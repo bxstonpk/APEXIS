@@ -1,0 +1,72 @@
+package entities
+
+import (
+	"slices"
+
+	"account/backend/internal/modules/identity/domain"
+	"account/backend/internal/modules/identity/domain/enums"
+	vo "account/backend/internal/modules/identity/domain/valueobjects"
+)
+
+// Membership คือ "พนักงาน X อยู่ในบริษัท Y และถือ role อะไรบ้าง"
+// user หนึ่งคนมีได้หลาย membership (หลายบริษัท) แต่ได้แค่หนึ่ง membership ต่อบริษัท
+type Membership struct {
+	id        vo.MembershipID
+	userID    vo.UserID
+	companyID vo.CompanyID
+	roleIDs   []vo.RoleID
+	status    enums.MembershipStatus
+}
+
+// NewMembership รับ roles เป็น *Role เพื่อบังคับว่าทุก role ต้องเป็นของบริษัทเดียวกัน
+func NewMembership(userID vo.UserID, companyID vo.CompanyID, roles []*Role) (*Membership, error) {
+	if userID.IsZero() {
+		return nil, domain.ErrInvalidUserID
+	}
+	if companyID.IsZero() {
+		return nil, domain.ErrInvalidCompanyID
+	}
+	m := &Membership{
+		id:        vo.NewMembershipID(),
+		userID:    userID,
+		companyID: companyID,
+		status:    enums.MembershipStatusActive,
+	}
+	if err := m.AssignRoles(roles); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func RehydrateMembership(id vo.MembershipID, userID vo.UserID, companyID vo.CompanyID, roleIDs []vo.RoleID, status enums.MembershipStatus) *Membership {
+	return &Membership{id: id, userID: userID, companyID: companyID, roleIDs: slices.Clone(roleIDs), status: status}
+}
+
+func (m *Membership) ID() vo.MembershipID            { return m.id }
+func (m *Membership) UserID() vo.UserID              { return m.userID }
+func (m *Membership) CompanyID() vo.CompanyID        { return m.companyID }
+func (m *Membership) RoleIDs() []vo.RoleID           { return slices.Clone(m.roleIDs) }
+func (m *Membership) Status() enums.MembershipStatus { return m.status }
+func (m *Membership) IsActive() bool                 { return m.status == enums.MembershipStatusActive }
+func (m *Membership) HasRole(id vo.RoleID) bool      { return slices.Contains(m.roleIDs, id) }
+
+// AssignRoles แทนที่ role ทั้งหมดของ member (ตัดตัวซ้ำ, ต้องอยู่บริษัทเดียวกัน)
+func (m *Membership) AssignRoles(roles []*Role) error {
+	ids := make([]vo.RoleID, 0, len(roles))
+	for _, r := range roles {
+		if r == nil {
+			return domain.ErrRoleNotFound
+		}
+		if r.CompanyID() != m.companyID {
+			return domain.ErrRoleCompanyMismatch
+		}
+		if !slices.Contains(ids, r.ID()) {
+			ids = append(ids, r.ID())
+		}
+	}
+	m.roleIDs = ids
+	return nil
+}
+
+func (m *Membership) Suspend()  { m.status = enums.MembershipStatusSuspended }
+func (m *Membership) Activate() { m.status = enums.MembershipStatusActive }

@@ -1,0 +1,90 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"account/backend/internal/modules/identity"
+	"account/backend/internal/platform/config"
+	"account/backend/internal/platform/database"
+)
+
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	if err := run(logger); err != nil {
+		logger.Error("server stopped", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger) error {
+	// รันได้ทั้งจาก apps/backend และจาก root ของ repo
+	if err := config.LoadDotEnv(".env", "../../.env"); err != nil {
+		return err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		return err
+	}
+	if err := identity.Migrate(db); err != nil {
+		return err
+	}
+
+	identityModule, err := identity.New(db, identity.Config{
+		JWTSecret: []byte(cfg.JWTSecret),
+		TokenTTL:  cfg.JWTTTL,
+		JWTIssuer: cfg.JWTIssuer,
+		Logger:    logger,
+	})
+	if err != nil {
+		return err
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	identityModule.RegisterRoutes(mux)
+	// module อื่นของ ERP ลงทะเบียนตรงนี้ และใช้ identityModule.Middleware ตรวจสิทธิ์
+
+	srv := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("http server listening", "addr", cfg.HTTPAddr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
+}
