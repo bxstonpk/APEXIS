@@ -1,0 +1,108 @@
+# 3. Database
+
+- PostgreSQL (ทดสอบกับ 16) — ทุกเวลาเก็บเป็น UTC, primary key เป็น UUID ที่สร้างฝั่งแอป
+- ชื่อตารางขึ้นต้นด้วยชื่อ module (`identity_*`, `organization_*`)
+- schema สร้างด้วย GORM `AutoMigrate` ตอนเริ่มโปรแกรม (ดูข้อควรระวังใน [06-deployment.md](06-deployment.md))
+
+## 3.1 ER Diagram
+
+```text
+identity (เก็บ company_id แต่ไม่มี FK ข้าม module ไป organization_companies)
+────────
+identity_users ─┐
+                │1     n┌──────────────────────┐
+                └──────►│ identity_memberships │  company_id
+                        └──────────┬───────────┘
+                                   │1
+                                   │n
+                     ┌─────────────▼─────────────┐  n   1┌─────────────────┐
+                     │ identity_membership_roles │──────►│ identity_roles  │  company_id
+                     └───────────────────────────┘       └────────┬────────┘
+                                                                  │1..n
+                                                     identity_role_permissions
+
+organization (─< = หนึ่งต่อหลาย ผ่าน company_id + FK)
+────────────
+organization_companies                      ← tenant ของทั้งระบบ
+ ├─< organization_branches
+ ├─< organization_business_units            parent_id → business_units (self)
+ ├─< organization_departments               parent_id → departments (self), business_unit_id → business_units, branch_id → branches
+ ├─< organization_cost_centers              department_id → departments
+ ├─< organization_project_sites             branch_id → branches, cost_center_id → cost_centers
+ └─< organization_fiscal_years
+        └─< organization_fiscal_periods
+```
+
+## 3.2 ตาราง — identity
+
+| ตาราง | คอลัมน์หลัก | Constraint |
+|---|---|---|
+| `identity_users` | id, email, name, password_hash, status | UNIQUE `email` |
+| `identity_roles` | id, company_id, code, name, description, is_system | UNIQUE `(company_id, code)` |
+| `identity_role_permissions` | role_id, permission | PK `(role_id, permission)`, FK role CASCADE |
+| `identity_memberships` | id, company_id, user_id, status | UNIQUE `(company_id, user_id)`, index `user_id`, FK user RESTRICT |
+| `identity_membership_roles` | membership_id, role_id | PK คู่, FK membership CASCADE, FK role **RESTRICT** (ลบ role ที่มีคนใช้ไม่ได้) |
+
+`company_id` ใน identity ไม่มี FK — บริษัทกับ owner ถูกสร้างใน transaction เดียวกันเสมอ จึงไม่มี membership ที่ไม่มีบริษัท
+
+## 3.3 ตาราง — organization
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `organization_companies` | id, code, name, tax_id, legal_name_th/en, address_*, phone, email, website, base_currency, fiscal_year_start_month, status | UNIQUE `code` (ทั้งระบบ); CHECK month 1–12, CHECK status; **ไม่มี soft delete** (ปิดด้วย status) |
+| `organization_branches` | id, company_id, code, name, tax_branch_no, address_*, phone, status, deleted_at | partial UNIQUE `(company_id, code)` และ `(company_id, tax_branch_no)` `WHERE deleted_at IS NULL`; CHECK status |
+| `organization_business_units` | id, company_id, code, name, parent_id, status, deleted_at | partial UNIQUE code; FK parent (self) RESTRICT; CHECK status |
+| `organization_departments` | id, company_id, code, name, parent_id, business_unit_id, branch_id, status, deleted_at | partial UNIQUE code; FK parent / BU / branch RESTRICT; CHECK status |
+| `organization_cost_centers` | id, company_id, code, name, department_id, valid_from, valid_to, status, deleted_at | partial UNIQUE code; FK department; CHECK `valid_to IS NULL OR valid_to >= valid_from` |
+| `organization_project_sites` | id, company_id, code, name, branch_id, cost_center_id, address_*, start_date, end_date, status, deleted_at | partial UNIQUE code; FK branch / cost center; CHECK วันที่, CHECK status `planned/active/closed` |
+| `organization_fiscal_years` | id, company_id, year, start_date, end_date | UNIQUE `(company_id, year)`; CHECK `end_date > start_date`; **ไม่มี soft delete** |
+| `organization_fiscal_periods` | id, fiscal_year_id, period_no, start_date, end_date, status | UNIQUE `(fiscal_year_id, period_no)`; CHECK period_no 1–12, วันที่, status `open/closed`; index `(start_date, end_date)` |
+
+- ทุกตาราง (ยกเว้น `organization_companies`, `organization_fiscal_periods`) มี FK `company_id → organization_companies` (RESTRICT)
+- `address_*` = `address_line, address_sub_district, address_district, address_province, address_postal_code, address_country` (ค่าเริ่มต้น `TH`)
+
+## 3.3.1 ตาราง — ledger
+
+```text
+ledger_accounts ◄─ parent_id (self)
+   ▲ account_id
+ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─ ledger_journal_sequences
+   (entry_id, line_no)     reversal_of_id / reversed_by_id → ledger_journal_entries (self)
+```
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `ledger_accounts` | id, company_id, code, name, name_en, type, parent_id, postable, status, deleted_at | partial UNIQUE `(company_id, code)`; FK parent (self) RESTRICT; CHECK type 5 หมวด, CHECK status |
+| `ledger_journals` | id, company_id, code, name, status, deleted_at | partial UNIQUE `(company_id, code)`; CHECK status |
+| `ledger_journal_entries` | id, company_id, journal_id, entry_no, entry_date, fiscal_period_id, description, reference, status, total_debit, total_credit, reversal_of_id, reversed_by_id, posted_at, posted_by, created_by | UNIQUE `(company_id, entry_no) WHERE entry_no IS NOT NULL`; index `(company_id, entry_date)`; FK journal / reversal (self) RESTRICT; CHECK status; **CHECK ไม่ใช่ draft ⇒ มี entry_no / งวด / ผู้ผ่าน**; **CHECK ไม่ใช่ draft ⇒ total_debit = total_credit > 0** |
+| `ledger_journal_lines` | entry_id, line_no, account_id, description, debit, credit, branch_id, department_id, cost_center_id, project_site_id | PK `(entry_id, line_no)`; FK entry CASCADE, FK account RESTRICT; index account_id; **CHECK debit ≥ 0, credit ≥ 0 และมีด้านเดียวที่ > 0** |
+| `ledger_journal_sequences` | journal_id, fiscal_year, company_id, last_no | PK `(journal_id, fiscal_year)`; FK journal |
+
+- จำนวนเงินเป็น `NUMERIC(18,2)`
+- `company_id`, `fiscal_period_id` และมิติวิเคราะห์ไม่มี FK ข้าม module — ตรวจผ่าน organization ตอนบันทึก / ผ่านรายการ
+- ข้อจำกัดที่รู้: organization ลบ (soft delete) สาขา / แผนก ฯลฯ ที่ถูกใช้ในบรรทัดรายการได้ เพราะไม่รู้จักตารางของ ledger — id ในรายการเดิมยังอยู่ครบ
+- **รายงานคำนวณจากบรรทัดรายการทุกครั้ง** (ยังไม่มีตารางยอดสะสม):
+  - รายงานแต่ละตัวใช้ `SUM(CASE ...)` ต่อบัญชี 1 query ครอบทุกช่วงวันที่
+  - บวกผังบัญชีอีก 1 query
+
+## 3.4 ข้อตกลงด้านข้อมูล
+
+| เรื่อง | ข้อตกลง |
+|---|---|
+| Soft delete | master data ของ organization ใช้ `deleted_at`; unique index เป็นแบบ partial จึงนำรหัสกลับมาใช้ได้หลังลบ |
+| Dependency check | ก่อนลบตรวจว่ามีแถวที่ยังไม่ถูกลบอ้างถึงหรือไม่ (409) — FK RESTRICT เป็นด่านสุดท้าย |
+| Uniqueness | use case ตรวจซ้ำเพื่อให้ error อ่านง่าย แต่ UNIQUE ใน DB คือตัวตัดสินจริง (repository แปลง unique violation → domain error) |
+| ลำดับชั้น | BU / แผนกตรวจวนลูปด้วย recursive CTE (คิวรีเดียว) ก่อนบันทึก |
+| ข้าม module | FK อยู่ภายใน module เท่านั้น — identity เก็บ `company_id` โดยไม่มี FK ไป `organization_companies` เพื่อให้ module แยก schema ได้อิสระ |
+| Timestamp | `created_at` / `updated_at` เป็นเรื่องของ persistence (GORM ตั้งให้) — entity ไม่รู้ |
+
+## 3.5 Query pattern
+
+- List ทุกตัว: คิวรีเดียวได้ทั้งหน้าและ `total` ด้วย `COUNT(*) OVER()`; นับแยกเฉพาะเมื่อขอหน้าที่เกินหน้าสุดท้าย
+- ข้อมูลที่อ้างถึง (parent, branch, department ...) ดึงด้วย `LEFT JOIN` คืนเป็น `{id, code, name}`
+- ข้อมูลแบบ one-to-many (เช่น role ของสมาชิก, permission ของ role) ดึงคิวรีที่สองแบบ `IN (ids ของหน้านั้น)` — ไม่ใช่ N+1
+- `GET /me/companies` ใช้ 2 คิวรี เพราะข้อมูลอยู่คนละ module (JOIN ข้าม module ไม่ได้):
+  1. identity: `company_id` ที่ผู้ใช้เป็นสมาชิก
+  2. organization: `WHERE id IN (...)` + ค้นหา / เรียง / แบ่งหน้าใน DB
+- การเขียนข้อมูลของบริษัทอ่าน `status` ของบริษัทเพิ่ม 1 คิวรี (primary key) เพื่อบังคับกฎ inactive = อ่านอย่างเดียว
+- `ORDER BY` สร้างจาก whitelist ของ sort key เสมอ และมี tie-breaker (`id`) ให้การแบ่งหน้านิ่ง

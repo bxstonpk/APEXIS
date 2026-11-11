@@ -1,0 +1,83 @@
+# 5. Testing
+
+## 5.1 กลยุทธ์
+
+| ระดับ | ทดสอบอะไร | ต้องมี DB |
+|---|---|---|
+| Unit — domain | entity invariant, value object, domain service (pure function) | ไม่ |
+| Unit — platform | parser ของ URL query, escape `LIKE` | ไม่ |
+| Integration (ต่อ module) | ยิง HTTP จริงผ่าน `httptest` → use case → GORM → PostgreSQL จริง ครอบคลุม flow, สิทธิ์, tenant isolation, error code | ใช่ |
+
+integration test **ข้ามอัตโนมัติ** ถ้าไม่ได้ตั้ง `IDENTITY_TEST_DSN` (ทั้งสอง module ใช้ตัวแปรเดียวกัน)
+test จะ drop / สร้างตารางใหม่ — **ห้ามชี้ไปที่ฐานข้อมูลจริง**
+
+## 5.2 วิธีรัน
+
+```bash
+cd apps/backend
+
+# unit test อย่างเดียว
+go vet ./...
+go test ./...
+
+# integration test — ใช้ Postgres ชั่วคราวใน Docker
+docker run -d --rm --name apexis-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=apexis_test \
+  -p 55432:5432 postgres:16-alpine
+
+IDENTITY_TEST_DSN="postgres://postgres:test@localhost:55432/apexis_test?sslmode=disable" \
+  go test -p 1 ./...        # -p 1: สอง package drop ตารางชุดเดียวกัน ห้ามรันขนาน
+
+docker stop apexis-test-pg
+```
+
+PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
+
+## 5.3 รายการ test ที่มี
+
+### identity
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/services/access_test.go` | `TestResolveAccess*` (4), `TestMembershipChangeStatus`, `TestMembershipRejectsRoleFromOtherCompany`, `TestOwnerRoleIsImmutable` | รวมสิทธิ์จากหลาย role, สถานะไม่ active ถูกปฏิเสธ, role ต่างบริษัท, owner แก้ไม่ได้ |
+| `domain/value_objects/permission_test.go` | `TestParsePermission`, `TestPermissionCovers`, `TestPermissionSetAllowsAll` | รูปแบบสิทธิ์และ wildcard |
+| `identity_integration_test.go` | `TestMultiCompanyAccessFlow` | สมัคร → ล็อกอิน → ตั้ง owner ของบริษัท (`ProvisionCompanyOwner`) → role → เพิ่มสมาชิก → ระงับ → สิทธิ์หลายบริษัท, timestamp จัดการโดย GORM |
+| | `TestListSearchViaURLQuery` | ค้นหา / กรอง / เรียง / แบ่งหน้าสมาชิกและ role ผ่าน URL query, ค่าผิดได้ 400 |
+
+### organization
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/value_objects/values_test.go` | `TestNewCode`, `TestTaxBranchNo`, `TestNewAddress`, `TestEnsureDateRange` | รูปแบบรหัส, เลขสาขา, ที่อยู่/รหัสไปรษณีย์, ช่วงวันที่ |
+| `domain/entities/entities_test.go` | `TestHeadOfficeRules`, `TestHierarchyCycle`, `TestCostCenterValidity`, `TestClosedProjectNeedsEndDate`, `TestFiscalYearPeriods`, `TestFiscalPeriodCloseOrder`, `TestCompanyRules` | กฎธุรกิจทั้งหมดของ entity (รวมค่าเริ่มต้นของบริษัท, รหัสบริษัทแก้ไม่ได้) |
+| `organization_integration_test.go` | `TestOrganizationFlow` | สร้างบริษัท (ค่าเริ่มต้น, รหัสซ้ำ), **rollback ข้าม module เมื่อ identity ล้มเหลว**, แก้บริษัท, บริษัทของฉัน, บริษัท inactive = อ่านอย่างเดียว / เปิดกลับ, สำนักงานใหญ่, วนลูป BU, การอ้างอิง / ลบไม่ได้เพราะมีผู้ใช้, `active_on`, ค้นหาช่วงวันที่โครงการ, soft delete + ใช้รหัสซ้ำ, ปีบัญชีซ้อน, ลำดับปิด/เปิดงวด, สิทธิ์ (พนักงาน / คนนอก / ไม่มี token), tenant isolation, query ผิดรูปแบบ |
+
+### ledger
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/value_objects/money_test.go` | `TestParseMoney`, `TestMoneyString` | แปลงจำนวนเงินแบบไม่ผ่าน float, ขอบเขต NUMERIC(18,2) |
+| `domain/entities/entities_test.go` | `TestAccountParentRules`, `TestAccountUsageRules`, `TestEntryLineValidation`, `TestEntryPostAndReverse`, `TestEntryNeedsTwoLines` | กฎผังบัญชี, บรรทัดรายการ, draft → posted → reversed |
+| `domain/services/services_test.go` | `TestBuildSectionRollsUpAndHidesZero` | รวมยอดตามผังบัญชีในงบการเงิน |
+| `ledger_integration_test.go` | `TestLedgerFlow` | สมุด / ผังบัญชี (ลูป, parent, ซ้ำ), draft ไม่สมดุล → แก้ → ผ่าน, เลขที่เอกสารรายปี, มิติวิเคราะห์ไม่พบ, บัญชีคุม / inactive, งวดปิด, ไม่มีงวด, กลับรายการ, ค้นหาผ่าน URL query, **ตัวเลขงบทดลอง / งบแสดงฐานะ / งบกำไรขาดทุน / บัญชีแยกประเภท (คำนวณมือแล้วเทียบ)**, ลบที่ถูกใช้, **ผ่านรายการพร้อมกัน 10 ใบ ได้เลขที่ไม่ซ้ำไม่ขาดตอน**, สิทธิ์ (draft ได้แต่ post ไม่ได้), บริษัท inactive, tenant isolation, query ผิดรูปแบบ |
+
+### platform
+
+| ไฟล์ | Test |
+|---|---|
+| `platform/listing/listing_test.go` | `TestParsePage`, `TestParseSort`, `TestParseSearch`, `TestParseDateRange`, `TestParseListAndOptional` |
+| `platform/database/database_test.go` | `TestLikeContainsEscapesWildcards` |
+
+## 5.4 ผลล่าสุด (2026-11-11)
+
+`go build ./...`, `go vet ./...` และ `go test -p 1 ./...` (รวม integration กับ PostgreSQL 16) — **ผ่านทั้งหมด**
+
+## 5.5 Checklist ก่อนถือว่า API เสร็จ
+
+ใช้ checklist ใน [CLAUDE.md §32](../CLAUDE.md) — architecture, GET (N+1 / JOIN / pagination), CREATE / UPDATE / DELETE (transaction), GORM, security
+
+## 5.6 สิ่งที่ยังไม่มี
+
+- CI ที่รัน test อัตโนมัติ
+- test วัดจำนวนคิวรีต่อ request แบบอัตโนมัติ (ตอนนี้ตรวจด้วยมือจาก log ของ Postgres)
+- load / performance test
+- frontend test
