@@ -9,7 +9,6 @@ import (
 type MembershipModel struct {
 	ID        uuid.UUID             `gorm:"type:uuid;primaryKey"`
 	CompanyID uuid.UUID             `gorm:"type:uuid;not null;uniqueIndex:uq_identity_memberships_company_user,priority:1"`
-	Company   *CompanyModel         `gorm:"foreignKey:CompanyID;constraint:OnDelete:RESTRICT"`
 	UserID    uuid.UUID             `gorm:"type:uuid;not null;uniqueIndex:uq_identity_memberships_company_user,priority:2;index:idx_identity_memberships_user"`
 	User      *UserModel            `gorm:"foreignKey:UserID;constraint:OnDelete:RESTRICT"`
 	Status    string                `gorm:"size:20;not null"`

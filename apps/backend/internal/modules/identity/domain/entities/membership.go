@@ -3,9 +3,8 @@ package entities
 import (
 	"slices"
 
-	"account/backend/internal/modules/identity/domain"
-	"account/backend/internal/modules/identity/domain/enums"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 // Membership คือ "พนักงาน X อยู่ในบริษัท Y และถือ role อะไรบ้าง"
@@ -15,7 +14,7 @@ type Membership struct {
 	userID    vo.UserID
 	companyID vo.CompanyID
 	roleIDs   []vo.RoleID
-	status    enums.MembershipStatus
+	status    vo.MembershipStatus
 }
 
 // NewMembership รับ roles เป็น *Role เพื่อบังคับว่าทุก role ต้องเป็นของบริษัทเดียวกัน
@@ -30,7 +29,7 @@ func NewMembership(userID vo.UserID, companyID vo.CompanyID, roles []*Role) (*Me
 		id:        vo.NewMembershipID(),
 		userID:    userID,
 		companyID: companyID,
-		status:    enums.MembershipStatusActive,
+		status:    vo.MembershipStatusActive,
 	}
 	if err := m.AssignRoles(roles); err != nil {
 		return nil, err
@@ -38,17 +37,17 @@ func NewMembership(userID vo.UserID, companyID vo.CompanyID, roles []*Role) (*Me
 	return m, nil
 }
 
-func RehydrateMembership(id vo.MembershipID, userID vo.UserID, companyID vo.CompanyID, roleIDs []vo.RoleID, status enums.MembershipStatus) *Membership {
+func RehydrateMembership(id vo.MembershipID, userID vo.UserID, companyID vo.CompanyID, roleIDs []vo.RoleID, status vo.MembershipStatus) *Membership {
 	return &Membership{id: id, userID: userID, companyID: companyID, roleIDs: slices.Clone(roleIDs), status: status}
 }
 
-func (m *Membership) ID() vo.MembershipID            { return m.id }
-func (m *Membership) UserID() vo.UserID              { return m.userID }
-func (m *Membership) CompanyID() vo.CompanyID        { return m.companyID }
-func (m *Membership) RoleIDs() []vo.RoleID           { return slices.Clone(m.roleIDs) }
-func (m *Membership) Status() enums.MembershipStatus { return m.status }
-func (m *Membership) IsActive() bool                 { return m.status == enums.MembershipStatusActive }
-func (m *Membership) HasRole(id vo.RoleID) bool      { return slices.Contains(m.roleIDs, id) }
+func (m *Membership) ID() vo.MembershipID         { return m.id }
+func (m *Membership) UserID() vo.UserID           { return m.userID }
+func (m *Membership) CompanyID() vo.CompanyID     { return m.companyID }
+func (m *Membership) RoleIDs() []vo.RoleID        { return slices.Clone(m.roleIDs) }
+func (m *Membership) Status() vo.MembershipStatus { return m.status }
+func (m *Membership) IsActive() bool              { return m.status == vo.MembershipStatusActive }
+func (m *Membership) HasRole(id vo.RoleID) bool   { return slices.Contains(m.roleIDs, id) }
 
 // AssignRoles แทนที่ role ทั้งหมดของ member (ตัดตัวซ้ำ, ต้องอยู่บริษัทเดียวกัน)
 func (m *Membership) AssignRoles(roles []*Role) error {
@@ -68,5 +67,14 @@ func (m *Membership) AssignRoles(roles []*Role) error {
 	return nil
 }
 
-func (m *Membership) Suspend()  { m.status = enums.MembershipStatusSuspended }
-func (m *Membership) Activate() { m.status = enums.MembershipStatusActive }
+func (m *Membership) Suspend()  { m.status = vo.MembershipStatusSuspended }
+func (m *Membership) Activate() { m.status = vo.MembershipStatusActive }
+
+// ChangeStatus ใช้กับ PATCH member — รับเฉพาะสถานะที่กำหนดไว้
+func (m *Membership) ChangeStatus(s vo.MembershipStatus) error {
+	if _, err := vo.ParseMembershipStatus(string(s)); err != nil {
+		return err
+	}
+	m.status = s
+	return nil
+}

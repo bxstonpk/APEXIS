@@ -4,9 +4,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"account/backend/internal/modules/identity/domain"
-	"account/backend/internal/modules/identity/domain/enums"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 // User คือบัญชีผู้ใช้ระดับระบบ (global) — ล็อกอินครั้งเดียวแล้วเข้าได้หลายบริษัท
@@ -19,7 +18,7 @@ type User struct {
 	email        vo.Email
 	name         string
 	passwordHash string
-	status       enums.UserStatus
+	status       vo.UserStatus
 }
 
 func NewUser(email vo.Email, name, passwordHash string) (*User, error) {
@@ -38,21 +37,21 @@ func NewUser(email vo.Email, name, passwordHash string) (*User, error) {
 		email:        email,
 		name:         n,
 		passwordHash: passwordHash,
-		status:       enums.UserStatusActive,
+		status:       vo.UserStatusActive,
 	}, nil
 }
 
 // RehydrateUser ใช้โดย repository เพื่อสร้าง entity กลับจาก DB (ไม่ validate ซ้ำ)
-func RehydrateUser(id vo.UserID, email vo.Email, name, passwordHash string, status enums.UserStatus) *User {
+func RehydrateUser(id vo.UserID, email vo.Email, name, passwordHash string, status vo.UserStatus) *User {
 	return &User{id: id, email: email, name: name, passwordHash: passwordHash, status: status}
 }
 
-func (u *User) ID() vo.UserID            { return u.id }
-func (u *User) Email() vo.Email          { return u.email }
-func (u *User) Name() string             { return u.name }
-func (u *User) PasswordHash() string     { return u.passwordHash }
-func (u *User) Status() enums.UserStatus { return u.status }
-func (u *User) IsActive() bool           { return u.status == enums.UserStatusActive }
+func (u *User) ID() vo.UserID         { return u.id }
+func (u *User) Email() vo.Email       { return u.email }
+func (u *User) Name() string          { return u.name }
+func (u *User) PasswordHash() string  { return u.passwordHash }
+func (u *User) Status() vo.UserStatus { return u.status }
+func (u *User) IsActive() bool        { return u.status == vo.UserStatusActive }
 
 func (u *User) Rename(name string) error {
 	n, err := normalizeUserName(name)
@@ -71,8 +70,8 @@ func (u *User) ChangePasswordHash(hash string) error {
 	return nil
 }
 
-func (u *User) Disable() { u.status = enums.UserStatusDisabled }
-func (u *User) Enable()  { u.status = enums.UserStatusActive }
+func (u *User) Disable() { u.status = vo.UserStatusDisabled }
+func (u *User) Enable()  { u.status = vo.UserStatusActive }
 
 func normalizeUserName(name string) (string, error) {
 	n := strings.TrimSpace(name)

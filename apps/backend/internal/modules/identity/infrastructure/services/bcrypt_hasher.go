@@ -4,7 +4,7 @@ package services
 import (
 	"golang.org/x/crypto/bcrypt"
 
-	"account/backend/internal/modules/identity/application/ports"
+	"apexis/backend/internal/modules/identity/application/ports"
 )
 
 var _ ports.PasswordHasher = (*BcryptHasher)(nil)

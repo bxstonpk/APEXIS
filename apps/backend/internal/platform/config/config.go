@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"account/backend/internal/platform/database"
+	"apexis/backend/internal/platform/database"
 )
 
 type Config struct {

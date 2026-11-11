@@ -10,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"account/backend/internal/modules/identity"
-	"account/backend/internal/platform/config"
-	"account/backend/internal/platform/database"
+	"apexis/backend/internal/modules/identity"
+	"apexis/backend/internal/modules/ledger"
+	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/platform/config"
+	"apexis/backend/internal/platform/database"
 )
 
 func main() {
@@ -42,6 +44,12 @@ func run(logger *slog.Logger) error {
 	if err := identity.Migrate(db); err != nil {
 		return err
 	}
+	if err := organization.Migrate(db); err != nil {
+		return err
+	}
+	if err := ledger.Migrate(db); err != nil {
+		return err
+	}
 
 	identityModule, err := identity.New(db, identity.Config{
 		JWTSecret: []byte(cfg.JWTSecret),
@@ -56,7 +64,10 @@ func run(logger *slog.Logger) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	identityModule.RegisterRoutes(mux)
-	// module อื่นของ ERP ลงทะเบียนตรงนี้ และใช้ identityModule.Middleware ตรวจสิทธิ์
+	// module อื่นของ ERP ลงทะเบียนตรงนี้ และพึ่งพา identity ผ่าน public API ของ identityModule
+	organizationModule := organization.New(db, identityModule)
+	organizationModule.RegisterRoutes(mux)
+	ledger.New(db, identityModule, organizationModule).RegisterRoutes(mux)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

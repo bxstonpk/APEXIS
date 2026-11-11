@@ -7,9 +7,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"account/backend/internal/modules/identity/application/ports"
-	"account/backend/internal/modules/identity/domain"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	"apexis/backend/internal/modules/identity/application/ports"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 var _ ports.TokenService = (*JWTTokenService)(nil)

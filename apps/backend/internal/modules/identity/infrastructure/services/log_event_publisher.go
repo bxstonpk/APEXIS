@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 
-	"account/backend/internal/modules/identity/application/ports"
-	"account/backend/internal/modules/identity/domain/events"
+	"apexis/backend/internal/modules/identity/application/ports"
+	"apexis/backend/internal/modules/identity/domain/events"
 )
 
 var _ ports.EventPublisher = (*LogEventPublisher)(nil)

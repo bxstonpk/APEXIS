@@ -3,9 +3,9 @@ package services
 import (
 	"slices"
 
-	"account/backend/internal/modules/identity/domain"
-	"account/backend/internal/modules/identity/domain/entities"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	"apexis/backend/internal/modules/identity/domain/entities"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 // AccessContext คือสิทธิ์ที่ resolve แล้วของ user หนึ่งคนในบริษัทหนึ่ง
@@ -39,37 +39,45 @@ func (a AccessContext) RequireAll(perms vo.PermissionSet) error {
 	return nil
 }
 
+// AccessFacts คือข้อมูลขั้นต่ำที่ต้องใช้ตัดสินสิทธิ์ของ user ในบริษัท
+// repository โหลดมาได้ใน query เดียว (memberships JOIN users JOIN roles)
+// โดยไม่ต้องโหลด User entity เต็มตัว
+//
+// สถานะของบริษัท (active / inactive) เป็นเรื่องของ organization module — identity ไม่ตรวจ
+type AccessFacts struct {
+	UserID     vo.UserID
+	UserStatus vo.UserStatus
+	CompanyID  vo.CompanyID
+	Membership *entities.Membership
+	Roles      []*entities.Role // role ที่ membership ถืออยู่
+}
+
 // ResolveAccess รวมกฎว่า user จะเข้าบริษัทได้เมื่อใด และรวม permission จากทุก role
 // เป็น pure function — ไม่แตะ DB จึง test ได้ง่าย
-func ResolveAccess(user *entities.User, company *entities.Company, m *entities.Membership, roles []*entities.Role) (AccessContext, error) {
+func ResolveAccess(f AccessFacts) (AccessContext, error) {
+	m := f.Membership
 	switch {
-	case user == nil:
-		return AccessContext{}, domain.ErrUserNotFound
-	case company == nil:
-		return AccessContext{}, domain.ErrCompanyNotFound
-	case m == nil || m.UserID() != user.ID() || m.CompanyID() != company.ID():
+	case m == nil || m.UserID() != f.UserID || m.CompanyID() != f.CompanyID:
 		return AccessContext{}, domain.ErrMembershipNotFound
-	case !user.IsActive():
+	case f.UserStatus != vo.UserStatusActive:
 		return AccessContext{}, domain.ErrUserInactive
-	case !company.IsActive():
-		return AccessContext{}, domain.ErrCompanyInactive
 	case !m.IsActive():
 		return AccessContext{}, domain.ErrMembershipInactive
 	}
 
 	perms := vo.NewPermissionSet()
-	for _, r := range roles {
+	for _, r := range f.Roles {
 		if r == nil || !m.HasRole(r.ID()) {
 			continue
 		}
-		if r.CompanyID() != company.ID() {
+		if r.CompanyID() != f.CompanyID {
 			return AccessContext{}, domain.ErrRoleCompanyMismatch
 		}
 		perms.Merge(r.Permissions())
 	}
 	return AccessContext{
-		userID:      user.ID(),
-		companyID:   company.ID(),
+		userID:      f.UserID,
+		companyID:   f.CompanyID,
 		roleIDs:     m.RoleIDs(),
 		permissions: perms,
 	}, nil

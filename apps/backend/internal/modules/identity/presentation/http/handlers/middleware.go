@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strings"
 
-	"account/backend/internal/modules/identity/application/ports"
-	"account/backend/internal/modules/identity/application/queries"
-	"account/backend/internal/modules/identity/domain"
-	"account/backend/internal/modules/identity/domain/services"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	"apexis/backend/internal/modules/identity/application/ports"
+	"apexis/backend/internal/modules/identity/application/usecases"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	"apexis/backend/internal/modules/identity/domain/services"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 type ctxKey int
@@ -33,12 +33,12 @@ func AccessFrom(ctx context.Context) (services.AccessContext, bool) {
 }
 
 type Middleware struct {
-	tokens  ports.TokenService
-	queries *queries.Handler
+	tokens ports.TokenService
+	access *usecases.AccessResolver
 }
 
-func NewMiddleware(tokens ports.TokenService, q *queries.Handler) *Middleware {
-	return &Middleware{tokens: tokens, queries: q}
+func NewMiddleware(tokens ports.TokenService, access *usecases.AccessResolver) *Middleware {
+	return &Middleware{tokens: tokens, access: access}
 }
 
 // Authenticate ตรวจ "Authorization: Bearer <token>" แล้วใส่ user id ลง context
@@ -72,7 +72,7 @@ func (m *Middleware) RequireCompany(next http.Handler) http.Handler {
 			writeError(w, r, err)
 			return
 		}
-		access, err := m.queries.ResolveAccess(r.Context(), userID, companyID)
+		access, err := m.access.Resolve(r.Context(), userID, companyID)
 		if err != nil {
 			writeError(w, r, err)
 			return
