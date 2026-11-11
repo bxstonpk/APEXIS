@@ -1,0 +1,48 @@
+/*
+ * สไตล์ทั้งหมดใช้ Tailwind CSS — component ใช้ utility class เท่านั้น ไม่มีไฟล์ CSS แยก
+ *
+ * Design tokens อยู่ใน @theme ด้านล่างที่เดียว: Tailwind สร้าง class จาก token ให้อัตโนมัติ
+ * เช่น --color-primary -> bg-primary / text-primary / border-primary / ring-primary
+ * เปลี่ยนสีหรือฟอนต์ของทั้งแอปได้ด้วยการแก้ค่าที่นี่
+ */
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Noto Sans Thai', 'Leelawadee UI', 'Sarabun', Tahoma, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* พื้นหลัง / พื้นผิว / เส้นขอบ */
+  --color-canvas: #f4f6fa;
+  --color-surface: #ffffff;
+  --color-line: #d9dee7;
+  --color-line-strong: #b8c0cc;
+
+  /* ตัวอักษร */
+  --color-ink: #1b2230;
+  --color-ink-muted: #5b6577;
+
+  /* สีหลัก */
+  --color-primary: #1f4fd1;
+  --color-primary-hover: #1a43b3;
+  --color-on-primary: #ffffff;
+
+  /* สถานะ */
+  --color-danger: #c62828;
+  --color-danger-soft: #fdecec;
+  --color-danger-line: #f3c2c2;
+  --color-info-soft: #eaf1ff;
+  --color-info-line: #c5d6fb;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px rgb(16 24 40 / 0.08);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+}
