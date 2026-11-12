@@ -132,7 +132,7 @@ ledger พึ่งพา organization ผ่าน interface `ledger.Organizati
 
 ```go
 type Organization interface {
-    CompanyActive(ctx, companyID uuid.UUID) (bool, error)
+    CompanySettings(ctx, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
     FiscalPeriodAt(ctx, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
     MissingDimensions(ctx, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 }
@@ -144,7 +144,7 @@ type Organization interface {
 PATCH /journal-entries/{id} {"status":"posted"}
   BEGIN
     identity.Authorize(ledger.entry:post)          ← สิทธิ์
-    organization.CompanyActive                      ← บริษัทต้อง active
+    organization.CompanySettings                    ← บริษัทต้อง active + จำนวนทศนิยมของเงิน
     SELECT entry ... FOR UPDATE                      ← กันผ่านรายการซ้อน
     journal / accounts (IN) / MissingDimensions      ← query ละ 1 ครั้ง ไม่ว่ากี่บรรทัด
     organization.FiscalPeriodAt ... FOR SHARE OF p   ← งวดต้องเปิด; การปิดงวดพร้อมกันต้องรอจน commit
@@ -153,12 +153,51 @@ PATCH /journal-entries/{id} {"status":"posted"}
   COMMIT  (rollback = เลขที่ไม่ถูกใช้ จึงไม่ขาดตอน — มี test ผ่านรายการพร้อมกัน 10 ใบ)
 ```
 
+### inventory → organization (และ FIFO)
+
+inventory ใช้ public API เดียวกับ ledger (`CompanySettings`, `FiscalPeriodAt`, `MissingDimensions` สำหรับสาขาของคลัง)
+
+การผ่านเอกสารสต็อก — transaction เดียว:
+
+```text
+BEGIN
+  identity.Authorize / organization.CompanySettings   ← สิทธิ์, บริษัท active, จำนวนทศนิยม
+  SELECT document ... FOR UPDATE
+  คลัง (IN) / สินค้า (IN)                               ← query ละ 1 ครั้ง
+  organization.FiscalPeriodAt ... FOR SHARE            ← งวดต้องเปิด
+  SELECT inventory_layers WHERE (item, warehouse) IN (...) AND layer_date <= วันที่เอกสาร
+         ORDER BY item, warehouse, layer_date, id FOR UPDATE      ← ลำดับ lock คงที่ กัน deadlock
+  services.PlanPosting (pure function)                  ← FIFO / ห้ามติดลบ คำนวณใน domain
+  UPDATE layers FROM (VALUES ...) ; INSERT layers / movements / allocations (batch)
+  INSERT inventory_sequences ... ON CONFLICT DO UPDATE ... RETURNING   ← เลขที่
+COMMIT
+```
+
+- FIFO และการยกเลิก (`PlanPosting`, `PlanCancel`) เป็น pure function ใน `domain/services` จึงทดสอบได้โดยไม่ต้องมีฐานข้อมูล
+- `inventory_movements` คือที่มาของยอดคงเหลือ / stock card; `inventory_layers` คือชั้นต้นทุนที่ยังเหลือ; `inventory_allocations` บันทึกว่าการเคลื่อนไหวขาออกตัดชั้นไหน (ใช้คืนชั้นตอนยกเลิก)
+
+## 2.6.1 รายงานรวม (`platform/reports`)
+
+- endpoint เดียวของทั้งระบบ: `GET /api/v1/companies/{companyID}/reports?book=...`
+- แต่ละ module ลงทะเบียน book ของตัวเอง (`RegisterReports`):
+  - ledger: `trial-balance`, `balance-sheet`, `income-statement`, `general-ledger`
+  - inventory: `stock-on-hand`, `stock-card`
+- registry ส่งต่อตาม `book`; book ไม่รู้จัก = 400 พร้อมรายชื่อ book ทั้งหมด; ชื่อซ้ำข้าม module = panic ตอนเริ่มโปรแกรม
+- `main.go` mount registry พร้อม `Authenticate`; แต่ละ handler ตรวจสิทธิ์ของ module ตัวเอง
+
+## 2.6.2 ตัวเลข (`platform/numeric`)
+
+- จำนวนเงิน / จำนวนสินค้าใช้ `shopspring/decimal` (ฐาน 10) — ไม่ใช้ float
+- ฐานข้อมูลเก็บ `NUMERIC(24,6)` (จำนวนเต็ม 18 หลัก, ทศนิยม 6 ตำแหน่ง)
+- จำนวนทศนิยมที่ยอมรับมาจากบริษัท (`amount_decimals`, `quantity_decimals`) — อ่านพร้อมสถานะบริษัทใน query เดียวตอนเขียน
+- JSON ส่งเป็นข้อความทศนิยมตามค่าจริง เช่น `"1200"`, `"30000.5"` — frontend จัดรูปแบบตามทศนิยมของบริษัท
+
 ## 2.7 บริษัท inactive
 
 - identity ไม่ตรวจสถานะบริษัท
 - organization บังคับใน `base.write`: ทุกการเขียนข้อมูลของบริษัท อ่าน `status` ของบริษัทใน transaction เดียวกัน ถ้า `inactive` → `422 company is inactive (read-only)`
 - การอ่านไม่ถูกกระทบ; `PUT /companies/{id}` ไม่ผ่านกฎนี้เพื่อให้เปิดใช้งานกลับได้
-- ledger บังคับกฎเดียวกันผ่าน `organization.CompanyActive` ใน transaction ของการเขียน — module ที่จะสร้างต่อไปต้องทำแบบเดียวกัน
+- ledger และ inventory บังคับกฎเดียวกันผ่าน `organization.CompanySettings` ใน transaction ของการเขียน — module ที่จะสร้างต่อไปต้องทำแบบเดียวกัน
 
 ## 2.8 Domain events
 

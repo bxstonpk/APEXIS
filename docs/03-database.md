@@ -49,7 +49,7 @@ organization_companies                      ← tenant ของทั้งร�
 
 | ตาราง | คอลัมน์หลัก | Constraint / Index |
 |---|---|---|
-| `organization_companies` | id, code, name, tax_id, legal_name_th/en, address_*, phone, email, website, base_currency, fiscal_year_start_month, status | UNIQUE `code` (ทั้งระบบ); CHECK month 1–12, CHECK status; **ไม่มี soft delete** (ปิดด้วย status) |
+| `organization_companies` | id, code, name, tax_id, legal_name_th/en, address_*, phone, email, website, base_currency, fiscal_year_start_month, amount_decimals, quantity_decimals, status | UNIQUE `code` (ทั้งระบบ); CHECK month 1–12, CHECK decimals 0–6, CHECK status; **ไม่มี soft delete** (ปิดด้วย status) |
 | `organization_branches` | id, company_id, code, name, tax_branch_no, address_*, phone, status, deleted_at | partial UNIQUE `(company_id, code)` และ `(company_id, tax_branch_no)` `WHERE deleted_at IS NULL`; CHECK status |
 | `organization_business_units` | id, company_id, code, name, parent_id, status, deleted_at | partial UNIQUE code; FK parent (self) RESTRICT; CHECK status |
 | `organization_departments` | id, company_id, code, name, parent_id, business_unit_id, branch_id, status, deleted_at | partial UNIQUE code; FK parent / BU / branch RESTRICT; CHECK status |
@@ -78,12 +78,30 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `ledger_journal_lines` | entry_id, line_no, account_id, description, debit, credit, branch_id, department_id, cost_center_id, project_site_id | PK `(entry_id, line_no)`; FK entry CASCADE, FK account RESTRICT; index account_id; **CHECK debit ≥ 0, credit ≥ 0 และมีด้านเดียวที่ > 0** |
 | `ledger_journal_sequences` | journal_id, fiscal_year, company_id, last_no | PK `(journal_id, fiscal_year)`; FK journal |
 
-- จำนวนเงินเป็น `NUMERIC(18,2)`
+- จำนวนเงินเป็น `NUMERIC(24,6)` — ทศนิยมที่ยอมรับกำหนดต่อบริษัท (`amount_decimals`)
 - `company_id`, `fiscal_period_id` และมิติวิเคราะห์ไม่มี FK ข้าม module — ตรวจผ่าน organization ตอนบันทึก / ผ่านรายการ
 - ข้อจำกัดที่รู้: organization ลบ (soft delete) สาขา / แผนก ฯลฯ ที่ถูกใช้ในบรรทัดรายการได้ เพราะไม่รู้จักตารางของ ledger — id ในรายการเดิมยังอยู่ครบ
 - **รายงานคำนวณจากบรรทัดรายการทุกครั้ง** (ยังไม่มีตารางยอดสะสม):
   - รายงานแต่ละตัวใช้ `SUM(CASE ...)` ต่อบัญชี 1 query ครอบทุกช่วงวันที่
   - บวกผังบัญชีอีก 1 query
+
+## 3.3.2 ตาราง — inventory
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `inventory_uoms`, `inventory_item_categories` | id, company_id, code, name, status, deleted_at | partial UNIQUE `(company_id, code)`; CHECK status |
+| `inventory_warehouses` | + branch_id (organization, ไม่มี FK) | partial UNIQUE code |
+| `inventory_items` | id, company_id, code, name, name_en, type, uom_id, category_id, reorder_point, status, deleted_at | partial UNIQUE code; FK uom / category RESTRICT; CHECK type, CHECK reorder ≥ 0 |
+| `inventory_documents` | id, company_id, doc_type, document_no, doc_date, warehouse_id, to_warehouse_id, fiscal_period_id, reference, description, status, total_value, posted_at/by, cancelled_at/by, created_by | UNIQUE `(company_id, document_no) WHERE document_no IS NOT NULL`; index `(company_id, doc_date)`; **CHECK ผ่านแล้วต้องมีเลขที่ / งวด / ผู้ผ่าน**; **CHECK transfer ต้องมีคลังปลายทางที่ต่างกัน**; CHECK ยกเลิกต้องมีผู้ยกเลิก |
+| `inventory_document_lines` | document_id, line_no, item_id, quantity, unit_cost, value, description | PK `(document_id, line_no)`; FK CASCADE / item RESTRICT; CHECK quantity ≠ 0, unit_cost ≥ 0, value ≥ 0 |
+| `inventory_layers` | id, company_id, item_id, warehouse_id, layer_date, document_id, line_no, quantity, value, remaining_quantity, remaining_value | **partial index `(company_id, item_id, warehouse_id, layer_date, id) WHERE remaining_quantity > 0`**; **CHECK 0 ≤ remaining ≤ quantity** |
+| `inventory_movements` | id, company_id, item_id, warehouse_id, movement_date, document_id, line_no, quantity (±), value (±) | index `(company_id, item_id, warehouse_id, movement_date)`; CHECK quantity ≠ 0 |
+| `inventory_allocations` | movement_id, layer_id, quantity, value | PK คู่; FK RESTRICT ทั้งสองฝั่ง |
+| `inventory_sequences` | company_id, doc_type, fiscal_year, last_no | PK `(company_id, doc_type, fiscal_year)` |
+
+- จำนวน / มูลค่าทั้งหมดเป็น `NUMERIC(24,6)`
+- ยอดคงเหลือ = ผลรวมของ `inventory_movements` (เท่ากับ remaining ของชั้นทั้งหมด) — ไม่มีตารางยอดสะสมแยก
+- ยกเลิกเอกสาร: ชั้นที่เอกสารสร้างถูกปิด (remaining = 0, ไม่ลบ — ประวัติ allocation อ้างถึง), ชั้นที่ถูกตัดได้คืน, เพิ่มการเคลื่อนไหวกลับรายการ
 
 ## 3.4 ข้อตกลงด้านข้อมูล
 

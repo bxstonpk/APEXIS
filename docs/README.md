@@ -26,7 +26,8 @@ APEXIS คือระบบ ERP แบบ multi-company (หนึ่งผู�
 | Backend — `identity` (ผู้ใช้, ล็อกอิน, role, สิทธิ์, สมาชิกของบริษัท) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `organization` (บริษัท / นิติบุคคล, สาขา, หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ/ไซต์งาน, ปีบัญชี/งวด 12 งวด) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `ledger` (ผังบัญชี, สมุดรายวัน, รายการบัญชี draft/posted/reversed, งบทดลอง, บัญชีแยกประเภท, งบแสดงฐานะการเงิน, งบกำไรขาดทุน) | ✅ ใช้งานได้, มี unit + integration test |
-| Backend — platform (config, database, httpx, listing) | ✅ ใช้ร่วมกันทุก module |
+| Backend — `inventory` (หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, ต้นทุน FIFO, ยอดคงเหลือ, stock card) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — platform (config, database, httpx, listing, numeric, reports) | ✅ ใช้ร่วมกันทุก module |
 | Frontend (`apps/frontend`) — React + Tailwind | 🟡 หน้า login + หน้าหลักชั่วคราว, มี test |
 | `services/` | ⬜ ยังว่าง |
 | CI/CD, Dockerfile, versioned migration, audit log | ⬜ ยังไม่มี |
@@ -46,7 +47,8 @@ APEXIS/
 │   │       └── modules/
 │   │           ├── identity/
 │   │           ├── organization/
-│   │           └── ledger/
+│   │           ├── ledger/
+│   │           └── inventory/
 │   └── frontend/             # React + Vite + Tailwind (ดู 08-frontend.md)
 └── services/                 # (ยังว่าง)
 ```

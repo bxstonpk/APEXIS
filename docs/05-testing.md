@@ -55,19 +55,28 @@ PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
 
 | ไฟล์ | Test | ครอบคลุม |
 |---|---|---|
-| `domain/value_objects/money_test.go` | `TestParseMoney`, `TestMoneyString` | แปลงจำนวนเงินแบบไม่ผ่าน float, ขอบเขต NUMERIC(18,2) |
-| `domain/entities/entities_test.go` | `TestAccountParentRules`, `TestAccountUsageRules`, `TestEntryLineValidation`, `TestEntryPostAndReverse`, `TestEntryNeedsTwoLines` | กฎผังบัญชี, บรรทัดรายการ, draft → posted → reversed |
+| `domain/value_objects/money_test.go` | `TestParseMoney` | แปลงจำนวนเงินเป็น decimal, ขอบเขต NUMERIC(24,6) |
+| `domain/entities/entities_test.go` | `TestAccountParentRules`, `TestAccountUsageRules`, `TestEntryLineValidation`, `TestEntryPostAndReverse`, `TestEntryAmountDecimalsFromCompany`, `TestEntryNeedsTwoLines` | กฎผังบัญชี, บรรทัดรายการ, draft → posted → reversed |
 | `domain/services/services_test.go` | `TestBuildSectionRollsUpAndHidesZero` | รวมยอดตามผังบัญชีในงบการเงิน |
 | `ledger_integration_test.go` | `TestLedgerFlow` | สมุด / ผังบัญชี (ลูป, parent, ซ้ำ), draft ไม่สมดุล → แก้ → ผ่าน, เลขที่เอกสารรายปี, มิติวิเคราะห์ไม่พบ, บัญชีคุม / inactive, งวดปิด, ไม่มีงวด, กลับรายการ, ค้นหาผ่าน URL query, **ตัวเลขงบทดลอง / งบแสดงฐานะ / งบกำไรขาดทุน / บัญชีแยกประเภท (คำนวณมือแล้วเทียบ)**, ลบที่ถูกใช้, **ผ่านรายการพร้อมกัน 10 ใบ ได้เลขที่ไม่ซ้ำไม่ขาดตอน**, สิทธิ์ (draft ได้แต่ post ไม่ได้), บริษัท inactive, tenant isolation, query ผิดรูปแบบ |
+
+### inventory
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/services/fifo_test.go` | `TestReceiptValueRoundsToCompanyDecimals`, `TestIssueConsumesOldestLayersFirst`, `TestPartialConsumptionLeavesNoRoundingDust`, `TestNoNegativeStockAndNoFutureLayers`, `TestTransferCarriesFifoCost`, `TestAdjustmentInThenOutInSameDocument`, `TestCancelRestoresLayersAndRejectsUsedReceipt` | FIFO (pure function ไม่ต้องใช้ DB) |
+| `domain/entities/entities_test.go` | `TestDocumentLineRules`, `TestDocumentLifecycle`, `TestItemRules` | กฎบรรทัดเอกสาร, ทศนิยมตามบริษัท, draft → posted → cancelled |
+| `inventory_integration_test.go` | `TestInventoryFlow` | master / สาขาไม่พบ, รับ / เบิก / โอน / ปรับปรุง, **มูลค่า FIFO คำนวณมือแล้วเทียบ**, ห้ามติดลบ / ห้ามใช้ชั้นวันที่อนาคต, ทศนิยมตามบริษัท, รายงาน stock-on-hand / stock-card (แบ่งหน้า), ลำดับการยกเลิก, **เบิกพร้อมกัน 10 ครั้งจากของ 5 ชิ้น = สำเร็จ 5 พอดี**, สิทธิ์, งวดปิด, บริษัท inactive, query ผิดรูปแบบ |
 
 ### platform
 
 | ไฟล์ | Test |
 |---|---|
+| `platform/numeric/numeric_test.go` | `TestParse`, `TestFitsScale`, `TestInRange` |
 | `platform/listing/listing_test.go` | `TestParsePage`, `TestParseSort`, `TestParseSearch`, `TestParseDateRange`, `TestParseListAndOptional` |
 | `platform/database/database_test.go` | `TestLikeContainsEscapesWildcards` |
 
-## 5.4 ผลล่าสุด (2026-11-11)
+## 5.4 ผลล่าสุด (2026-11-12)
 
 `go build ./...`, `go vet ./...` และ `go test -p 1 ./...` (รวม integration กับ PostgreSQL 16) — **ผ่านทั้งหมด**
 

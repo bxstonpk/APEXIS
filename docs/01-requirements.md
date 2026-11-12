@@ -57,7 +57,10 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 
 รายละเอียดของบริษัท (ORG-01):
 
-- `POST /companies` ต้องมี `code`, `name` เท่านั้น — ค่าเริ่มต้น: `base_currency` = THB, `fiscal_year_start_month` = 1, `status` = active, `legal_name_th` = `name`
+- `POST /companies` ต้องมี `code`, `name` เท่านั้น — ค่าเริ่มต้น: `base_currency` = THB, `fiscal_year_start_month` = 1, `status` = active, `legal_name_th` = `name`, `amount_decimals` = 2, `quantity_decimals` = 2
+- **จำนวนทศนิยมกำหนดต่อบริษัท ไม่ fix ไว้ในโค้ด**: `amount_decimals` (จำนวนเงิน) และ `quantity_decimals` (จำนวนสินค้า) ตั้งได้ 0–6
+  - ทุก module ตรวจข้อมูลที่บันทึกกับค่านี้ (ledger: จำนวนเงิน, inventory: จำนวนสินค้า / มูลค่า)
+  - เพิ่มได้ แต่ลดไม่ได้ (422) — ข้อมูลเดิมที่มีทศนิยมมากกว่าจะผิดรูป
 - ผู้ใช้ที่ active ทุกคนสร้างบริษัทได้
 - บริษัท `inactive`:
   - อ่านข้อมูลทุกอย่างได้ตามปกติ
@@ -87,10 +90,28 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 
 ข้อตกลงทางบัญชี:
 
-- สกุลเงินเดียว (สกุลเงินหลักของบริษัท) ทศนิยม 2 ตำแหน่ง — เก็บเป็นจำนวนเต็มหน่วยย่อย ไม่ใช้ float
+- สกุลเงินเดียว (สกุลเงินหลักของบริษัท) — จำนวนเงินเป็น decimal ฐาน 10 (ไม่ใช้ float); ทศนิยมตามที่บริษัทกำหนด (`amount_decimals`)
 - **ยังไม่มีการปิดบัญชีสิ้นปี**: รายได้ / ค่าใช้จ่ายเริ่มนับใหม่ที่วันเริ่มปีบัญชีของ organization; กำไร (ขาดทุน) ปีก่อนแสดงเป็นยอด "กำไรสะสมที่ยังไม่ปิดบัญชี" แยกต่างหาก
 - รายการ `reversed` ยังมีผลต่อยอด (การกลับรายการคือรายการใหม่อีกใบที่หักล้างกัน)
 - บริษัท inactive: อ่าน / ดูรายงานได้ แต่เขียนข้อมูลบัญชีไม่ได้ (422)
+
+## 1.4.2 Functional Requirements — `inventory` (คลังสินค้า)
+
+| ID | ความต้องการ | กฎธุรกิจ |
+|---|---|---|
+| INV-01 | **หน่วยนับ (uoms)**, **หมวดสินค้า (item-categories)** CRUD + ค้นหา | ลบไม่ได้ถ้ายังมีสินค้าใช้อยู่ |
+| INV-02 | **คลัง (warehouses)** CRUD + ค้นหา | ผูกสาขาของ organization ได้ (ต้องมีอยู่จริง); มีเอกสารแล้วลบไม่ได้ |
+| INV-03 | **สินค้า (items)** CRUD + ค้นหา | ชนิด stock / non_stock / service; มีการเคลื่อนไหวแล้วเปลี่ยนชนิด / หน่วยนับไม่ได้; จุดสั่งซื้อทศนิยมตามบริษัท |
+| INV-04 | **เอกสารสต็อก (stock-documents)**: รับเข้า (receipt), เบิก (issue), โอนระหว่างคลัง (transfer), ปรับปรุง (adjustment) | draft → posted → cancelled; เลขที่ `GR/GI/TR/AJ{ปีบัญชี}-{000001}` เรียงไม่ขาดตอน; วันที่ต้องอยู่ในงวดที่เปิด; ใช้ได้เฉพาะสินค้าชนิด stock ที่ active และคลังที่ active |
+| INV-05 | **ต้นทุน FIFO** | ขาออกตัดชั้นต้นทุนเก่าสุดก่อน (เฉพาะชั้นที่ลงวันที่ไม่เกินวันที่เอกสาร); โอนย้ายพาต้นทุน FIFO เดิมไปคลังปลายทาง |
+| INV-06 | **ห้ามสต็อกติดลบ** | เบิกเกินยอดที่มี ณ วันที่เอกสาร = 422; ทำงานถูกต้องเมื่อเบิกพร้อมกันหลายคน |
+| INV-07 | **ยกเลิกเอกสาร** | กลับผลที่วันที่เดิม (งวดต้องยังเปิด); เอกสารที่ของที่รับเข้าถูกใช้ไปแล้วยกเลิกไม่ได้ (ต้องยกเลิกเอกสารที่ใช้ก่อน) |
+| INV-08 | **รายงาน** `stock-on-hand` (ยอดคงเหลือ + มูลค่า ณ วันที่), `stock-card` (การเคลื่อนไหวพร้อมยอดสะสม) | ผ่าน `GET /reports?book=` เดียวกับ ledger |
+
+ข้อตกลง:
+- **inventory ไม่ลงบัญชีเอง** — module ที่เกี่ยวข้อง (ซื้อ / ขาย) เป็นผู้ลงบัญชี โดยใช้ต้นทุนจากเอกสารสต็อก
+- จำนวนสินค้าทศนิยมตาม `quantity_decimals`; มูลค่าปัดตาม `amount_decimals`; ต้นทุนต่อหน่วยรับได้ถึง 6 ตำแหน่ง
+- การตัดชั้น FIFO บางส่วนปัดมูลค่าตามทศนิยมของเงิน; การตัดหมดชั้นใช้มูลค่าคงเหลือทั้งหมด จึงไม่มีเศษค้าง
 
 ## 1.5 สิทธิ์ (Permissions)
 
@@ -99,6 +120,7 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | identity | `identity.member:read`, `identity.member:manage`, `identity.role:read`, `identity.role:manage` |
 | organization | `organization.{company,branch,business_unit,department,cost_center,project_site}:{read,manage}` |
 | organization (บัญชี) | `organization.fiscal_period:read`, `organization.fiscal_period:manage` (สร้างปีบัญชี), `organization.fiscal_period:close` (ปิด/เปิดงวด) |
+| inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read` |
 | ledger | `ledger.account:{read,manage}`, `ledger.journal:{read,manage}`, `ledger.entry:read`, `ledger.entry:manage` (สร้าง / แก้ / ลบ draft), `ledger.entry:post` (ผ่าน / กลับรายการ), `ledger.report:read` |
 
 owner ได้สิทธิ์ `*` อัตโนมัติ — role อื่นต้องกำหนดสิทธิ์เอง

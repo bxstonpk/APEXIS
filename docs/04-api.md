@@ -89,7 +89,7 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 | POST | `/companies` | login | ผู้สร้างเป็น owner — 201 |
 | GET | `/me/companies` | login | บริษัทที่ตัวเองเป็นสมาชิก `?q=&status=&sort=name\|code&page=&page_size=` |
 | GET | `/companies/{companyID}` | `organization.company:read` | |
-| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท |
+| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
 
 ### ข้อมูลภายใต้บริษัท
 
@@ -115,7 +115,8 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 { "name": "ACME", "tax_id": "0105556000000",
   "legal_name_th": "บริษัท แอคมี จำกัด", "legal_name_en": "ACME Co., Ltd.",
   "address": { "line": "", "sub_district": "", "district": "", "province": "", "postal_code": "10110", "country": "TH" },
-  "phone": "", "email": "", "website": "", "base_currency": "THB", "fiscal_year_start_month": 1, "status": "active" }
+  "phone": "", "email": "", "website": "", "base_currency": "THB", "fiscal_year_start_month": 1,
+  "amount_decimals": 2, "quantity_decimals": 2, "status": "active" }
 
 // POST/PUT /branches   (status: ค่าเริ่มต้น active ตอน POST, บังคับส่งตอน PUT)
 { "code": "HQ", "name": "สำนักงานใหญ่", "tax_branch_no": "00000", "address": { … }, "phone": "", "status": "active" }
@@ -144,9 +145,9 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 
 prefix: `/api/v1/companies/{companyID}` — การเขียนทุกตัวต้องให้บริษัท `active`
 
-**จำนวนเงิน**:
-- request รับเป็น string `"1234.50"` (แนะนำ) หรือ number ทศนิยมไม่เกิน 2 ตำแหน่ง
-- response ส่งเป็น string `"1234.50"` เสมอ — client จะได้ไม่ปัดเศษผิด
+**จำนวนเงิน / จำนวนสินค้า** (ใช้กับ ledger และ inventory):
+- request รับเป็น string `"1234.5"` (แนะนำ) หรือ number — ทศนิยมไม่เกินที่บริษัทกำหนด (`amount_decimals` / `quantity_decimals`) ไม่งั้น 400
+- response ส่งเป็น string ตามค่าจริง เช่น `"1200"`, `"30000.5"` — frontend จัดรูปแบบการแสดงผลตามทศนิยมของบริษัท
 
 ### ผังบัญชี / สมุดรายวัน
 
@@ -200,7 +201,44 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 // POST/PUT /journal-entries   (status เฉพาะ POST: "draft" ค่าเริ่มต้น | "posted")
 { "journal_id": "…", "date": "2026-01-10", "description": "ค่าเช่า", "reference": "INV-001", "status": "draft",
   "lines": [
-    { "account_id": "…", "debit": "1200.00", "description": "ค่าเช่าเดือนมกราคม",
+    { "account_id": "…", "debit": "1200", "description": "ค่าเช่าเดือนมกราคม",
       "branch_id": null, "department_id": null, "cost_center_id": null, "project_site_id": null },
-    { "account_id": "…", "credit": "1200.00" } ] }
+    { "account_id": "…", "credit": "1200" } ] }
 ```
+
+## 4.7 Endpoint — inventory
+
+prefix: `/api/v1/companies/{companyID}` — การเขียนทุกตัวต้องให้บริษัท `active`
+
+| Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | Permission |
+|---|---|---|---|
+| หน่วยนับ | `GET`, `POST /uoms`; `GET`, `PUT`, `DELETE /uoms/{uomID}` | `status` | `inventory.uom:read\|manage` |
+| หมวดสินค้า | `/item-categories[/{categoryID}]` | `status` | `inventory.category:read\|manage` |
+| คลัง | `/warehouses[/{warehouseID}]` | `status, branch_id` | `inventory.warehouse:read\|manage` |
+| สินค้า | `/items[/{itemID}]` | `type` (stock,non_stock,service), `status, category_id, uom_id` | `inventory.item:read\|manage` |
+
+### เอกสารสต็อก
+
+| Method | Path | Permission | หมายเหตุ |
+|---|---|---|---|
+| GET | `/stock-documents` | `inventory.document:read` | `?q=&type=receipt,issue,transfer,adjustment&status=&warehouse_id=&item_id=&start_date=&end_date=&sort=date\|document_no\|created_at` |
+| POST | `/stock-documents` | `inventory.document:manage` (+ `post` ถ้า `status: "posted"`) | 201 |
+| GET | `/stock-documents/{documentID}` | `inventory.document:read` | พร้อมบรรทัด (มูลค่า FIFO หลังผ่าน) |
+| PUT | `/stock-documents/{documentID}` | `inventory.document:manage` | แทนที่ draft ทั้งก้อน |
+| PATCH | `/stock-documents/{documentID}` | `inventory.document:post` | `{"status": "posted"}` ผ่าน / `{"status": "cancelled"}` ยกเลิก |
+| DELETE | `/stock-documents/{documentID}` | `inventory.document:manage` | เฉพาะ draft — 204 |
+
+```jsonc
+// POST /stock-documents
+{ "type": "receipt", "date": "2026-01-05", "warehouse_id": "…", "reference": "PO-001", "status": "draft",
+  "lines": [ { "item_id": "…", "quantity": "10", "unit_cost": "12.50" } ] }
+// receipt: unit_cost บังคับ | issue / transfer: ห้ามส่ง unit_cost (FIFO)
+// transfer: ต้องมี "to_warehouse_id" | adjustment: quantity บวก = เพิ่ม (ต้องมี unit_cost), ลบ = ลด (FIFO)
+```
+
+### รายงาน (`inventory.report:read`) — ผ่าน `GET /reports?book=` เดียวกับ ledger
+
+| `book` | parameter | ผลลัพธ์ |
+|---|---|---|
+| `stock-on-hand` | `end_date` (บังคับ = ณ วันที่), `warehouse_id, item_id, category_id, q, sort` (item_code, item_name, warehouse_code, quantity, value), `page, page_size` | แถวต่อสินค้า × คลัง: จำนวน + มูลค่า; `total_value` = มูลค่ารวมทุกแถวที่ตรงเงื่อนไข; `meta` แบ่งหน้า |
+| `stock-card` | `item_id, start_date, end_date` (บังคับ), `warehouse_id` (ไม่ส่ง = ทุกคลัง), `page, page_size` | ยอดยกมา + การเคลื่อนไหว (± จำนวน / มูลค่า) พร้อมยอดสะสม; `meta` แบ่งหน้า |

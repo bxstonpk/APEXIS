@@ -39,6 +39,16 @@
    - React 19 + Vite + Tailwind CSS v4 + React Router 7
    - ข้อความทั้งหมดอยู่ที่ `src/config/locales/th.ts`, design token อยู่ที่ `src/styles/app.css`
    - หน้า login + หน้าหลักชั่วคราว
+9. **seed ผู้ดูแลระบบ** จาก `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` ตอนเริ่มโปรแกรม (ถ้ายังไม่มี)
+10. **ทศนิยมกำหนดต่อบริษัท** (ตัดสินใจ 2026-11-12)
+    - `organization_companies.amount_decimals` / `quantity_decimals` (0–6, เพิ่มได้ ลดไม่ได้)
+    - ledger เปลี่ยนจากจำนวนเต็มสตางค์ (fix 2 ตำแหน่ง) เป็น decimal + `NUMERIC(24,6)`
+    - JSON ส่งตัวเลขตามค่าจริง (`"1200"` แทน `"1200.00"`)
+    - organization public API: `CompanyActive` → `CompanySettings` (สถานะ + ทศนิยม ใน query เดียว)
+11. **สร้าง module inventory** (ตัดสินใจ 2026-11-12)
+    - ต้นทุน FIFO, ห้ามสต็อกติดลบ, ไม่ลงบัญชีเอง (ซื้อ / ขายเป็นผู้ลง)
+    - หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, รายงาน stock-on-hand / stock-card
+12. **รายงานรวม** `platform/reports`: ledger และ inventory ลงทะเบียน book กับ `GET /reports?book=` เดียว
 
 ## 7.3 ข้อเบี่ยงเบนจากสเปก / การตัดสินใจที่ควรรู้
 
@@ -58,7 +68,11 @@
 | ledger: ผังบัญชีเริ่มต้น | ยังไม่มี template ผังบัญชีไทย / สมุดเริ่มต้น (ต้องสร้างเอง) | **รอยืนยัน** ว่าต้องการ template หรือไม่ |
 | ledger: ผ่านรายการ | ~8 query เล็กใน transaction เดียว (สิทธิ์, บริษัท, lock รายการ, สมุด, บัญชี, มิติ, งวด, เลขที่) | แต่ละ query ใช้ index / primary key — ไม่ขึ้นกับจำนวนบรรทัด |
 | ledger: มิติวิเคราะห์ใน response | ส่งเป็น id (ไม่มีชื่อ) | ชื่ออยู่ใน organization — JOIN ข้าม module ไม่ได้; frontend ใช้ master list ที่โหลดไว้ |
-| สิทธิ์ role อื่นนอกจาก owner | ต้องให้ admin กำหนด `organization.*` เอง | ยังไม่มี role template |
+| สิทธิ์ role อื่นนอกจาก owner | ต้องให้ admin กำหนด `organization.*` / `ledger.*` / `inventory.*` เอง | ยังไม่มี role template |
+| inventory: เลขที่เอกสาร | prefix คงที่ GR / GI / TR / AJ ตามชนิด | ยังไม่ได้ทำให้ตั้งค่าได้ (แบบสมุดรายวันของ ledger) |
+| inventory: ยกเลิกเอกสาร | กลับผลที่วันที่เดิมของเอกสาร (งวดต้องเปิด) | เอกสารในงวดที่ปิดแล้วให้ทำใบปรับปรุงแทน |
+| inventory: ยังไม่ทำ | lot / serial, วันหมดอายุ, ชั้นวาง (bin), หลายหน่วยนับต่อสินค้า, ใบตรวจนับ, รายงานจุดสั่งซื้อ | นอกขอบเขตรอบแรก |
+| inventory: สาขาที่คลังอ้างถึง | organization ลบสาขาได้แม้คลังยังอ้างถึง (ไม่รู้จักตารางของ inventory) | id เดิมยังอยู่; ตรวจตอนบันทึกคลังเท่านั้น |
 
 ## 7.4 งานถัดไป (แนะนำ)
 
@@ -71,4 +85,5 @@
 | 5 | Audit log ร่วม (platform) — ใช้ transaction เดียวกับการเขียน |
 | 6 | frontend ต่อ: layout หลัก + เมนู, เลือกบริษัท (`/me/companies`), หน้ารายงานเดียว `?book=` |
 | 7 | ledger ต่อ: template ผังบัญชีไทย, การปิดบัญชีสิ้นปี, ตารางยอดสะสมรายงวด (ถ้ารายงานช้าเมื่อข้อมูลโต) |
-| 8 | module ถัดไป (เช่น AR / AP) ที่ลงบัญชีผ่าน ledger use case ใน transaction เดียวกัน |
+| 8 | module ซื้อ / ขาย: ใช้เอกสารสต็อกของ inventory (ต้นทุน FIFO) และลงบัญชีผ่าน ledger ใน transaction เดียวกัน |
+| 9 | inventory ต่อ: ใบตรวจนับ, รายงานจุดสั่งซื้อ, lot / serial (ถ้าต้องการ) |
