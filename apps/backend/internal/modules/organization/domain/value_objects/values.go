@@ -155,6 +155,17 @@ func NewTaxID(raw string) (string, error) {
 	return s, nil
 }
 
+// MaxDecimals คือจำนวนทศนิยมสูงสุดที่ตั้งได้ (ฐานข้อมูลเก็บ NUMERIC สเกล 6)
+const MaxDecimals = 6
+
+// NewDecimals ตรวจจำนวนตำแหน่งทศนิยม (0-6)
+func NewDecimals(n int) (int, error) {
+	if n < 0 || n > MaxDecimals {
+		return 0, domain.ErrInvalidDecimals
+	}
+	return n, nil
+}
+
 // Currency คือรหัสสกุลเงิน ISO 4217 เช่น THB
 type Currency string
 

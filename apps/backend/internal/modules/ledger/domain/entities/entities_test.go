@@ -70,37 +70,37 @@ func TestAccountUsageRules(t *testing.T) {
 	}
 }
 
-func line(acc vo.AccountID, debit, credit vo.Money) LineData {
-	return LineData{AccountID: acc, Debit: debit, Credit: credit}
+func line(acc vo.AccountID, debit, credit string) LineData {
+	return LineData{AccountID: acc, Debit: vo.MustMoney(debit), Credit: vo.MustMoney(credit)}
 }
 
 func TestEntryLineValidation(t *testing.T) {
 	cases := map[string][]LineData{
 		"no lines":       nil,
-		"both sides":     {line(cash, 100, 100)},
-		"zero line":      {line(cash, 0, 0)},
-		"negative debit": {line(cash, -100, 0)},
+		"both sides":     {line(cash, "100", "100")},
+		"zero line":      {line(cash, "0", "0")},
+		"negative debit": {line(cash, "-100", "0")},
 	}
 	for name, lines := range cases {
-		if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: lines}); !errors.Is(err, domain.ErrInvalidLine) {
+		if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: lines}, 2); !errors.Is(err, domain.ErrInvalidLine) {
 			t.Errorf("%s: got %v", name, err)
 		}
 	}
-	if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day.Add(time.Hour), Lines: []LineData{line(cash, 1, 0)}}); !errors.Is(err, domain.ErrInvalidDate) {
+	if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day.Add(time.Hour), Lines: []LineData{line(cash, "1", "0")}}, 2); !errors.Is(err, domain.ErrInvalidDate) {
 		t.Errorf("non date-only: %v", err)
 	}
 }
 
 func TestEntryPostAndReverse(t *testing.T) {
 	// draft ไม่สมดุลได้ แต่ผ่านรายการไม่ได้
-	e, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, 10000, 0), line(sales, 0, 9000)}})
+	e, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, "10000", "0"), line(sales, "0", "9000")}}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := e.Post(Posting{EntryNo: "JV2026-000001"}); !errors.Is(err, domain.ErrUnbalanced) {
 		t.Fatalf("post unbalanced: %v", err)
 	}
-	if err := e.Update(EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, 10000, 0), line(sales, 0, 10000)}}); err != nil {
+	if err := e.Update(EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, "10000", "0"), line(sales, "0", "10000")}}, 2); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Reversal(day, "", user); !errors.Is(err, domain.ErrEntryNotPosted) {
@@ -109,7 +109,7 @@ func TestEntryPostAndReverse(t *testing.T) {
 	if err := e.Post(Posting{EntryNo: "JV2026-000001", By: user, At: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.Update(e.Data()); !errors.Is(err, domain.ErrEntryNotDraft) {
+	if err := e.Update(e.Data(), 2); !errors.Is(err, domain.ErrEntryNotDraft) {
 		t.Fatalf("update posted: %v", err)
 	}
 	if err := e.EnsureDeletable(); !errors.Is(err, domain.ErrEntryNotDraft) {
@@ -121,7 +121,7 @@ func TestEntryPostAndReverse(t *testing.T) {
 		t.Fatal(err)
 	}
 	rl := r.Data().Lines
-	if rl[0].Credit != 10000 || rl[1].Debit != 10000 || r.Data().Reference != "JV2026-000001" || *r.State().ReversalOf != e.ID() {
+	if !rl[0].Credit.Equal(vo.MustMoney("10000")) || !rl[1].Debit.Equal(vo.MustMoney("10000")) || r.Data().Reference != "JV2026-000001" || *r.State().ReversalOf != e.ID() {
 		t.Fatalf("reversal = %+v", r.State())
 	}
 	if err := e.MarkReversed(r.ID()); err != nil || e.Status() != vo.EntryReversed {
@@ -132,8 +132,22 @@ func TestEntryPostAndReverse(t *testing.T) {
 	}
 }
 
+func TestEntryAmountDecimalsFromCompany(t *testing.T) {
+	lines := []LineData{line(cash, "10.125", "0"), line(sales, "0", "10.125")}
+	if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: lines}, 2); !errors.Is(err, domain.ErrInvalidLine) {
+		t.Fatalf("3 decimals with company setting 2: %v", err)
+	}
+	if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: lines}, 3); err != nil {
+		t.Fatalf("3 decimals with company setting 3: %v", err)
+	}
+	whole := []LineData{line(cash, "10.00", "0"), line(sales, "0", "10")}
+	if _, err := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: whole}, 0); err != nil {
+		t.Fatalf("10.00 with company setting 0: %v", err)
+	}
+}
+
 func TestEntryNeedsTwoLines(t *testing.T) {
-	e, _ := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, 100, 0)}})
+	e, _ := NewEntry(company, user, EntryData{JournalID: journal, Date: day, Lines: []LineData{line(cash, "100", "0")}}, 2)
 	if err := e.EnsurePostable(); !errors.Is(err, domain.ErrEntryIncomplete) {
 		t.Fatalf("single line: %v", err)
 	}

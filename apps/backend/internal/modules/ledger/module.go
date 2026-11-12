@@ -22,6 +22,7 @@ import (
 	"apexis/backend/internal/modules/ledger/infrastructure/services"
 	ledgerhttp "apexis/backend/internal/modules/ledger/presentation/http"
 	"apexis/backend/internal/modules/ledger/presentation/http/handlers"
+	"apexis/backend/internal/platform/reports"
 )
 
 // Identity คือสิ่งที่ ledger ต้องการจาก identity module (*identity.Module implement)
@@ -33,7 +34,7 @@ type Identity interface {
 
 // Organization คือสิ่งที่ ledger ต้องการจาก organization module (*organization.Module implement)
 type Organization interface {
-	CompanyActive(ctx context.Context, companyID uuid.UUID) (bool, error)
+	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 }
@@ -59,6 +60,11 @@ func New(db *gorm.DB, identity Identity, org Organization) *Module {
 
 func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 	ledgerhttp.RegisterRoutes(mux, m.handler, m.identity.Authenticate)
+}
+
+// RegisterReports ลงทะเบียน book ของ ledger กับ GET /reports?book=
+func (m *Module) RegisterReports(reg *reports.Registry) {
+	ledgerhttp.RegisterReports(reg, m.handler)
 }
 
 // Migrate สร้างตารางของ ledger

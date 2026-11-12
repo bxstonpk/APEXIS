@@ -110,7 +110,8 @@ func (a Address) toDomain() vo.Address {
 //
 // POST: ต้องมี code, name — ที่เหลือมีค่าเริ่มต้น (base_currency THB, fiscal_year_start_month 1,
 // status active, legal_name_th = name)
-// PUT: แทนที่ทั้งก้อน ต้องส่ง name, base_currency, fiscal_year_start_month, status — code แก้ไม่ได้ (ไม่ต้องส่ง)
+// PUT: แทนที่ทั้งก้อน ต้องส่ง name, base_currency, fiscal_year_start_month, amount_decimals, quantity_decimals, status
+// — code แก้ไม่ได้ (ไม่ต้องส่ง)
 type Company struct {
 	Code                 string  `json:"code"`
 	Name                 string  `json:"name"`
@@ -123,7 +124,20 @@ type Company struct {
 	Website              string  `json:"website"`
 	BaseCurrency         string  `json:"base_currency"`
 	FiscalYearStartMonth int     `json:"fiscal_year_start_month"`
+	AmountDecimals       *int    `json:"amount_decimals"`   // POST ไม่ส่ง = 2, PUT ต้องส่ง
+	QuantityDecimals     *int    `json:"quantity_decimals"` // POST ไม่ส่ง = 2, PUT ต้องส่ง
 	Status               string  `json:"status"`
+}
+
+// decimals: 0 เป็นค่าที่ถูกต้อง จึงรับเป็น pointer เพื่อแยก "ไม่ได้ส่ง"
+func decimals(field string, v *int, isCreate bool) (int, error) {
+	switch {
+	case v != nil:
+		return *v, nil
+	case isCreate:
+		return 2, nil
+	}
+	return 0, invalid("%s is required", field)
 }
 
 func (r Company) ToData(isCreate bool) (entities.CompanyData, error) {
@@ -149,10 +163,19 @@ func (r Company) ToData(isCreate bool) (entities.CompanyData, error) {
 	if err != nil {
 		return entities.CompanyData{}, err
 	}
+	amountDecimals, err := decimals("amount_decimals", r.AmountDecimals, isCreate)
+	if err != nil {
+		return entities.CompanyData{}, err
+	}
+	quantityDecimals, err := decimals("quantity_decimals", r.QuantityDecimals, isCreate)
+	if err != nil {
+		return entities.CompanyData{}, err
+	}
 	return entities.CompanyData{
 		Code: r.Code, Name: r.Name, TaxID: r.TaxID, LegalNameTH: r.LegalNameTH, LegalNameEN: r.LegalNameEN,
 		Address: r.Address.toDomain(), Phone: r.Phone, Email: r.Email, Website: r.Website,
-		BaseCurrency: r.BaseCurrency, FiscalYearStartMonth: r.FiscalYearStartMonth, Status: st,
+		BaseCurrency: r.BaseCurrency, FiscalYearStartMonth: r.FiscalYearStartMonth,
+		AmountDecimals: amountDecimals, QuantityDecimals: quantityDecimals, Status: st,
 	}, nil
 }
 

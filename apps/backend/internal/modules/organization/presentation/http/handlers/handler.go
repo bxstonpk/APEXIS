@@ -48,6 +48,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidWebsite, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidCurrency, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalMonth, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidDecimals, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidDateRange, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalYear, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalStart, Status: http.StatusBadRequest},
@@ -71,6 +72,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrFiscalYearOverlaps, Status: http.StatusConflict},
 	// 422
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrDecimalsDecrease, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrHierarchyCycle, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrHeadOfficeImmutable, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrProjectEndDateRequired, Status: http.StatusUnprocessableEntity},

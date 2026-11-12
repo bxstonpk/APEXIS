@@ -90,11 +90,11 @@ func (b base) write(ctx context.Context, a dto.Actor, p vo.Permission, fn func(c
 		if err := b.authorize(ctx, a, p); err != nil {
 			return err
 		}
-		active, err := b.companies.IsActive(ctx, a.CompanyID)
+		s, err := b.companies.Settings(ctx, a.CompanyID)
 		if err != nil {
 			return err
 		}
-		if !active {
+		if !s.Active {
 			return domain.ErrCompanyInactive
 		}
 		return fn(ctx)

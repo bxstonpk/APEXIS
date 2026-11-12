@@ -39,7 +39,7 @@ func (a *IdentityAuthorizer) Authorize(ctx context.Context, userID vo.UserID, co
 
 // OrganizationAccess คือ public API ของ organization ที่ ledger ใช้ (organization.Module implement)
 type OrganizationAccess interface {
-	CompanyActive(ctx context.Context, companyID uuid.UUID) (bool, error)
+	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 }
@@ -50,8 +50,9 @@ type Organization struct{ org OrganizationAccess }
 
 func NewOrganization(org OrganizationAccess) *Organization { return &Organization{org: org} }
 
-func (o *Organization) CompanyActive(ctx context.Context, companyID vo.CompanyID) (bool, error) {
-	return o.org.CompanyActive(ctx, uuid.UUID(companyID))
+func (o *Organization) CompanySettings(ctx context.Context, companyID vo.CompanyID) (ports.CompanySettings, error) {
+	active, amountDecimals, _, err := o.org.CompanySettings(ctx, uuid.UUID(companyID))
+	return ports.CompanySettings{Active: active, AmountDecimals: amountDecimals}, err
 }
 
 func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (ports.Period, error) {

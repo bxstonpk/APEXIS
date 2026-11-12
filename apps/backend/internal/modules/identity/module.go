@@ -129,5 +129,12 @@ func (m *Module) MemberCompanyIDs(ctx context.Context, userID uuid.UUID) ([]uuid
 	return out, nil
 }
 
+// SeedUser สร้างผู้ใช้เริ่มต้น (เช่นผู้ดูแลระบบจาก INITIAL_ADMIN_*) ถ้ายังไม่มีอีเมลนี้
+// คืน true เมื่อสร้างใหม่, false เมื่อมีอยู่แล้ว (ไม่แก้ไขผู้ใช้เดิม / ไม่รีเซ็ตรหัสผ่าน)
+func (m *Module) SeedUser(ctx context.Context, email, name, password string) (bool, error) {
+	_, created, err := m.UseCases.Auth.EnsureUser(ctx, dto.RegisterUserInput{Email: email, Name: name, Password: password})
+	return created, err
+}
+
 // Migrate สร้างตารางของ identity
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }

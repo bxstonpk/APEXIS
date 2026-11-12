@@ -39,6 +39,8 @@ type CompanyModel struct {
 	Website              string         `gorm:"size:300;not null;default:''"`
 	BaseCurrency         string         `gorm:"size:3;not null"`
 	FiscalYearStartMonth int            `gorm:"not null;check:chk_org_companies_fy_month,fiscal_year_start_month BETWEEN 1 AND 12"`
+	AmountDecimals       int            `gorm:"not null;default:2;check:chk_org_companies_amount_decimals,amount_decimals BETWEEN 0 AND 6"`
+	QuantityDecimals     int            `gorm:"not null;default:2;check:chk_org_companies_quantity_decimals,quantity_decimals BETWEEN 0 AND 6"`
 	Status               string         `gorm:"size:20;not null;check:chk_org_companies_status,status IN ('active','inactive')"`
 	CreatedAt            time.Time      `gorm:"not null"`
 	UpdatedAt            time.Time      `gorm:"not null"`

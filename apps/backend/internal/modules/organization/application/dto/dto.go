@@ -206,7 +206,16 @@ type Company struct {
 	Website              string
 	BaseCurrency         string
 	FiscalYearStartMonth int
+	AmountDecimals       int
+	QuantityDecimals     int
 	Status               string
+}
+
+// CompanySettings คือค่าตั้งของบริษัทที่ module อื่นต้องใช้ตอนเขียนข้อมูล (อ่านใน query เดียว)
+type CompanySettings struct {
+	Active           bool
+	AmountDecimals   int
+	QuantityDecimals int
 }
 
 // PeriodAt คืองวดบัญชีที่ครอบคลุมวันที่หนึ่ง (module อื่นใช้ตรวจก่อนลงรายการ / ทำรายงาน)

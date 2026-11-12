@@ -143,7 +143,7 @@ func TestFiscalPeriodCloseOrder(t *testing.T) {
 }
 
 func TestCompanyRules(t *testing.T) {
-	base := CompanyData{Code: "acme", Name: "ACME", BaseCurrency: "thb", FiscalYearStartMonth: 1, Status: vo.StatusActive}
+	base := CompanyData{Code: "acme", Name: "ACME", BaseCurrency: "thb", FiscalYearStartMonth: 1, AmountDecimals: 2, QuantityDecimals: 2, Status: vo.StatusActive}
 	c, err := NewCompany(base)
 	if err != nil {
 		t.Fatal(err)
@@ -159,6 +159,18 @@ func TestCompanyRules(t *testing.T) {
 		t.Fatalf("update: %+v %v", c.Data(), err)
 	}
 
+	// ทศนิยมเพิ่มได้ ลดไม่ได้
+	more := c.Data()
+	more.AmountDecimals, more.QuantityDecimals = 4, 3
+	if err := c.Update(more); err != nil {
+		t.Fatalf("increase decimals: %v", err)
+	}
+	less := c.Data()
+	less.QuantityDecimals = 2
+	if err := c.Update(less); !errors.Is(err, domain.ErrDecimalsDecrease) {
+		t.Fatalf("decrease decimals: %v", err)
+	}
+
 	cases := map[string]struct {
 		mutate func(*CompanyData)
 		want   error
@@ -171,6 +183,8 @@ func TestCompanyRules(t *testing.T) {
 		"bad website": {func(d *CompanyData) { d.Website = "javascript:alert(1)" }, domain.ErrInvalidWebsite},
 		"currency":    {func(d *CompanyData) { d.BaseCurrency = "BAHT" }, domain.ErrInvalidCurrency},
 		"status":      {func(d *CompanyData) { d.Status = "deleted" }, domain.ErrInvalidStatus},
+		"decimals 7":  {func(d *CompanyData) { d.AmountDecimals = 7 }, domain.ErrInvalidDecimals},
+		"decimals -1": {func(d *CompanyData) { d.QuantityDecimals = -1 }, domain.ErrInvalidDecimals},
 	}
 	for name, tc := range cases {
 		d := base

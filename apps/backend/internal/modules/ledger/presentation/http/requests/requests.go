@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"apexis/backend/internal/modules/ledger/domain/entities"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
@@ -101,7 +103,7 @@ func (a *Amount) UnmarshalJSON(b []byte) error {
 
 func (a Amount) money() (vo.Money, error) {
 	if a == "" {
-		return 0, nil
+		return decimal.Zero, nil
 	}
 	return vo.ParseMoney(string(a))
 }

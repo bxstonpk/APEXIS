@@ -132,7 +132,8 @@ func TestOrganizationFlow(t *testing.T) {
 	// ---------- company: สร้างแล้วผู้สร้างเป็น owner (identity อยู่ใน transaction เดียวกัน) ----------
 	ca := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "acme", "name": "ACME", "tax_id": "0105556000000"}), 201, "company A")
 	if d := ca.data(); d["code"] != "ACME" || d["status"] != "active" || d["base_currency"] != "THB" ||
-		d["fiscal_year_start_month"] != float64(1) || d["legal_name_th"] != "ACME" {
+		d["fiscal_year_start_month"] != float64(1) || d["legal_name_th"] != "ACME" ||
+		d["amount_decimals"] != float64(2) || d["quantity_decimals"] != float64(2) {
 		t.Fatalf("company A defaults = %v", d)
 	}
 	compA := ca.id()
@@ -156,6 +157,7 @@ func TestOrganizationFlow(t *testing.T) {
 	company := map[string]any{
 		"code": "CHANGED", "name": "ACME", "legal_name_th": "บริษัท แอคมี จำกัด", "tax_id": "0105556000000",
 		"base_currency": "thb", "fiscal_year_start_month": 10, "status": "active",
+		"amount_decimals": 2, "quantity_decimals": 3,
 		"address": map[string]any{"line": "99 ถ.สุขุมวิท", "province": "กรุงเทพมหานคร", "postal_code": "10110"},
 	}
 	c := a.expect(a.do("PUT", base, owner, company), 200, "update company").data()
@@ -172,6 +174,13 @@ func TestOrganizationFlow(t *testing.T) {
 	delete(company, "status")
 	a.expect(a.do("PUT", base, owner, company), 400, "PUT company without status")
 	company["status"] = "active"
+	company["quantity_decimals"] = 2
+	a.expect(a.do("PUT", base, owner, company), 422, "decrease quantity decimals")
+	company["quantity_decimals"] = 7
+	a.expect(a.do("PUT", base, owner, company), 400, "7 decimals")
+	delete(company, "quantity_decimals")
+	a.expect(a.do("PUT", base, owner, company), 400, "PUT company without quantity_decimals")
+	company["quantity_decimals"] = 3
 
 	// บริษัทของฉัน: id จาก identity + กรอง / เรียง / แบ่งหน้าใน organization
 	if got := a.expect(a.do("GET", "/api/v1/me/companies?sort=-code", owner, nil), 200, "my companies").codes(); !slices.Equal(got, []string{"BETA", "ACME"}) {
@@ -301,7 +310,7 @@ func TestOrganizationFlow(t *testing.T) {
 	}
 
 	// ---------- บริษัท inactive = อ่านอย่างเดียว ----------
-	companyB := map[string]any{"name": "Beta", "base_currency": "THB", "fiscal_year_start_month": 1, "status": "inactive"}
+	companyB := map[string]any{"name": "Beta", "base_currency": "THB", "fiscal_year_start_month": 1, "amount_decimals": 2, "quantity_decimals": 2, "status": "inactive"}
 	a.expect(a.do("PUT", baseB, owner, companyB), 200, "deactivate B")
 	a.expect(a.do("POST", baseB+"/branches", owner, map[string]any{"code": "HQ", "name": "HQ", "tax_branch_no": "00000"}), 422, "write to inactive company")
 	a.expect(a.do("POST", baseB+"/fiscal-years", owner, map[string]any{"year": 2026, "start_date": "2026-01-01"}), 422, "fiscal year in inactive company")

@@ -4,6 +4,8 @@ import (
 	nethttp "net/http"
 
 	"apexis/backend/internal/modules/ledger/presentation/http/handlers"
+	"apexis/backend/internal/modules/ledger/presentation/http/requests"
+	"apexis/backend/internal/platform/reports"
 )
 
 // RegisterRoutes ผูก route ของ ledger (RESTful) — ทุก route อยู่ใต้บริษัท และต้อง Authenticate
@@ -35,7 +37,11 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("PATCH "+base+"/journal-entries/{entryID}", h.UpdateEntryStatus)
 	handle("DELETE "+base+"/journal-entries/{entryID}", h.DeleteEntry)
 	handle("POST "+base+"/journal-entries/{entryID}/reversals", h.ReverseEntry)
+}
 
-	// รายงาน — endpoint เดียว เลือกรายงานด้วย ?book= (trial-balance | balance-sheet | income-statement | general-ledger)
-	handle("GET "+base+"/reports", h.Report)
+// RegisterReports ลงทะเบียนรายงานของ ledger กับ GET /reports?book= (registry ถูก mount พร้อม Authenticate แล้ว)
+func RegisterReports(reg *reports.Registry, h *handlers.Handler) {
+	for _, b := range requests.Books {
+		reg.Register(string(b), nethttp.HandlerFunc(h.Report))
+	}
 }

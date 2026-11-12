@@ -19,8 +19,8 @@ type LookupUseCases struct {
 	dimensions repositories.DimensionRepository
 }
 
-func (uc *LookupUseCases) CompanyActive(ctx context.Context, id vo.CompanyID) (bool, error) {
-	return uc.companies.IsActive(ctx, id)
+func (uc *LookupUseCases) CompanySettings(ctx context.Context, id vo.CompanyID) (dto.CompanySettings, error) {
+	return uc.companies.Settings(ctx, id)
 }
 
 func (uc *LookupUseCases) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (dto.PeriodAt, error) {

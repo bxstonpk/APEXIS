@@ -76,7 +76,7 @@ func EntryToModel(e *entities.Entry) models.EntryModel {
 	m := models.EntryModel{
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), JournalID: uuid.UUID(s.Data.JournalID),
 		EntryDate: s.Data.Date, Description: s.Data.Description, Reference: s.Data.Reference, Status: string(s.Status),
-		TotalDebit: models.Amount(debit), TotalCredit: models.Amount(credit),
+		TotalDebit: debit, TotalCredit: credit,
 		ReversalOfID: optUUID(s.ReversalOf), ReversedByID: optUUID(s.ReversedBy), CreatedBy: uuid.UUID(s.CreatedBy),
 	}
 	if p := s.Posting; p != nil {
@@ -87,7 +87,7 @@ func EntryToModel(e *entities.Entry) models.EntryModel {
 	for i, l := range s.Data.Lines {
 		m.Lines[i] = models.LineModel{
 			EntryID: m.ID, LineNo: i + 1, AccountID: uuid.UUID(l.AccountID), Description: l.Description,
-			Debit: models.Amount(l.Debit), Credit: models.Amount(l.Credit),
+			Debit: l.Debit, Credit: l.Credit,
 			BranchID: optUUID(l.BranchID), DepartmentID: optUUID(l.DepartmentID),
 			CostCenterID: optUUID(l.CostCenterID), ProjectSiteID: optUUID(l.ProjectSiteID),
 		}
@@ -113,7 +113,7 @@ func EntryToEntity(m models.EntryModel) *entities.Entry {
 	for i, l := range m.Lines {
 		s.Data.Lines[i] = entities.LineData{
 			AccountID: vo.AccountID(l.AccountID), Description: l.Description,
-			Debit: vo.Money(l.Debit), Credit: vo.Money(l.Credit),
+			Debit: l.Debit, Credit: l.Credit,
 			BranchID: optID[vo.BranchID](l.BranchID), DepartmentID: optID[vo.DepartmentID](l.DepartmentID),
 			CostCenterID: optID[vo.CostCenterID](l.CostCenterID), ProjectSiteID: optID[vo.ProjectSiteID](l.ProjectSiteID),
 		}

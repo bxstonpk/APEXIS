@@ -36,11 +36,12 @@ func (uc *EntryUseCases) List(ctx context.Context, in dto.List[dto.EntryFilter])
 
 // Create สร้าง draft — ถ้า in.Post จะผ่านรายการต่อทันทีใน transaction เดียว (ต้องมีสิทธิ์ post ด้วย)
 func (uc *EntryUseCases) Create(ctx context.Context, in dto.CreateEntry[entities.EntryData]) (dto.Entry, error) {
-	e, err := entities.NewEntry(in.CompanyID, in.UserID, in.Data)
-	if err != nil {
-		return dto.Entry{}, err
-	}
-	err = uc.write(ctx, in.Actor, vo.PermEntryManage, func(ctx context.Context) error {
+	var e *entities.Entry
+	err := uc.writeWith(ctx, in.Actor, vo.PermEntryManage, func(ctx context.Context, s ports.CompanySettings) error {
+		var err error
+		if e, err = entities.NewEntry(in.CompanyID, in.UserID, in.Data, s.AmountDecimals); err != nil {
+			return err
+		}
 		journal, err := uc.checkRefs(ctx, in.CompanyID, e, in.Post)
 		if err != nil {
 			return err
@@ -63,12 +64,12 @@ func (uc *EntryUseCases) Create(ctx context.Context, in dto.CreateEntry[entities
 
 // Update แทนที่ draft ทั้งก้อน (หัวรายการ + บรรทัด)
 func (uc *EntryUseCases) Update(ctx context.Context, in dto.Update[vo.EntryID, entities.EntryData]) (dto.Entry, error) {
-	err := uc.write(ctx, in.Actor, vo.PermEntryManage, func(ctx context.Context) error {
+	err := uc.writeWith(ctx, in.Actor, vo.PermEntryManage, func(ctx context.Context, s ports.CompanySettings) error {
 		e, err := uc.entries.FindForUpdate(ctx, in.CompanyID, in.ID)
 		if err != nil {
 			return err
 		}
-		if err := e.Update(in.Data); err != nil {
+		if err := e.Update(in.Data, s.AmountDecimals); err != nil {
 			return err
 		}
 		if _, err := uc.checkRefs(ctx, in.CompanyID, e, false); err != nil {

@@ -22,6 +22,7 @@ var (
 	ErrInvalidWebsite     = errors.New("invalid website")
 	ErrInvalidCurrency    = errors.New("invalid currency code")
 	ErrInvalidFiscalMonth = errors.New("fiscal year start month must be between 1 and 12")
+	ErrInvalidDecimals    = errors.New("decimal places must be between 0 and 6")
 	ErrInvalidDateRange   = errors.New("end date must not be before start date")
 	ErrInvalidFiscalYear  = errors.New("invalid fiscal year")
 	ErrInvalidFiscalStart = errors.New("fiscal year must start on the first day of a month")
@@ -51,6 +52,7 @@ var (
 // ผิดกฎธุรกิจ (422)
 var (
 	ErrCompanyInactive        = errors.New("company is inactive (read-only)")
+	ErrDecimalsDecrease       = errors.New("decimal places cannot be decreased")
 	ErrHierarchyCycle         = errors.New("parent would create a cycle")
 	ErrHeadOfficeImmutable    = errors.New("head office cannot be deactivated or deleted")
 	ErrProjectEndDateRequired = errors.New("closed project site requires an end date")

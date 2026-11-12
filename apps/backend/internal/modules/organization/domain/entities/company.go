@@ -22,6 +22,8 @@ type CompanyData struct {
 	Website              string
 	BaseCurrency         string
 	FiscalYearStartMonth int // 1 = มกราคม ... 10 = ตุลาคม (ปีงบประมาณราชการ)
+	AmountDecimals       int // ทศนิยมของจำนวนเงิน (0-6) — ทุก module ใช้ค่านี้ ไม่ fix ไว้ในโค้ด
+	QuantityDecimals     int // ทศนิยมของจำนวนสินค้า (0-6)
 	Status               vo.Status
 }
 
@@ -31,6 +33,7 @@ type CompanyData struct {
 //   - รหัสบริษัทไม่ซ้ำทั้งระบบ (unique constraint) และแก้ไม่ได้หลังสร้าง
 //   - บริษัทที่ inactive เป็น "อ่านอย่างเดียว": อ่านข้อมูลได้ แต่สร้าง / แก้ / ลบข้อมูลของบริษัทไม่ได้
 //     ยกเว้นแก้ข้อมูลบริษัทเอง (เพื่อเปิดใช้งานกลับ)
+//   - จำนวนทศนิยม (เงิน / จำนวนสินค้า) เพิ่มได้แต่ลดไม่ได้ — ข้อมูลเดิมที่มีทศนิยมมากกว่าจะผิดรูป
 type Company struct {
 	id   vo.CompanyID
 	data CompanyData
@@ -58,6 +61,9 @@ func (c *Company) Update(d CompanyData) error {
 	n, err := normalizeCompany(d)
 	if err != nil {
 		return err
+	}
+	if n.AmountDecimals < c.data.AmountDecimals || n.QuantityDecimals < c.data.QuantityDecimals {
+		return domain.ErrDecimalsDecrease
 	}
 	c.data = n
 	return nil
@@ -104,6 +110,12 @@ func normalizeCompany(d CompanyData) (CompanyData, error) {
 	out.BaseCurrency = string(currency)
 	if out.FiscalYearStartMonth < 1 || out.FiscalYearStartMonth > 12 {
 		return CompanyData{}, domain.ErrInvalidFiscalMonth
+	}
+	if out.AmountDecimals, err = vo.NewDecimals(d.AmountDecimals); err != nil {
+		return CompanyData{}, err
+	}
+	if out.QuantityDecimals, err = vo.NewDecimals(d.QuantityDecimals); err != nil {
+		return CompanyData{}, err
 	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
 		return CompanyData{}, err

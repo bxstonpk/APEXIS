@@ -25,8 +25,8 @@ type CompanyRepository interface {
 	Create(ctx context.Context, c *entities.Company) error
 	Update(ctx context.Context, c *entities.Company) error
 	FindByID(ctx context.Context, id vo.CompanyID) (*entities.Company, error)
-	// IsActive คืน domain.ErrCompanyNotFound ถ้าไม่พบ
-	IsActive(ctx context.Context, id vo.CompanyID) (bool, error)
+	// Settings คืนสถานะ + จำนวนทศนิยมของบริษัท — domain.ErrCompanyNotFound ถ้าไม่พบ
+	Settings(ctx context.Context, id vo.CompanyID) (dto.CompanySettings, error)
 	// ListByIDs กรอง / เรียง / แบ่งหน้าเฉพาะบริษัทใน ids (id ได้จาก identity — JOIN ข้าม module ไม่ได้)
 	ListByIDs(ctx context.Context, ids []vo.CompanyID, f dto.CompanyFilter) (listing.Result[dto.CompanySummary], error)
 }

@@ -39,7 +39,8 @@ func CompanyToModel(c *entities.Company) models.CompanyModel {
 		ID: uuid.UUID(c.ID()), Code: d.Code, Name: d.Name, TaxID: d.TaxID,
 		LegalNameTH: d.LegalNameTH, LegalNameEN: d.LegalNameEN,
 		Address: AddressToModel(d.Address), Phone: d.Phone, Email: d.Email, Website: d.Website,
-		BaseCurrency: d.BaseCurrency, FiscalYearStartMonth: d.FiscalYearStartMonth, Status: string(d.Status),
+		BaseCurrency: d.BaseCurrency, FiscalYearStartMonth: d.FiscalYearStartMonth,
+		AmountDecimals: d.AmountDecimals, QuantityDecimals: d.QuantityDecimals, Status: string(d.Status),
 	}
 }
 
@@ -48,7 +49,8 @@ func CompanyToEntity(m models.CompanyModel) *entities.Company {
 		Code: m.Code, Name: m.Name, TaxID: m.TaxID,
 		LegalNameTH: m.LegalNameTH, LegalNameEN: m.LegalNameEN, Address: AddressToDomain(m.Address),
 		Phone: m.Phone, Email: m.Email, Website: m.Website,
-		BaseCurrency: m.BaseCurrency, FiscalYearStartMonth: m.FiscalYearStartMonth, Status: vo.Status(m.Status),
+		BaseCurrency: m.BaseCurrency, FiscalYearStartMonth: m.FiscalYearStartMonth,
+		AmountDecimals: m.AmountDecimals, QuantityDecimals: m.QuantityDecimals, Status: vo.Status(m.Status),
 	})
 }
 

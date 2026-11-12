@@ -37,10 +37,16 @@ type Dimensions struct {
 	ProjectSites []vo.ProjectSiteID
 }
 
+// CompanySettings คือค่าตั้งของบริษัทที่ ledger ใช้ตอนเขียนข้อมูล
+type CompanySettings struct {
+	Active         bool
+	AmountDecimals int
+}
+
 // Organization คือสิ่งที่ ledger ต้องการจาก organization module (เข้าร่วม transaction ใน ctx)
 type Organization interface {
-	// CompanyActive: บริษัท inactive เป็นอ่านอย่างเดียว
-	CompanyActive(ctx context.Context, companyID vo.CompanyID) (bool, error)
+	// CompanySettings: สถานะ (inactive = อ่านอย่างเดียว) และจำนวนทศนิยมของเงินที่บริษัทกำหนด
+	CompanySettings(ctx context.Context, companyID vo.CompanyID) (CompanySettings, error)
 	// PeriodAt คืน domain.ErrNoFiscalPeriod ถ้าไม่มีงวดครอบคลุมวันนั้น
 	// ภายใน transaction จะ lock แถวงวดจน commit — การปิดงวดพร้อมกันต้องรอรายการที่กำลังผ่าน
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)

@@ -36,7 +36,8 @@ func (r *CompanyRepository) Update(ctx context.Context, c *entities.Company) err
 		Select(
 			"name", "tax_id", "legal_name_th", "legal_name_en",
 			"address_line", "address_sub_district", "address_district", "address_province", "address_postal_code", "address_country",
-			"phone", "email", "website", "base_currency", "fiscal_year_start_month", "status", "updated_at",
+			"phone", "email", "website", "base_currency", "fiscal_year_start_month",
+			"amount_decimals", "quantity_decimals", "status", "updated_at",
 		).
 		Omit(clause.Associations).
 		Updates(&m)
@@ -61,18 +62,26 @@ func (r *CompanyRepository) FindByID(ctx context.Context, id vo.CompanyID) (*ent
 	return gp.CompanyToEntity(m), nil
 }
 
-// IsActive อ่าน status column เดียวผ่าน primary key (ถูกเรียกทุกครั้งที่เขียนข้อมูลของบริษัท)
-func (r *CompanyRepository) IsActive(ctx context.Context, id vo.CompanyID) (bool, error) {
-	var status []string
+// Settings — 1 query ผ่าน primary key: status + จำนวนทศนิยม (ถูกเรียกทุกครั้งที่เขียนข้อมูลของบริษัท)
+func (r *CompanyRepository) Settings(ctx context.Context, id vo.CompanyID) (dto.CompanySettings, error) {
+	var rows []struct {
+		Status           string
+		AmountDecimals   int
+		QuantityDecimals int
+	}
 	err := database.Conn(ctx, r.db).Model(&models.CompanyModel{}).
-		Where("id = ?", uuid.UUID(id)).Limit(1).Pluck("status", &status).Error
+		Select("status, amount_decimals, quantity_decimals").
+		Where("id = ?", uuid.UUID(id)).Limit(1).Scan(&rows).Error
 	if err != nil {
-		return false, err
+		return dto.CompanySettings{}, err
 	}
-	if len(status) == 0 {
-		return false, domain.ErrCompanyNotFound
+	if len(rows) == 0 {
+		return dto.CompanySettings{}, domain.ErrCompanyNotFound
 	}
-	return status[0] == string(vo.StatusActive), nil
+	s := rows[0]
+	return dto.CompanySettings{
+		Active: s.Status == string(vo.StatusActive), AmountDecimals: s.AmountDecimals, QuantityDecimals: s.QuantityDecimals,
+	}, nil
 }
 
 var companySortColumns = map[string]string{

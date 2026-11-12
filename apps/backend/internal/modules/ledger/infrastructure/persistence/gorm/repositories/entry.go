@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -131,8 +132,8 @@ type entryRow struct {
 	Description    string
 	Reference      string
 	Status         string
-	TotalDebit     models.Amount
-	TotalCredit    models.Amount
+	TotalDebit     decimal.Decimal
+	TotalCredit    decimal.Decimal
 	PostedAt       *time.Time
 	FiscalPeriodID *uuid.UUID
 	ReversalOfID   *uuid.UUID
@@ -147,7 +148,7 @@ func (r entryRow) summary() dto.EntrySummary {
 		ID: r.ID.String(), Date: gp.DateUTC(r.EntryDate),
 		Journal:     dto.Ref{ID: r.JournalID.String(), Code: r.JournalCode, Name: r.JournalName},
 		Description: r.Description, Reference: r.Reference, Status: r.Status,
-		TotalDebit: vo.Money(r.TotalDebit), TotalCredit: vo.Money(r.TotalCredit), PostedAt: r.PostedAt,
+		TotalDebit: r.TotalDebit, TotalCredit: r.TotalCredit, PostedAt: r.PostedAt,
 	}
 	if r.EntryNo != nil {
 		out.EntryNo = *r.EntryNo
@@ -183,8 +184,8 @@ func (r *EntryRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo
 		AccountCode   string
 		AccountName   string
 		Description   string
-		Debit         models.Amount
-		Credit        models.Amount
+		Debit         decimal.Decimal
+		Credit        decimal.Decimal
 		BranchID      *uuid.UUID
 		DepartmentID  *uuid.UUID
 		CostCenterID  *uuid.UUID
@@ -207,7 +208,7 @@ func (r *EntryRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo
 	for i, l := range lines {
 		out.Lines[i] = dto.EntryLine{
 			LineNo: l.LineNo, Account: dto.Ref{ID: l.AccountID.String(), Code: l.AccountCode, Name: l.AccountName},
-			Description: l.Description, Debit: vo.Money(l.Debit), Credit: vo.Money(l.Credit),
+			Description: l.Description, Debit: l.Debit, Credit: l.Credit,
 			BranchID: optString(l.BranchID), DepartmentID: optString(l.DepartmentID),
 			CostCenterID: optString(l.CostCenterID), ProjectSiteID: optString(l.ProjectSiteID),
 		}

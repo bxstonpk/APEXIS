@@ -64,18 +64,18 @@ func (uc *ReportUseCases) TrialBalance(ctx context.Context, in dto.DateRange) (d
 		opening := s[0].Net()
 		if !a.Type.IsBalanceSheet() {
 			opening = s[1].Net()
-			out.PriorYearsEarnings += s[0].Net() - s[1].Net()
+			out.PriorYearsEarnings = out.PriorYearsEarnings.Add(s[0].Net().Sub(s[1].Net()))
 		}
 		row := dto.TrialBalanceRow{
 			Account: info(a), Opening: opening, Debit: s[2].Debit, Credit: s[2].Credit,
-			Closing: opening + s[2].Debit - s[2].Credit,
+			Closing: opening.Add(s[2].Debit).Sub(s[2].Credit),
 		}
 		if row.Opening.IsZero() && row.Debit.IsZero() && row.Credit.IsZero() {
 			continue
 		}
 		out.Rows = append(out.Rows, row)
-		out.TotalDebit += row.Debit
-		out.TotalCredit += row.Credit
+		out.TotalDebit = out.TotalDebit.Add(row.Debit)
+		out.TotalCredit = out.TotalCredit.Add(row.Credit)
 	}
 	return out, nil
 }
@@ -112,7 +112,7 @@ func (uc *ReportUseCases) AccountLedger(ctx context.Context, in dto.AccountLedge
 		return dto.AccountLedger{}, err
 	}
 	for i := range lines {
-		lines[i].Balance += opening
+		lines[i].Balance = lines[i].Balance.Add(opening)
 	}
 	out := dto.AccountLedger{
 		Account: dto.AccountInfo{ID: id.String(), Code: d.Code, Name: d.Name, Type: string(d.Type)},
@@ -154,15 +154,15 @@ func (uc *ReportUseCases) BalanceSheet(ctx context.Context, in dto.AsOf) (dto.Ba
 			continue
 		}
 		// รายได้ / ค่าใช้จ่าย -> กำไร (ขาดทุน) ด้านเครดิตเป็นบวก
-		out.CurrentYearEarnings -= s[1].Net()
-		out.RetainedEarningsPrior -= s[0].Net() - s[1].Net()
+		out.CurrentYearEarnings = out.CurrentYearEarnings.Sub(s[1].Net())
+		out.RetainedEarningsPrior = out.RetainedEarningsPrior.Sub(s[0].Net().Sub(s[1].Net()))
 	}
 	out.Assets, out.TotalAssets = services.BuildSection(chart, net, vo.AccountAsset)
 	out.Liabilities, out.TotalLiabilities = services.BuildSection(chart, net, vo.AccountLiability)
 	var equity vo.Money
 	out.Equity, equity = services.BuildSection(chart, net, vo.AccountEquity)
-	out.TotalEquity = equity + out.RetainedEarningsPrior + out.CurrentYearEarnings
-	out.TotalLiabilitiesAndEquity = out.TotalLiabilities + out.TotalEquity
+	out.TotalEquity = equity.Add(out.RetainedEarningsPrior).Add(out.CurrentYearEarnings)
+	out.TotalLiabilitiesAndEquity = out.TotalLiabilities.Add(out.TotalEquity)
 	return out, nil
 }
 
@@ -186,7 +186,7 @@ func (uc *ReportUseCases) IncomeStatement(ctx context.Context, in dto.DateRange)
 	out := dto.IncomeStatement{Start: in.Start, End: in.End}
 	out.Revenue, out.TotalRevenue = services.BuildSection(chart, net, vo.AccountRevenue)
 	out.Expenses, out.TotalExpenses = services.BuildSection(chart, net, vo.AccountExpense)
-	out.NetIncome = out.TotalRevenue - out.TotalExpenses
+	out.NetIncome = out.TotalRevenue.Sub(out.TotalExpenses)
 	return out, nil
 }
 

@@ -1,7 +1,8 @@
 // Package responses คือรูปแบบ JSON ขาออกของ ledger (แปลงจาก application/dto)
 //
 //   - วันที่ "YYYY-MM-DD" (ค.ศ.)
-//   - จำนวนเงินเป็น string ทศนิยม 2 ตำแหน่ง เช่น "1234.50" (ไม่ใช้ number เพื่อไม่ให้ client ปัดเศษผิด)
+//   - จำนวนเงินเป็น string ทศนิยมตามค่าจริง เช่น "1234.5" (ไม่ใช้ number เพื่อไม่ให้ client ปัดเศษผิด)
+//     frontend จัดรูปแบบการแสดงผลตามจำนวนทศนิยมที่บริษัทกำหนด (company.amount_decimals)
 //
 // envelope (data / meta / error) อยู่ที่ platform/httpx
 package responses

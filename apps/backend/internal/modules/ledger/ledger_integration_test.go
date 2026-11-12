@@ -19,6 +19,7 @@ import (
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
 	"apexis/backend/internal/platform/database"
+	"apexis/backend/internal/platform/reports"
 )
 
 type api struct {
@@ -131,7 +132,11 @@ func setup(t *testing.T) api {
 	idm.RegisterRoutes(mux)
 	org := organization.New(db, idm)
 	org.RegisterRoutes(mux)
-	ledger.New(db, idm, org).RegisterRoutes(mux)
+	lm := ledger.New(db, idm, org)
+	lm.RegisterRoutes(mux)
+	reg := reports.NewRegistry()
+	lm.RegisterReports(reg)
+	mux.Handle("GET /api/v1/companies/{companyID}/reports", idm.Authenticate(reg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return api{t: t, srv: srv}
@@ -196,7 +201,7 @@ func TestLedgerFlow(t *testing.T) {
 		return obj{"journal_id": journal, "date": date, "description": "test " + date, "status": status, "lines": lines}
 	}
 	e1 := a.expect(a.do("POST", base+"/journal-entries", owner, entry("2025-06-01", "posted", ln(cash, "100000", "0"), ln(capital, "0", "100000"))), 201, "capital 2025")
-	if e1.str("entry_no") != "JV2025-000001" || e1.str("total_debit") != "100000.00" || e1.str("status") != "posted" {
+	if e1.str("entry_no") != "JV2025-000001" || e1.str("total_debit") != "100000" || e1.str("status") != "posted" {
 		t.Fatalf("e1 = %v", e1.data())
 	}
 	if no := a.expect(a.do("POST", base+"/journal-entries", owner, entry("2025-12-01", "posted", ln(cash, "5000", nil), ln(revenue, nil, "5000"))), 201, "sale 2025").str("entry_no"); no != "JV2025-000002" {
@@ -235,11 +240,20 @@ func TestLedgerFlow(t *testing.T) {
 	a.expect(a.do("DELETE", base+"/journal-entries/"+rentEntry, owner, nil), 422, "delete posted")
 
 	// จำนวนเงินเป็น number ได้, ทศนิยมเกิน 2 ตำแหน่ง / ทั้งเดบิตและเครดิต / ไม่มีบรรทัด -> 400
-	sale := a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "posted", ln(bank, 30000.50, nil), ln(revenue, nil, "30000.50"))), 201, "sale 2026")
-	if sale.str("entry_no") != "JV2026-000002" || sale.str("total_credit") != "30000.50" {
+	sale := a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "posted", ln(bank, 30000.50, nil), ln(revenue, nil, "30000.5"))), 201, "sale 2026")
+	if sale.str("entry_no") != "JV2026-000002" || sale.str("total_credit") != "30000.5" {
 		t.Fatalf("sale = %v", sale.data())
 	}
-	a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "", ln(bank, "1.234", nil), ln(revenue, nil, "1.234"))), 400, "3 decimals")
+	a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "", ln(bank, "1.234", nil), ln(revenue, nil, "1.234"))), 400, "3 decimals (company amount_decimals = 2)")
+	// ทศนิยมไม่ fix ไว้: บริษัทเพิ่มเป็น 3 ตำแหน่งแล้วบันทึกได้ (ลดกลับไม่ได้)
+	companyBody := obj{"name": "ACME", "base_currency": "THB", "fiscal_year_start_month": 1, "amount_decimals": 3, "quantity_decimals": 2, "status": "active"}
+	a.expect(a.do("PUT", base, owner, companyBody), 200, "company amount_decimals = 3")
+	three := a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "", ln(bank, "1.234", nil), ln(revenue, nil, "1.234"))), 201, "3 decimals (company amount_decimals = 3)")
+	if l := objs(three.data()["lines"]); l[0]["debit"] != "1.234" {
+		t.Fatalf("3-decimal line = %v", l[0])
+	}
+	a.expect(a.do("DELETE", base+"/journal-entries/"+three.id(), owner, nil), 204, "delete 3-decimal draft")
+	a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "", ln(bank, "1.2345", nil), ln(revenue, nil, "1.2345"))), 400, "4 decimals (company amount_decimals = 3)")
 	a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "", ln(bank, "1", "1"))), 400, "both sides")
 	a.expect(a.do("POST", base+"/journal-entries", owner, entry("2026-02-15", "")), 400, "no lines")
 	a.expect(a.do("POST", base+"/journal-entries", owner, entry("15022026", "", ln(bank, "1", nil))), 400, "DDMMYYYY date")
@@ -265,7 +279,7 @@ func TestLedgerFlow(t *testing.T) {
 	if rev.str("entry_no") != "JV2026-000003" || rev.str("reversal_of_id") != rentEntry || rev.str("reference") != "JV2026-000001" {
 		t.Fatalf("reversal = %v", rev.data())
 	}
-	if rl := objs(rev.data()["lines"]); rl[0]["credit"] != "1200.00" || rl[1]["debit"] != "1200.00" {
+	if rl := objs(rev.data()["lines"]); rl[0]["credit"] != "1200" || rl[1]["debit"] != "1200" {
 		t.Fatalf("reversal lines = %v", rl)
 	}
 	orig := a.expect(a.do("GET", base+"/journal-entries/"+rentEntry, owner, nil), 200, "original").data()
@@ -288,11 +302,11 @@ func TestLedgerFlow(t *testing.T) {
 	// ---------- รายงาน ----------
 	tb := a.expect(a.do("GET", base+"/reports?book=trial-balance&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "trial balance").data()
 	wantTB := map[string][4]string{ // opening, debit, credit, closing (เดบิตเป็นบวก)
-		"1101": {"105000.00", "1200.00", "1200.00", "105000.00"},
-		"1102": {"0.00", "30000.50", "0.00", "30000.50"},
-		"3101": {"-100000.00", "0.00", "0.00", "-100000.00"},
-		"4101": {"0.00", "0.00", "30000.50", "-30000.50"}, // รายได้เริ่มนับใหม่ทุกปีบัญชี
-		"5101": {"0.00", "1200.00", "1200.00", "0.00"},
+		"1101": {"105000", "1200", "1200", "105000"},
+		"1102": {"0", "30000.5", "0", "30000.5"},
+		"3101": {"-100000", "0", "0", "-100000"},
+		"4101": {"0", "0", "30000.5", "-30000.5"}, // รายได้เริ่มนับใหม่ทุกปีบัญชี
+		"5101": {"0", "1200", "1200", "0"},
 	}
 	rows := objs(tb["rows"])
 	if len(rows) != len(wantTB) {
@@ -312,36 +326,36 @@ func TestLedgerFlow(t *testing.T) {
 	if b := a.expect(a.do("GET", base+"/reports?book=balance-sheet&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "switch book").data(); b["book"] != "balance-sheet" || b["as_of"] != "2026-12-31" {
 		t.Fatalf("switch book = %v", b)
 	}
-	if tb["total_debit"] != "32400.50" || tb["total_credit"] != "32400.50" || tb["prior_years_earnings"] != "-5000.00" {
+	if tb["total_debit"] != "32400.5" || tb["total_credit"] != "32400.5" || tb["prior_years_earnings"] != "-5000" {
 		t.Fatalf("TB totals = %v / %v / %v", tb["total_debit"], tb["total_credit"], tb["prior_years_earnings"])
 	}
 	a.expect(a.do("GET", base+"/reports?book=trial-balance&start_date=2025-12-01&end_date=2026-01-31", owner, nil), 422, "TB across fiscal years")
 
 	bs := a.expect(a.do("GET", base+"/reports?book=balance-sheet&end_date=2026-12-31", owner, nil), 200, "balance sheet").data()
-	if bs["total_assets"] != "135000.50" || bs["total_liabilities"] != "0.00" || bs["retained_earnings_prior_years"] != "5000.00" ||
-		bs["current_year_earnings"] != "30000.50" || bs["total_equity"] != "135000.50" || bs["total_liabilities_and_equity"] != "135000.50" {
+	if bs["total_assets"] != "135000.5" || bs["total_liabilities"] != "0" || bs["retained_earnings_prior_years"] != "5000" ||
+		bs["current_year_earnings"] != "30000.5" || bs["total_equity"] != "135000.5" || bs["total_liabilities_and_equity"] != "135000.5" {
 		t.Fatalf("balance sheet = %v", bs)
 	}
 	assetLines := objs(bs["assets"])
-	if got := field(assetLines, "code"); !slices.Equal(got, []string{"1000", "1101", "1102"}) || assetLines[0]["amount"] != "135000.50" || assetLines[0]["is_header"] != true || assetLines[1]["level"] != float64(1) {
+	if got := field(assetLines, "code"); !slices.Equal(got, []string{"1000", "1101", "1102"}) || assetLines[0]["amount"] != "135000.5" || assetLines[0]["is_header"] != true || assetLines[1]["level"] != float64(1) {
 		t.Fatalf("assets = %v", assetLines) // 1100 (ยอดศูนย์) ถูกซ่อน
 	}
 
 	is := a.expect(a.do("GET", base+"/reports?book=income-statement&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "income statement").data()
-	if is["total_revenue"] != "30000.50" || is["total_expenses"] != "0.00" || is["net_income"] != "30000.50" || len(objs(is["expenses"])) != 0 {
+	if is["total_revenue"] != "30000.5" || is["total_expenses"] != "0" || is["net_income"] != "30000.5" || len(objs(is["expenses"])) != 0 {
 		t.Fatalf("income statement = %v", is)
 	}
-	if n := a.expect(a.do("GET", base+"/reports?book=income-statement&start_date=2026-01-01&end_date=2026-01-31", owner, nil), 200, "IS Jan").data()["net_income"]; n != "-1200.00" {
+	if n := a.expect(a.do("GET", base+"/reports?book=income-statement&start_date=2026-01-01&end_date=2026-01-31", owner, nil), 200, "IS Jan").data()["net_income"]; n != "-1200" {
 		t.Fatalf("Jan net income = %v", n)
 	}
 
 	gl1 := a.expect(a.do("GET", base+"/reports?book=general-ledger&account_id="+cash+"&start_date=2026-01-01&end_date=2026-12-31&page_size=1", owner, nil), 200, "cash ledger p1")
 	gl2 := a.expect(a.do("GET", base+"/reports?book=general-ledger&account_id="+cash+"&start_date=2026-01-01&end_date=2026-12-31&page_size=1&page=2", owner, nil), 200, "cash ledger p2")
 	l1, l2 := objs(gl1.data()["lines"]), objs(gl2.data()["lines"])
-	if gl1.data()["opening_balance"] != "105000.00" || gl1.total() != 2 || l1[0]["balance"] != "103800.00" || l1[0]["entry_no"] != "JV2026-000001" || l2[0]["balance"] != "105000.00" {
+	if gl1.data()["opening_balance"] != "105000" || gl1.total() != 2 || l1[0]["balance"] != "103800" || l1[0]["entry_no"] != "JV2026-000001" || l2[0]["balance"] != "105000" {
 		t.Fatalf("cash ledger = %v / %v", gl1.body, gl2.body)
 	}
-	if o := a.expect(a.do("GET", base+"/reports?book=general-ledger&account_id="+revenue+"&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "revenue ledger").data()["opening_balance"]; o != "0.00" {
+	if o := a.expect(a.do("GET", base+"/reports?book=general-ledger&account_id="+revenue+"&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "revenue ledger").data()["opening_balance"]; o != "0" {
 		t.Fatalf("revenue opening 2026 = %v (must reset at fiscal year start)", o)
 	}
 
@@ -391,7 +405,7 @@ func TestLedgerFlow(t *testing.T) {
 	a.expect(a.do("GET", base+"/journal-entries", "", nil), 401, "no token")
 
 	// ---------- บริษัท inactive = อ่านอย่างเดียว ----------
-	companyBody := obj{"name": "ACME", "base_currency": "THB", "fiscal_year_start_month": 1, "status": "inactive"}
+	companyBody["status"] = "inactive"
 	a.expect(a.do("PUT", base, owner, companyBody), 200, "deactivate company")
 	a.expect(a.do("POST", base+"/journals", owner, obj{"code": "RV", "name": "รับ"}), 422, "write to inactive company")
 	a.expect(a.do("GET", base+"/reports?book=trial-balance&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "report of inactive company")

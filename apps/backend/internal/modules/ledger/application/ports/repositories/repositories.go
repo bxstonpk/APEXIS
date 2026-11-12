@@ -74,7 +74,7 @@ type Sum struct {
 	Credit vo.Money
 }
 
-func (s Sum) Net() vo.Money { return s.Debit - s.Credit }
+func (s Sum) Net() vo.Money { return s.Debit.Sub(s.Credit) }
 
 type ReportRepository interface {
 	// SumByAccount รวมยอดของรายการที่มีผล (posted / reversed) ต่อบัญชี แยกตาม bucket — query เดียว

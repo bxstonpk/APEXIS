@@ -41,6 +41,33 @@ func (uc *AuthUseCases) Register(ctx context.Context, in dto.RegisterUserInput) 
 	return dto.FromUser(user), nil
 }
 
+// EnsureUser สร้างผู้ใช้ถ้ายังไม่มีอีเมลนี้ (ใช้ seed ผู้ดูแลระบบตอนเริ่มโปรแกรม) — คืน created=true เมื่อสร้างใหม่
+//
+// ถ้ามีอยู่แล้วจะไม่แก้ไขอะไร (ไม่รีเซ็ตรหัสผ่าน) และไม่ hash รหัสผ่าน (bcrypt ใช้ CPU) ทุกครั้งที่เริ่มโปรแกรม
+// ถ้ามีการสร้างพร้อมกันจนชน unique constraint ถือว่ามีอยู่แล้ว
+func (uc *AuthUseCases) EnsureUser(ctx context.Context, in dto.RegisterUserInput) (dto.User, bool, error) {
+	email, err := vo.NewEmail(in.Email)
+	if err != nil {
+		return dto.User{}, false, err
+	}
+	existing, err := uc.deps.Users.FindByEmail(ctx, email)
+	switch {
+	case err == nil:
+		return dto.FromUser(existing), false, nil
+	case !errors.Is(err, domain.ErrUserNotFound):
+		return dto.User{}, false, err
+	}
+	u, err := uc.Register(ctx, in)
+	if errors.Is(err, domain.ErrEmailAlreadyExists) {
+		existing, err := uc.deps.Users.FindByEmail(ctx, email)
+		if err != nil {
+			return dto.User{}, false, err
+		}
+		return dto.FromUser(existing), false, nil
+	}
+	return u, err == nil, err
+}
+
 // Login ตรวจ email/password แล้วออก access token — ไม่บอกว่าผิดที่ email หรือ password
 // เป็นการอ่านอย่างเดียว จึงไม่เปิด transaction
 func (uc *AuthUseCases) Login(ctx context.Context, in dto.LoginInput) (dto.AuthToken, error) {

@@ -68,13 +68,18 @@ func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 // ใช้ uuid / primitive type เท่านั้น — ไม่ตรวจสิทธิ์ (module ที่เรียกตรวจสิทธิ์ของตัวเองแล้ว)
 // เข้าร่วม transaction ใน ctx ของผู้เรียกได้
 
-// CompanyActive คืน false เมื่อบริษัท inactive หรือไม่พบ — บริษัท inactive เป็นอ่านอย่างเดียว
-func (m *Module) CompanyActive(ctx context.Context, companyID uuid.UUID) (bool, error) {
-	ok, err := m.UseCases.Lookups.CompanyActive(ctx, vo.CompanyID(companyID))
+// CompanySettings คืนสถานะและจำนวนทศนิยมของบริษัทใน query เดียว
+//   - active = false เมื่อบริษัท inactive หรือไม่พบ (บริษัท inactive เป็นอ่านอย่างเดียว)
+//   - amountDecimals / quantityDecimals คือทศนิยมของจำนวนเงิน / จำนวนสินค้าที่บริษัทกำหนด
+func (m *Module) CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error) {
+	s, err := m.UseCases.Lookups.CompanySettings(ctx, vo.CompanyID(companyID))
 	if errors.Is(err, domain.ErrCompanyNotFound) {
-		return false, nil
+		return false, 0, 0, nil
 	}
-	return ok, err
+	if err != nil {
+		return false, 0, 0, err
+	}
+	return s.Active, s.AmountDecimals, s.QuantityDecimals, nil
 }
 
 // FiscalPeriodAt คืนงวดบัญชีที่ครอบคลุม date: id งวด, ปีบัญชี, วันเริ่มปีบัญชี, งวดเปิดอยู่หรือไม่

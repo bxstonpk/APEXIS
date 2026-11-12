@@ -320,3 +320,32 @@ func TestListSearchViaURLQuery(t *testing.T) {
 		t.Fatalf("roles q=own = %v", r.list())
 	}
 }
+
+// TestSeedUser: ผู้ดูแลระบบเริ่มต้น (INITIAL_ADMIN_*) ถูกสร้างครั้งเดียว — เริ่มโปรแกรมใหม่ไม่สร้างซ้ำ / ไม่รีเซ็ตรหัสผ่าน
+func TestSeedUser(t *testing.T) {
+	a := setup(t)
+	ctx := context.Background()
+
+	created, err := a.mod.SeedUser(ctx, "Admin@Example.com", "Administrator", "admin-pass-123")
+	if err != nil || !created {
+		t.Fatalf("first seed: created=%v err=%v", created, err)
+	}
+	r := a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "admin-pass-123"}), 201, "admin login")
+	if u := r.data()["user"].(map[string]any); u["name"] != "Administrator" || u["status"] != "active" {
+		t.Fatalf("admin = %v", u)
+	}
+
+	created, err = a.mod.SeedUser(ctx, "admin@example.com", "Administrator", "changed-pass-456")
+	if err != nil || created {
+		t.Fatalf("second seed: created=%v err=%v", created, err)
+	}
+	a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "admin-pass-123"}), 201, "old password still works")
+	a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "changed-pass-456"}), 401, "password not reset")
+
+	if _, err := a.mod.SeedUser(ctx, "ADMIN_USERNAME", "Administrator", "admin-pass-123"); err == nil {
+		t.Fatal("placeholder username (not an email) must be rejected")
+	}
+	if _, err := a.mod.SeedUser(ctx, "other@example.com", "Administrator", "short"); err == nil {
+		t.Fatal("short password must be rejected")
+	}
+}

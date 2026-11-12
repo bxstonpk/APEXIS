@@ -92,6 +92,7 @@ func companyDTO(c *entities.Company) dto.Company {
 		ID: c.ID().String(), Code: d.Code, Name: d.Name, TaxID: d.TaxID,
 		LegalNameTH: d.LegalNameTH, LegalNameEN: d.LegalNameEN,
 		Address: d.Address, Phone: d.Phone, Email: d.Email, Website: d.Website,
-		BaseCurrency: d.BaseCurrency, FiscalYearStartMonth: d.FiscalYearStartMonth, Status: string(d.Status),
+		BaseCurrency: d.BaseCurrency, FiscalYearStartMonth: d.FiscalYearStartMonth,
+		AmountDecimals: d.AmountDecimals, QuantityDecimals: d.QuantityDecimals, Status: string(d.Status),
 	}
 }

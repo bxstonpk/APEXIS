@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"apexis/backend/internal/modules/ledger/application/dto"
 	ports "apexis/backend/internal/modules/ledger/application/ports/repositories"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	gp "apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm/models"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/listing"
 )
@@ -75,7 +75,7 @@ func (r *ReportRepository) SumByAccount(ctx context.Context, companyID vo.Compan
 	out := map[vo.AccountID][]ports.Sum{}
 	for rows.Next() {
 		var id uuid.UUID
-		amounts := make([]models.Amount, 2*len(buckets))
+		amounts := make([]decimal.Decimal, 2*len(buckets))
 		dest := []any{&id}
 		for i := range amounts {
 			dest = append(dest, &amounts[i])
@@ -85,7 +85,7 @@ func (r *ReportRepository) SumByAccount(ctx context.Context, companyID vo.Compan
 		}
 		sums := make([]ports.Sum, len(buckets))
 		for i := range sums {
-			sums[i] = ports.Sum{Debit: vo.Money(amounts[2*i]), Credit: vo.Money(amounts[2*i+1])}
+			sums[i] = ports.Sum{Debit: amounts[2*i], Credit: amounts[2*i+1]}
 		}
 		out[vo.AccountID(id)] = sums
 	}
@@ -107,9 +107,9 @@ func (r *ReportRepository) AccountLines(ctx context.Context, companyID vo.Compan
 		LineNo      int
 		Description string
 		Reference   string
-		Debit       models.Amount
-		Credit      models.Amount
-		Running     models.Amount
+		Debit       decimal.Decimal
+		Credit      decimal.Decimal
+		Running     decimal.Decimal
 		Total       int64
 	}
 	var rows []row
@@ -137,7 +137,7 @@ func (r *ReportRepository) AccountLines(ctx context.Context, companyID vo.Compan
 		out[i] = dto.LedgerLine{
 			EntryID: x.EntryID.String(), EntryNo: x.EntryNo, Date: gp.DateUTC(x.EntryDate),
 			Description: x.Description, Reference: x.Reference,
-			Debit: vo.Money(x.Debit), Credit: vo.Money(x.Credit), Balance: vo.Money(x.Running),
+			Debit: x.Debit, Credit: x.Credit, Balance: x.Running,
 		}
 	}
 	return out, total, nil

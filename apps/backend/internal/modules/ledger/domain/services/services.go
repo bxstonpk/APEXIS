@@ -4,6 +4,8 @@ package services
 import (
 	"slices"
 
+	"github.com/shopspring/decimal"
+
 	domain "apexis/backend/internal/modules/ledger/domain/errors"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 )
@@ -73,32 +75,31 @@ func BuildSection(accounts []AccountNode, net map[vo.AccountID]vo.Money, t vo.Ac
 		return 0
 	}
 
-	sign := vo.Money(1)
-	if !t.DebitNormal() {
-		sign = -1
-	}
 	var lines []StatementLine
 	var walk func(a AccountNode, level int) vo.Money
 	walk = func(a AccountNode, level int) vo.Money {
 		idx := len(lines)
 		lines = append(lines, StatementLine{AccountID: a.ID, Code: a.Code, Name: a.Name, Level: level, IsHeader: !a.Postable})
-		total := net[a.ID] * sign
+		total := net[a.ID]
+		if !t.DebitNormal() {
+			total = total.Neg()
+		}
 		kids := children[a.ID]
 		slices.SortFunc(kids, byCode)
 		for _, c := range kids {
-			total += walk(c, level+1)
+			total = total.Add(walk(c, level+1))
 		}
 		if total.IsZero() && len(lines) == idx+1 {
 			lines = lines[:idx] // ตัดบัญชีที่ยอดเป็นศูนย์และไม่มีลูกที่มียอด
-			return 0
+			return decimal.Zero
 		}
 		lines[idx].Amount = total
 		return total
 	}
 	slices.SortFunc(roots, byCode)
-	var sum vo.Money
+	sum := decimal.Zero
 	for _, r := range roots {
-		sum += walk(r, 0)
+		sum = sum.Add(walk(r, 0))
 	}
 	return lines, sum
 }

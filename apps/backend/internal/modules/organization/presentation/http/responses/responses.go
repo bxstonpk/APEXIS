@@ -61,6 +61,8 @@ type Company struct {
 	Website              string  `json:"website"`
 	BaseCurrency         string  `json:"base_currency"`
 	FiscalYearStartMonth int     `json:"fiscal_year_start_month"`
+	AmountDecimals       int     `json:"amount_decimals"`
+	QuantityDecimals     int     `json:"quantity_decimals"`
 	Status               string  `json:"status"`
 }
 
@@ -69,7 +71,8 @@ func FromCompany(c dto.Company) Company {
 		ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID,
 		LegalNameTH: c.LegalNameTH, LegalNameEN: c.LegalNameEN, Address: address(c.Address),
 		Phone: c.Phone, Email: c.Email, Website: c.Website,
-		BaseCurrency: c.BaseCurrency, FiscalYearStartMonth: c.FiscalYearStartMonth, Status: c.Status,
+		BaseCurrency: c.BaseCurrency, FiscalYearStartMonth: c.FiscalYearStartMonth,
+		AmountDecimals: c.AmountDecimals, QuantityDecimals: c.QuantityDecimals, Status: c.Status,
 	}
 }
 

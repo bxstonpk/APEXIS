@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	domain "apexis/backend/internal/modules/ledger/domain/errors"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
+	"apexis/backend/internal/platform/numeric"
 )
 
 // MaxLines คือจำนวนบรรทัดสูงสุดต่อรายการ
@@ -60,8 +63,9 @@ type EntryState struct {
 //   - posted แก้ / ลบไม่ได้ — แก้ไขด้วยการกลับรายการ (reversal) ซึ่งสร้างรายการใหม่ที่สลับเดบิต / เครดิต
 type Entry struct{ s EntryState }
 
-func NewEntry(companyID vo.CompanyID, createdBy vo.UserID, d EntryData) (*Entry, error) {
-	n, err := normalizeEntry(d)
+// NewEntry: amountDecimals คือจำนวนทศนิยมของเงินที่บริษัทกำหนด (organization.amount_decimals)
+func NewEntry(companyID vo.CompanyID, createdBy vo.UserID, d EntryData, amountDecimals int) (*Entry, error) {
+	n, err := normalizeEntry(d, amountDecimals)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +84,10 @@ func (e *Entry) State() EntryState       { return e.s }
 
 // Totals คืนยอดรวมเดบิต / เครดิต
 func (e *Entry) Totals() (debit, credit vo.Money) {
+	debit, credit = decimal.Zero, decimal.Zero
 	for _, l := range e.s.Data.Lines {
-		debit += l.Debit
-		credit += l.Credit
+		debit = debit.Add(l.Debit)
+		credit = credit.Add(l.Credit)
 	}
 	return debit, credit
 }
@@ -100,11 +105,11 @@ func (e *Entry) AccountIDs() []vo.AccountID {
 	return out
 }
 
-func (e *Entry) Update(d EntryData) error {
+func (e *Entry) Update(d EntryData, amountDecimals int) error {
 	if e.s.Status != vo.EntryDraft {
 		return domain.ErrEntryNotDraft
 	}
-	n, err := normalizeEntry(d)
+	n, err := normalizeEntry(d, amountDecimals)
 	if err != nil {
 		return err
 	}
@@ -128,7 +133,7 @@ func (e *Entry) EnsurePostable() error {
 	if len(e.s.Data.Lines) < 2 || debit.IsZero() {
 		return domain.ErrEntryIncomplete
 	}
-	if debit != credit {
+	if !debit.Equal(credit) {
 		return domain.ErrUnbalanced
 	}
 	return nil
@@ -157,10 +162,11 @@ func (e *Entry) Reversal(date time.Time, description string, by vo.UserID) (*Ent
 		l.Debit, l.Credit = l.Credit, l.Debit
 		lines[i] = l
 	}
+	// จำนวนเงินเท่ากับต้นฉบับซึ่งผ่านการตรวจทศนิยมแล้ว (ทศนิยมของบริษัทเพิ่มได้อย่างเดียว) จึงไม่ตรวจซ้ำ
 	r, err := NewEntry(e.s.CompanyID, by, EntryData{
 		JournalID: e.s.Data.JournalID, Date: date, Description: description,
 		Reference: e.s.Posting.EntryNo, Lines: lines,
-	})
+	}, numeric.MaxScale)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +184,7 @@ func (e *Entry) MarkReversed(by vo.EntryID) error {
 	return nil
 }
 
-func normalizeEntry(d EntryData) (EntryData, error) {
+func normalizeEntry(d EntryData, amountDecimals int) (EntryData, error) {
 	var err error
 	if !vo.IsDateOnly(d.Date) {
 		return EntryData{}, domain.ErrInvalidDate
@@ -196,11 +202,14 @@ func normalizeEntry(d EntryData) (EntryData, error) {
 	out.Lines = make([]LineData, len(d.Lines))
 	for i, l := range d.Lines {
 		n := i + 1
-		if l.Debit < 0 || l.Credit < 0 || l.Debit > vo.MaxMoney || l.Credit > vo.MaxMoney {
-			return EntryData{}, fmt.Errorf("%w: line %d amount must be between 0 and %s", domain.ErrInvalidLine, n, vo.MaxMoney)
+		if l.Debit.IsNegative() || l.Credit.IsNegative() || !numeric.InRange(l.Debit) || !numeric.InRange(l.Credit) {
+			return EntryData{}, fmt.Errorf("%w: line %d amount must be zero or positive and below 10^%d", domain.ErrInvalidLine, n, numeric.MaxIntegerDigits)
 		}
 		if l.Debit.IsPositive() == l.Credit.IsPositive() {
 			return EntryData{}, fmt.Errorf("%w: line %d must have either a debit or a credit amount", domain.ErrInvalidLine, n)
+		}
+		if !numeric.FitsScale(l.Debit, amountDecimals) || !numeric.FitsScale(l.Credit, amountDecimals) {
+			return EntryData{}, fmt.Errorf("%w: line %d amount has more than %d decimal places", domain.ErrInvalidLine, n, amountDecimals)
 		}
 		if l.Description, err = vo.OptionalText(l.Description, 500); err != nil {
 			return EntryData{}, fmt.Errorf("%w: line %d description is too long", domain.ErrInvalidLine, n)
