@@ -67,6 +67,10 @@
     - ลูกค้า (วงเงินเครดิต: เตือนตอนอนุมัติ ไม่ห้าม), ใบเสนอราคา → ใบสั่งขาย, ส่งของ / ออกบิลแยกใบหรือรวมใบ, ใบเสร็จ (ถูกหัก ณ ที่จ่าย)
     - inventory: `PostIssue` (ใบเบิก FIFO ให้ module อื่น), บัญชีรายได้ที่สินค้า / หมวด
     - รายงาน `outstanding-sales-orders`, `ar-aging`, `output-vat`, `withholding-tax-received`
+18. **ย้าย frontend เป็น Next.js 16** (ตัดสินใจ 2026-11-21) — ดู [08-frontend.md](08-frontend.md)
+    - App Router + `output: 'standalone'` (รันด้วย Node — ไม่ใช่ static file อีกต่อไป)
+    - token เก็บใน HttpOnly cookie ผ่าน route handler `/api/session`; `/api/v1/*` ส่งต่อไป backend พร้อม Bearer
+    - `proxy.ts` กันหน้าที่ต้องเข้าสู่ระบบ; ยกเลิก Vite / React Router / localStorage
 
 ## 7.3 ข้อเบี่ยงเบนจากสเปก / การตัดสินใจที่ควรรู้
 

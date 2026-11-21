@@ -41,10 +41,15 @@ curl http://localhost:8080/healthz   # 200
 HTTP server timeout: read header 10s, read 30s, write 30s, idle 120s
 DB pool: max open 25, max idle 5, conn lifetime 30 นาที; log คิวรีที่ช้ากว่า 200ms
 
-Frontend (dev): ดู [08-frontend.md §8.5](08-frontend.md) — `npm run dev` แล้ว Vite ส่งต่อ `/api` ไป backend
+Frontend: Next.js (ดู [08-frontend.md §8.5](08-frontend.md)) — server ของ Next ส่งต่อ `/api/v1/*` ไป backend เอง
+- dev: `npm run dev` (http://localhost:5173)
+- production: `npm run build` ได้ `.next/standalone/` → รัน `node server.js`
+  - คัดลอก `public/` ไปที่ `.next/standalone/public` และ `.next/static/` ไปที่ `.next/standalone/.next/static`
+  - env: `APEXIS_API_URL` (ที่อยู่ backend จากมุมมองของ server Next — ไม่ต้องเปิด backend สู่ภายนอก), `PORT`, `HOSTNAME`
+  - ต้องใช้ HTTPS — cookie `apexis_session` ตั้ง `Secure` เมื่อ `NODE_ENV=production`
 
 > ถ้าเครื่องมีโปรแกรมอื่นใช้พอร์ต 8080 อยู่ (เช่น Docker / WSL) ให้ตั้ง `HTTP_ADDR=:18080` ที่ backend
-> และ `VITE_API_PROXY_TARGET=http://127.0.0.1:18080` ใน `apps/frontend/.env.local`
+> และ `APEXIS_API_URL=http://127.0.0.1:18080` ใน `apps/frontend/.env.local`
 
 ## 6.4 Migration
 

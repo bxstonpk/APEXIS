@@ -56,6 +56,6 @@ APEXIS/
 │   │           ├── purchasing/
 │   │           ├── cashbank/
 │   │           └── sales/
-│   └── frontend/             # React + Vite + Tailwind (ดู 08-frontend.md)
+│   └── frontend/             # Next.js + Tailwind (ดู 08-frontend.md)
 └── services/                 # (ยังว่าง)
 ```
