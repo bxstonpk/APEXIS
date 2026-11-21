@@ -1,8 +1,8 @@
 package inventory_test
 
-// Integration test: HTTP -> application -> gorm -> PostgreSQL จริง (identity + organization + inventory)
+// Integration test: HTTP -> application -> gorm -> PostgreSQL จริง (identity + organization + ledger + inventory)
 // รันด้วย: IDENTITY_TEST_DSN="postgres://user:pass@localhost:5432/db?sslmode=disable" go test ./internal/modules/inventory/
-// (ไม่ได้ตั้ง env = skip) — test จะ DROP ตาราง identity_* / organization_* / inventory_* ใน DB นั้น ห้ามชี้ไป DB จริง
+// (ไม่ได้ตั้ง env = skip) — test จะ DROP ตาราง identity_* / organization_* / ledger_* / inventory_* ใน DB นั้น ห้ามชี้ไป DB จริง
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
+	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/reports"
@@ -95,6 +96,8 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
+		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
+		"ledger_journal_lines", "ledger_journal_entries", "ledger_journal_sequences", "ledger_journals", "ledger_accounts",
 		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_document_lines",
 		"inventory_documents", "inventory_items", "inventory_warehouses", "inventory_item_categories", "inventory_uoms",
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
@@ -108,6 +111,7 @@ func setup(t *testing.T) api {
 	for _, migrate := range []func() error{
 		func() error { return identity.Migrate(db) },
 		func() error { return organization.Migrate(db) },
+		func() error { return ledger.Migrate(db) },
 		func() error { return inventory.Migrate(db) },
 	} {
 		if err := migrate(); err != nil {
@@ -122,7 +126,9 @@ func setup(t *testing.T) api {
 	idm.RegisterRoutes(mux)
 	org := organization.New(db, idm)
 	org.RegisterRoutes(mux)
-	inv := inventory.New(db, idm, org)
+	led := ledger.New(db, idm, org)
+	led.RegisterRoutes(mux)
+	inv := inventory.New(db, idm, org, led)
 	inv.RegisterRoutes(mux)
 	reg := reports.NewRegistry()
 	inv.RegisterReports(reg)

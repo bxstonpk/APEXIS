@@ -95,6 +95,49 @@ func ParseItemType(raw string) (ItemType, error) {
 	return parseEnum(raw, ItemTypes, domain.ErrInvalidItemType)
 }
 
+// AccountingSystem คือระบบบัญชีสินค้า (ตั้งต่อปีบัญชี)
+type AccountingSystem string
+
+const (
+	Perpetual AccountingSystem = "perpetual" // บันทึกสินค้าคงเหลือ / ต้นทุนขายทันที
+	Periodic  AccountingSystem = "periodic"  // ลงบัญชีซื้อระหว่างงวด ปรับปรุงสินค้าคงเหลือสิ้นงวด
+)
+
+var AccountingSystems = []AccountingSystem{Perpetual, Periodic}
+
+func ParseAccountingSystem(raw string) (AccountingSystem, error) {
+	return parseEnum(raw, AccountingSystems, domain.ErrInvalidSystem)
+}
+
+// GLAccounts คือบัญชีแยกประเภท (ของ ledger) ที่ผูกกับสินค้า / หมวด / ค่าเริ่มต้นของบริษัท — nil = ไม่ได้ตั้ง
+type GLAccounts struct {
+	Purchase  *AccountID // บัญชีซื้อ (periodic, สินค้าไม่นับสต็อก / บริการ)
+	Inventory *AccountID // บัญชีสินค้าคงเหลือ (perpetual)
+}
+
+// IDs คืน id ที่ตั้งไว้ (ไม่ซ้ำ)
+func (g GLAccounts) IDs() []AccountID {
+	var out []AccountID
+	for _, p := range []*AccountID{g.Purchase, g.Inventory} {
+		if p != nil && !slices.Contains(out, *p) {
+			out = append(out, *p)
+		}
+	}
+	return out
+}
+
+// Or: ใช้ค่าของ g ถ้าตั้งไว้ ไม่งั้นใช้ของ fallback (สินค้า -> หมวด -> ค่าเริ่มต้นของบริษัท)
+func (g GLAccounts) Or(fallback GLAccounts) GLAccounts {
+	out := g
+	if out.Purchase == nil {
+		out.Purchase = fallback.Purchase
+	}
+	if out.Inventory == nil {
+		out.Inventory = fallback.Inventory
+	}
+	return out
+}
+
 // DocumentType ของเอกสารเคลื่อนไหวสต็อก
 type DocumentType string
 

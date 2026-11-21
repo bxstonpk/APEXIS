@@ -332,3 +332,25 @@ func (r *StockRepository) StockCardLines(ctx context.Context, companyID vo.Compa
 	}
 	return out, total, nil
 }
+
+// ValueByItem — 1 query: รวมมูลค่าการเคลื่อนไหวถึงวันที่ต่อสินค้า (subquery) แล้ว JOIN สินค้า / หมวดเพื่อเอาบัญชี
+// (รวมสินค้าที่ถูก soft delete — มูลค่าที่ยังเหลือต้องถูกนับ)
+func (r *StockRepository) ValueByItem(ctx context.Context, companyID vo.CompanyID, asOf time.Time) ([]dto.ItemStockValue, error) {
+	var rows []struct {
+		ItemAccountsRow
+		Value decimal.Decimal
+	}
+	err := database.Conn(ctx, r.db).Raw(`
+		SELECT `+itemAccountColumns+`, v.value
+		  FROM (SELECT item_id, SUM(value) AS value FROM inventory_movements
+		         WHERE company_id = ? AND movement_date <= ?
+		         GROUP BY item_id HAVING SUM(value) <> 0) AS v
+		  JOIN inventory_items AS i ON i.id = v.item_id
+		  LEFT JOIN inventory_item_categories AS c ON c.id = i.category_id AND c.deleted_at IS NULL
+		 ORDER BY i.code`, uuidOf(companyID), asOf).Scan(&rows).Error
+	out := make([]dto.ItemStockValue, len(rows))
+	for i, row := range rows {
+		out[i] = dto.ItemStockValue{ItemAccounts: row.ItemAccountsRow.dto(), Value: row.Value}
+	}
+	return out, err
+}

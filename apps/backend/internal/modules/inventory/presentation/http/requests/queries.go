@@ -3,6 +3,7 @@ package requests
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"apexis/backend/internal/modules/inventory/application/dto"
@@ -142,4 +143,39 @@ func ParseStockCard(v url.Values) (dto.StockCardFilter, error) {
 		f.ItemID = *item
 	}
 	return f, q.err
+}
+
+// GET /inventory-closings?fiscal_year=&status=posted|cancelled&sort=period_end|created_at&page=&page_size=
+func ParseClosingFilter(v url.Values) (dto.ClosingFilter, error) {
+	q := &query{v: v}
+	f := dto.ClosingFilter{
+		FiscalYear: parse(q, func() (*int, error) {
+			return listing.ParseOptional(v, "fiscal_year", func(s string) (int, error) {
+				y, err := strconv.Atoi(s)
+				if err != nil || y < 1900 || y > 9999 {
+					return 0, fmt.Errorf("invalid year")
+				}
+				return y, nil
+			})
+		}),
+		Statuses: parse(q, func() ([]string, error) {
+			return listing.ParseList(v, "status", func(s string) (string, error) {
+				if s != "posted" && s != "cancelled" {
+					return "", fmt.Errorf("invalid status")
+				}
+				return s, nil
+			})
+		}),
+		Sort: q.sort(dto.ClosingSortKeys, dto.DefaultClosingSort), Page: q.page(),
+	}
+	return f, q.err
+}
+
+// ParseYear: path parameter {fiscalYear}
+func ParseYear(raw string) (int, error) {
+	y, err := strconv.Atoi(raw)
+	if err != nil || y < 1900 || y > 9999 {
+		return 0, invalid("fiscal year must be a 4-digit year")
+	}
+	return y, nil
 }

@@ -15,6 +15,7 @@ import (
 	vo "apexis/backend/internal/modules/inventory/domain/value_objects"
 	"apexis/backend/internal/modules/inventory/presentation/http/requests"
 	"apexis/backend/internal/platform/httpx"
+	"apexis/backend/internal/platform/integration"
 )
 
 type CurrentUser func(ctx context.Context) (uuid.UUID, bool)
@@ -43,6 +44,8 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidQuantity, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidLine, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidDate, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidSystem, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidYear, Status: http.StatusBadRequest},
 	// 401 / 403
 	{Err: errUnauthenticated, Status: http.StatusUnauthorized},
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
@@ -53,9 +56,11 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrWarehouseNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrDocumentNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrBranchNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrClosingNotFound, Status: http.StatusNotFound},
 	// 409
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
 	{Err: domain.ErrInUse, Status: http.StatusConflict},
+	{Err: domain.ErrClosingExists, Status: http.StatusConflict},
 	// 422
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrItemNotStocked, Status: http.StatusUnprocessableEntity},
@@ -68,8 +73,17 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrNoFiscalPeriod, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodClosed, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrItemHasStock, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrAccountInvalid, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrJournalInvalid, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrSystemLocked, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrNotPeriodic, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrSettingsMissing, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrInventoryClosed, Status: http.StatusUnprocessableEntity},
+	// กฎของ module อื่น (เช่น ledger ปฏิเสธรายการปรับปรุงสิ้นงวด) — ข้อความมาจาก domain error ของ module นั้น
+	{Err: integration.ErrRejected, Status: http.StatusUnprocessableEntity},
 }, requests.ErrValidation, domain.ErrInvalidQuantity, domain.ErrInvalidLine, domain.ErrItemNotFound,
-	domain.ErrItemNotStocked, domain.ErrInsufficientStock, domain.ErrStockAlreadyUsed)
+	domain.ErrItemNotStocked, domain.ErrInsufficientStock, domain.ErrStockAlreadyUsed,
+	domain.ErrAccountInvalid, domain.ErrSettingsMissing, integration.ErrRejected)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response (fn คืน body ที่ห่อ envelope แล้ว หรือ nil สำหรับ 204)
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {

@@ -21,6 +21,7 @@ type DocumentUseCases struct {
 	items      repositories.ItemRepository
 	warehouses repositories.WarehouseRepository
 	stock      repositories.StockRepository
+	closings   repositories.ClosingRepository
 }
 
 func (uc *DocumentUseCases) Get(ctx context.Context, in dto.ByID[vo.DocumentID]) (dto.Document, error) {
@@ -123,36 +124,40 @@ func (uc *DocumentUseCases) Post(ctx context.Context, in dto.ByID[vo.DocumentID]
 // บันทึกการเคลื่อนไหวกลับรายการที่วันที่เดิมของเอกสาร — งวดของวันที่นั้นต้องยังเปิด
 func (uc *DocumentUseCases) Cancel(ctx context.Context, in dto.ByID[vo.DocumentID]) (dto.Document, error) {
 	err := uc.write(ctx, in.Actor, vo.PermDocumentPost, func(ctx context.Context) error {
-		d, err := uc.docs.FindForUpdate(ctx, in.CompanyID, in.ID)
-		if err != nil {
-			return err
-		}
-		if d.Status() != vo.DocPosted {
-			return domain.ErrDocumentNotPosted
-		}
-		if _, err := uc.openPeriod(ctx, in.CompanyID, d); err != nil {
-			return err
-		}
-		input, err := uc.stock.LoadForCancel(ctx, in.CompanyID, in.ID)
-		if err != nil {
-			return err
-		}
-		plan, err := services.PlanCancel(input)
-		if err != nil {
-			return err
-		}
-		if err := uc.stock.ApplyCancel(ctx, in.CompanyID, plan); err != nil {
-			return err
-		}
-		if err := d.Cancel(entities.Cancellation{By: in.UserID, At: uc.now()}); err != nil {
-			return err
-		}
-		return uc.docs.UpdateStatus(ctx, d)
+		return uc.cancel(ctx, in.Actor, in.ID)
 	})
 	if err != nil {
 		return dto.Document{}, err
 	}
 	return uc.docs.Get(ctx, in.CompanyID, in.ID)
+}
+
+func (uc *DocumentUseCases) cancel(ctx context.Context, a dto.Actor, id vo.DocumentID) error {
+	d, err := uc.docs.FindForUpdate(ctx, a.CompanyID, id)
+	if err != nil {
+		return err
+	}
+	if d.Status() != vo.DocPosted {
+		return domain.ErrDocumentNotPosted
+	}
+	if _, err := uc.openPeriod(ctx, a.CompanyID, d); err != nil {
+		return err
+	}
+	input, err := uc.stock.LoadForCancel(ctx, a.CompanyID, id)
+	if err != nil {
+		return err
+	}
+	plan, err := services.PlanCancel(input)
+	if err != nil {
+		return err
+	}
+	if err := uc.stock.ApplyCancel(ctx, a.CompanyID, plan); err != nil {
+		return err
+	}
+	if err := d.Cancel(entities.Cancellation{By: a.UserID, At: uc.now()}); err != nil {
+		return err
+	}
+	return uc.docs.UpdateStatus(ctx, d)
 }
 
 // post คำนวณ FIFO และเขียนผลทั้งหมด (เอกสารต้องถูกบันทึกแล้ว — การเคลื่อนไหวอ้างถึงเอกสาร)
@@ -190,7 +195,7 @@ func (uc *DocumentUseCases) post(ctx context.Context, a dto.Actor, s ports.Compa
 	}
 	err = d.Post(entities.Posting{
 		DocumentNo: fmt.Sprintf("%s%d-%06d", data.Type.Prefix(), period.FiscalYear, n),
-		PeriodID:   period.ID, By: a.UserID, At: uc.now(),
+		PeriodID:   period.ID, FiscalYear: period.FiscalYear, By: a.UserID, At: uc.now(),
 	}, plan.LineValues)
 	if err != nil {
 		return err
@@ -205,6 +210,14 @@ func (uc *DocumentUseCases) openPeriod(ctx context.Context, companyID vo.Company
 	}
 	if !p.Open {
 		return ports.Period{}, domain.ErrPeriodClosed
+	}
+	// ปรับปรุงสินค้าคงเหลือสิ้นงวด (periodic) ใช้มูลค่าสะสมถึงวันสิ้นงวด — เอกสารย้อนหลังจะทำให้ยอดนั้นผิด
+	closed, err := uc.closings.PostedOnOrAfter(ctx, companyID, d.Data().Date)
+	if err != nil {
+		return ports.Period{}, err
+	}
+	if closed {
+		return ports.Period{}, domain.ErrInventoryClosed
 	}
 	return p, nil
 }

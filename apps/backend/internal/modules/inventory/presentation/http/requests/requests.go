@@ -22,6 +22,9 @@ import (
 // ErrValidation ถูก wrap พร้อมรายละเอียดที่ปลอดภัยต่อการแสดงให้ client (HTTP 400)
 var ErrValidation = errors.New("validation failed")
 
+// Invalid: validation error ที่ handler สร้างเอง (400)
+func Invalid(msg string) error { return invalid("%s", msg) }
+
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrValidation}, args...)...)
 }
@@ -117,6 +120,39 @@ func (r Master) ToData(isCreate bool) (entities.MasterData, error) {
 	return entities.MasterData{Code: r.Code, Name: r.Name, Status: st}, nil
 }
 
+// Accounts: บัญชีแยกประเภท (id ของ ledger) — ไม่ส่ง / null = ไม่ตั้ง (ใช้ของหมวด / ค่าเริ่มต้น)
+type Accounts struct {
+	PurchaseAccountID  *string `json:"purchase_account_id"`
+	InventoryAccountID *string `json:"inventory_account_id"`
+}
+
+func (r Accounts) toGL(prefix string) (vo.GLAccounts, error) {
+	purchase, err := optionalID[vo.AccountID](prefix+"purchase_account_id", r.PurchaseAccountID)
+	if err != nil {
+		return vo.GLAccounts{}, err
+	}
+	inventory, err := optionalID[vo.AccountID](prefix+"inventory_account_id", r.InventoryAccountID)
+	if err != nil {
+		return vo.GLAccounts{}, err
+	}
+	return vo.GLAccounts{Purchase: purchase, Inventory: inventory}, nil
+}
+
+// Category: POST / PUT /item-categories — บัญชีของสินค้าในหมวด
+type Category struct {
+	Master
+	Accounts
+}
+
+func (r Category) ToData(isCreate bool) (entities.MasterData, error) {
+	d, err := r.Master.ToData(isCreate)
+	if err != nil {
+		return entities.MasterData{}, err
+	}
+	d.Accounts, err = r.Accounts.toGL("")
+	return d, err
+}
+
 // Warehouse: POST / PUT /warehouses
 type Warehouse struct {
 	Code     string  `json:"code"`
@@ -147,6 +183,7 @@ type Item struct {
 	CategoryID   *string  `json:"category_id"`
 	ReorderPoint *Decimal `json:"reorder_point"`
 	Status       string   `json:"status"`
+	Accounts
 }
 
 func (r Item) ToData(isCreate bool) (entities.ItemData, error) {
@@ -179,8 +216,13 @@ func (r Item) ToData(isCreate bool) (entities.ItemData, error) {
 	if err != nil {
 		return entities.ItemData{}, err
 	}
+	accounts, err := r.Accounts.toGL("")
+	if err != nil {
+		return entities.ItemData{}, err
+	}
 	return entities.ItemData{
-		Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: typ, UomID: uom, CategoryID: category, ReorderPoint: reorder, Status: st,
+		Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: typ, UomID: uom, CategoryID: category, ReorderPoint: reorder,
+		Accounts: accounts, Status: st,
 	}, nil
 }
 
@@ -291,4 +333,64 @@ func (r UpdateDocumentStatus) Parse() (vo.DocumentStatus, error) {
 		return vo.DocumentStatus(r.Status), nil
 	}
 	return "", invalid(`status must be "posted" or "cancelled"`)
+}
+
+// ---------- ค่าตั้ง / ปิดงวด ----------
+
+// Settings: PUT /inventory-settings — แทนที่ทั้งก้อน (field ที่ไม่ส่ง = ไม่ตั้ง)
+type Settings struct {
+	DefaultPurchaseAccountID  *string `json:"default_purchase_account_id"`
+	DefaultInventoryAccountID *string `json:"default_inventory_account_id"`
+	CogsAccountID             *string `json:"cogs_account_id"`
+	JournalID                 *string `json:"journal_id"`
+}
+
+func (r Settings) ToSettings() (entities.Settings, error) {
+	defaults, err := Accounts{PurchaseAccountID: r.DefaultPurchaseAccountID, InventoryAccountID: r.DefaultInventoryAccountID}.toGL("default_")
+	if err != nil {
+		return entities.Settings{}, err
+	}
+	cogs, err := optionalID[vo.AccountID]("cogs_account_id", r.CogsAccountID)
+	if err != nil {
+		return entities.Settings{}, err
+	}
+	journal, err := optionalID[vo.JournalID]("journal_id", r.JournalID)
+	if err != nil {
+		return entities.Settings{}, err
+	}
+	return entities.Settings{Defaults: defaults, CogsAccountID: cogs, JournalID: journal}, nil
+}
+
+// AccountingSystem: PUT /inventory-settings/accounting-systems/{fiscalYear}
+type AccountingSystem struct {
+	System string `json:"system"`
+}
+
+func (r AccountingSystem) Parse() (vo.AccountingSystem, error) {
+	s, err := vo.ParseAccountingSystem(r.System)
+	if err != nil {
+		return "", invalid("system must be one of perpetual, periodic")
+	}
+	return s, nil
+}
+
+// Closing: POST /inventory-closings — date คือวันใดก็ได้ในงวดที่จะปิด (YYYY-MM-DD)
+type Closing struct {
+	Date string `json:"date"`
+}
+
+func (r Closing) ParseDate() (time.Time, error) {
+	if err := required(map[string]string{"date": r.Date}); err != nil {
+		return time.Time{}, err
+	}
+	d, err := listing.ParseDate(r.Date)
+	if err != nil {
+		return time.Time{}, invalid("date must be YYYY-MM-DD")
+	}
+	return d, nil
+}
+
+// ClosingStatus: PATCH /inventory-closings/{closingID} — {"status":"cancelled"}
+type ClosingStatus struct {
+	Status string `json:"status"`
 }

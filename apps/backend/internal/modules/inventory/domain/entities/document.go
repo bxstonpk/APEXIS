@@ -44,6 +44,7 @@ type DocumentData struct {
 type Posting struct {
 	DocumentNo string // เช่น GR2026-000001 — เรียงไม่ขาดตอนแยกตามชนิดเอกสารและปีบัญชี
 	PeriodID   vo.FiscalPeriodID
+	FiscalYear int
 	By         vo.UserID
 	At         time.Time
 }

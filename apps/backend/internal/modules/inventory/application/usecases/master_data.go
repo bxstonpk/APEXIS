@@ -21,6 +21,14 @@ type MasterUseCases[ID any, E any] struct {
 	newEntity    func(vo.CompanyID, entities.MasterData) (E, error)
 	update       func(E, entities.MasterData) error
 	id           func(E) ID
+	validate     func(context.Context, vo.CompanyID, E) error // optional: ตรวจกับข้อมูลภายนอก (เช่น บัญชีของหมวด)
+}
+
+func (uc *MasterUseCases[ID, E]) check(ctx context.Context, companyID vo.CompanyID, e E) error {
+	if uc.validate == nil {
+		return nil
+	}
+	return uc.validate(ctx, companyID, e)
 }
 
 func (uc *MasterUseCases[ID, E]) Get(ctx context.Context, in dto.ByID[ID]) (dto.Master, error) {
@@ -38,7 +46,13 @@ func (uc *MasterUseCases[ID, E]) Create(ctx context.Context, in dto.Create[entit
 	if err != nil {
 		return dto.Master{}, err
 	}
-	if err := uc.write(ctx, in.Actor, uc.manage, func(ctx context.Context) error { return uc.repo.Create(ctx, e) }); err != nil {
+	err = uc.write(ctx, in.Actor, uc.manage, func(ctx context.Context) error {
+		if err := uc.check(ctx, in.CompanyID, e); err != nil {
+			return err
+		}
+		return uc.repo.Create(ctx, e)
+	})
+	if err != nil {
 		return dto.Master{}, err
 	}
 	return uc.repo.Get(ctx, in.CompanyID, uc.id(e))
@@ -51,6 +65,9 @@ func (uc *MasterUseCases[ID, E]) Update(ctx context.Context, in dto.Update[ID, e
 			return err
 		}
 		if err := uc.update(e, in.Data); err != nil {
+			return err
+		}
+		if err := uc.check(ctx, in.CompanyID, e); err != nil {
 			return err
 		}
 		return uc.repo.Update(ctx, e)
@@ -242,7 +259,7 @@ func (uc *ItemUseCases) Delete(ctx context.Context, in dto.ByID[vo.ItemID]) erro
 	})
 }
 
-// requireRefs: หน่วยนับ (บังคับ) และหมวด (ถ้าระบุ) ต้องมีอยู่ในบริษัท
+// requireRefs: หน่วยนับ (บังคับ) และหมวด (ถ้าระบุ) ต้องมีอยู่ในบริษัท, บัญชีที่ตั้งต้องลงรายการได้
 func (uc *ItemUseCases) requireRefs(ctx context.Context, companyID vo.CompanyID, d entities.ItemData) error {
 	if _, err := uc.uoms.FindByID(ctx, companyID, d.UomID); err != nil {
 		return err
@@ -252,5 +269,5 @@ func (uc *ItemUseCases) requireRefs(ctx context.Context, companyID vo.CompanyID,
 			return err
 		}
 	}
-	return nil
+	return uc.checkAccounts(ctx, companyID, d.Accounts.IDs())
 }

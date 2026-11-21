@@ -96,6 +96,19 @@ func (m *Module) FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date t
 	return uuid.UUID(p.PeriodID), p.FiscalYear, p.YearStart, p.Status == vo.PeriodOpen, nil
 }
 
+// FiscalPeriodRange คืนงวดที่ครอบคลุม date พร้อมวันแรก / วันสุดท้ายของงวด (periodID = uuid.Nil เมื่อไม่มีงวด)
+// ใช้กับงานสิ้นงวด เช่น ปรับปรุงสินค้าคงเหลือ — lock แถวงวดแบบเดียวกับ FiscalPeriodAt
+func (m *Module) FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error) {
+	p, err := m.UseCases.Lookups.PeriodAt(ctx, vo.CompanyID(companyID), date)
+	if errors.Is(err, domain.ErrFiscalPeriodNotFound) {
+		return uuid.Nil, 0, time.Time{}, time.Time{}, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, 0, time.Time{}, time.Time{}, false, err
+	}
+	return uuid.UUID(p.PeriodID), p.FiscalYear, p.Start, p.End, p.Status == vo.PeriodOpen, nil
+}
+
 // MissingDimensions คืนชนิดมิติที่มี id ไม่พบในบริษัท ("branch", "department", "cost_center", "project_site")
 func (m *Module) MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error) {
 	return m.UseCases.Lookups.MissingDimensions(ctx, vo.CompanyID(companyID), dto.Dimensions{

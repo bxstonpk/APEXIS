@@ -1,11 +1,14 @@
 // Package inventory คือคลังสินค้า: หน่วยนับ, หมวดสินค้า, สินค้า, คลัง, เอกสารเคลื่อนไหวสต็อก
 // (รับเข้า / เบิกออก / โอน / ปรับปรุง) ต้นทุนแบบ FIFO ห้ามสต็อกติดลบ และรายงานยอดคงเหลือ / stock card
 //
-// inventory ไม่ลงบัญชีเอง — module ที่เกี่ยวข้อง (ซื้อ / ขาย) ลงบัญชีโดยใช้ต้นทุนจากเอกสารสต็อก
+// เอกสารสต็อกไม่ลงบัญชีเอง — module ที่เกี่ยวข้อง (ซื้อ / ขาย) ลงบัญชีโดยใช้ต้นทุนจากเอกสารสต็อก
+// inventory เก็บค่าตั้งบัญชีสินค้า (ระบบ perpetual / periodic ต่อปีบัญชี, บัญชีตามสินค้า / หมวด / ค่าเริ่มต้น)
+// และลงบัญชีเองเฉพาะรายการปรับปรุงสินค้าคงเหลือสิ้นงวด (periodic) ผ่าน ledger
 //
 // พึ่งพา module อื่นผ่าน interface เท่านั้น:
 //   - identity: ตรวจ token, user ปัจจุบัน, ตรวจสิทธิ์
 //   - organization: สถานะบริษัท + จำนวนทศนิยม, งวดบัญชี, สาขา
+//   - ledger: ตรวจบัญชี / สมุดรายวัน, ยอดบัญชี, ลงรายการปรับปรุงสิ้นงวด
 package inventory
 
 import (
@@ -16,13 +19,18 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"apexis/backend/internal/modules/inventory/application/dto"
 	"apexis/backend/internal/modules/inventory/application/usecases"
+	"apexis/backend/internal/modules/inventory/domain/entities"
+	domain "apexis/backend/internal/modules/inventory/domain/errors"
+	vo "apexis/backend/internal/modules/inventory/domain/value_objects"
 	gp "apexis/backend/internal/modules/inventory/infrastructure/persistence/gorm"
 	"apexis/backend/internal/modules/inventory/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/inventory/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/inventory/infrastructure/services"
 	inventoryhttp "apexis/backend/internal/modules/inventory/presentation/http"
 	"apexis/backend/internal/modules/inventory/presentation/http/handlers"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -36,9 +44,12 @@ type Identity interface {
 // Organization คือสิ่งที่ inventory ต้องการจาก organization module (*organization.Module implement)
 type Organization interface {
 	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
-	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
+	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 }
+
+// Ledger คือสิ่งที่ inventory ต้องการจาก ledger module (*ledger.Module implement)
+type Ledger = services.LedgerAccess
 
 type Module struct {
 	UseCases *usecases.UseCases
@@ -46,17 +57,20 @@ type Module struct {
 	handler  *handlers.Handler
 }
 
-func New(db *gorm.DB, identity Identity, org Organization) *Module {
+func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger) *Module {
 	uc := usecases.New(usecases.Deps{
 		Tx:         gp.NewTransactionManager(db),
 		Auth:       services.NewIdentityAuthorizer(identity),
 		Org:        services.NewOrganization(org),
+		Ledger:     services.NewLedger(ledger),
 		Uoms:       gormrepo.NewUomRepository(db),
 		Categories: gormrepo.NewCategoryRepository(db),
 		Warehouses: gormrepo.NewWarehouseRepository(db),
 		Items:      gormrepo.NewItemRepository(db),
 		Documents:  gormrepo.NewDocumentRepository(db),
 		Stock:      gormrepo.NewStockRepository(db),
+		Settings:   gormrepo.NewSettingsRepository(db),
+		Closings:   gormrepo.NewClosingRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -68,6 +82,85 @@ func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 // RegisterReports ลงทะเบียน book ของ inventory กับ GET /reports?book=
 func (m *Module) RegisterReports(reg *reports.Registry) {
 	inventoryhttp.RegisterReports(reg, m.handler)
+}
+
+// ---------- public API สำหรับ module อื่น (จัดซื้อ / ขาย) ----------
+//
+// ไม่ตรวจสิทธิ์ของ inventory (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎของ inventory ครบ
+// ทำงานใน transaction ของผู้เรียก (ctx); error กฎธุรกิจถูกห่อเป็น integration.ErrRejected
+
+func reject(err error) error {
+	if err != nil && domain.IsBusiness(err) {
+		return integration.Reject("inventory", err)
+	}
+	return err
+}
+
+// PurchaseContext คืนระบบบัญชีของปีบัญชีที่ date อยู่ และสินค้าพร้อมบัญชีที่ใช้จริง (สินค้าที่ไม่พบจะไม่อยู่ใน map)
+// lock ค่าตั้งไว้จน transaction ของผู้เรียก commit — ระบบบัญชีเปลี่ยนระหว่างนั้นไม่ได้
+func (m *Module) PurchaseContext(ctx context.Context, companyID uuid.UUID, date time.Time, itemIDs []uuid.UUID) (integration.PurchaseContext, error) {
+	ids := make([]vo.ItemID, len(itemIDs))
+	for i, id := range itemIDs {
+		ids[i] = vo.ItemID(id)
+	}
+	system, items, err := m.UseCases.Facade.PurchaseContext(ctx, vo.CompanyID(companyID), date, ids)
+	if err != nil {
+		return integration.PurchaseContext{}, reject(err)
+	}
+	return integration.PurchaseContext{System: integration.AccountingSystem(system), Items: itemMap(items)}, nil
+}
+
+// PurchaseItems คืนสินค้าพร้อมบัญชีที่ใช้จริง (ไม่ผูกกับปีบัญชี) — สินค้าที่ไม่พบจะไม่อยู่ใน map
+func (m *Module) PurchaseItems(ctx context.Context, companyID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]integration.Item, error) {
+	ids := make([]vo.ItemID, len(itemIDs))
+	for i, id := range itemIDs {
+		ids[i] = vo.ItemID(id)
+	}
+	items, err := m.UseCases.Facade.PurchaseItems(ctx, vo.CompanyID(companyID), ids)
+	if err != nil {
+		return nil, reject(err)
+	}
+	return itemMap(items), nil
+}
+
+func itemMap(items []dto.PurchaseItem) map[uuid.UUID]integration.Item {
+	out := make(map[uuid.UUID]integration.Item, len(items))
+	for _, i := range items {
+		out[uuid.UUID(i.ID)] = integration.Item{
+			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
+			PurchaseAccountID: accountUUID(i.Accounts.Purchase), InventoryAccountID: accountUUID(i.Accounts.Inventory),
+		}
+	}
+	return out
+}
+
+func accountUUID(id *vo.AccountID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return uuid.UUID(*id)
+}
+
+// PostReceipt ออกใบรับเข้า (receipt) แล้วผ่านทันที — ต้นทุน FIFO ตามราคาก่อน VAT ที่ส่งมา
+func (m *Module) PostReceipt(ctx context.Context, companyID, userID, warehouseID uuid.UUID, date time.Time, reference, description string, lines []integration.ReceiptLine) (integration.Receipt, error) {
+	data := entities.DocumentData{
+		Type: vo.DocReceipt, Date: date, WarehouseID: vo.WarehouseID(warehouseID), Reference: reference, Description: description,
+		Lines: make([]entities.LineData, len(lines)),
+	}
+	for i, l := range lines {
+		cost := l.UnitCost
+		data.Lines[i] = entities.LineData{ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity, UnitCost: &cost}
+	}
+	r, err := m.UseCases.Facade.PostReceipt(ctx, vo.CompanyID(companyID), vo.UserID(userID), data)
+	if err != nil {
+		return integration.Receipt{}, reject(err)
+	}
+	return integration.Receipt{DocumentID: uuid.UUID(r.DocumentID), DocumentNo: r.DocumentNo, LineValues: r.LineValues}, nil
+}
+
+// CancelDocument ยกเลิกเอกสารสต็อกที่ผ่านแล้ว (คืนต้นทุน FIFO) — ของที่รับเข้าถูกใช้ไปแล้วยกเลิกไม่ได้
+func (m *Module) CancelDocument(ctx context.Context, companyID, userID, documentID uuid.UUID) error {
+	return reject(m.UseCases.Facade.CancelDocument(ctx, vo.CompanyID(companyID), vo.UserID(userID), vo.DocumentID(documentID)))
 }
 
 // Migrate สร้างตารางของ inventory

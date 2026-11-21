@@ -75,7 +75,7 @@ func (r *DocumentRepository) UpdateStatus(ctx context.Context, d *entities.Docum
 	res := tx.Model(&models.DocumentModel{}).
 		Where("company_id = ? AND id = ?", m.CompanyID, m.ID).
 		Updates(map[string]any{
-			"status": m.Status, "document_no": m.DocumentNo, "fiscal_period_id": m.FiscalPeriodID,
+			"status": m.Status, "document_no": m.DocumentNo, "fiscal_period_id": m.FiscalPeriodID, "fiscal_year": m.FiscalYear,
 			"posted_at": m.PostedAt, "posted_by": m.PostedBy, "cancelled_at": m.CancelledAt, "cancelled_by": m.CancelledBy,
 			"total_value": m.TotalValue, "updated_at": time.Now().UTC(),
 		})

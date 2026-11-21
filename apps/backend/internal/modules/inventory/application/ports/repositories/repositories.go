@@ -40,6 +40,10 @@ type ItemRepository interface {
 	FindByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.ItemID) ([]*entities.Item, error)
 	// HasMovements: เคยมีการเคลื่อนไหวสต็อก (ชนิด / หน่วยนับเปลี่ยนไม่ได้)
 	HasMovements(ctx context.Context, companyID vo.CompanyID, id vo.ItemID) (bool, error)
+	// AccountsOf: สินค้า + บัญชีของสินค้าและหมวด — query เดียว (สินค้าที่ไม่พบจะไม่อยู่ในผลลัพธ์)
+	AccountsOf(ctx context.Context, companyID vo.CompanyID, ids []vo.ItemID) ([]dto.ItemAccounts, error)
+	// InventoryAccountIDs: บัญชีสินค้าคงเหลือทั้งหมดที่ตั้งไว้ที่สินค้า / หมวด (ไม่ซ้ำ)
+	InventoryAccountIDs(ctx context.Context, companyID vo.CompanyID) ([]vo.AccountID, error)
 }
 
 type DocumentRepository interface {
@@ -73,4 +77,35 @@ type StockRepository interface {
 	StockCardOpening(ctx context.Context, companyID vo.CompanyID, f dto.StockCardFilter) (vo.Quantity, vo.Money, error)
 	// StockCardLines: การเคลื่อนไหวในช่วงวันที่ พร้อมยอดสะสม (ไม่รวมยอดยกมา) — แบ่งหน้าใน DB
 	StockCardLines(ctx context.Context, companyID vo.CompanyID, f dto.StockCardFilter) ([]dto.StockCardLine, int64, error)
+	// ValueByItem: มูลค่าสต็อกรวมทุกคลัง ณ วันที่ asOf ต่อสินค้า (เฉพาะที่ไม่เป็นศูนย์) — query เดียว
+	ValueByItem(ctx context.Context, companyID vo.CompanyID, asOf time.Time) ([]dto.ItemStockValue, error)
+}
+
+type Lock int
+
+const (
+	NoLock Lock = iota
+	ForShare
+	ForUpdate
+)
+
+type SettingsRepository interface {
+	// Get คืนค่าตั้ง (ยังไม่เคยตั้ง = ค่าว่าง) และระบบบัญชีตามปี
+	// lock != NoLock: สร้างแถวค่าตั้งถ้ายังไม่มี แล้ว lock — กันเปลี่ยนระบบพร้อมกับการลงบัญชีซื้อ
+	Get(ctx context.Context, companyID vo.CompanyID, lock Lock) (entities.Settings, []entities.SystemChange, error)
+	Save(ctx context.Context, companyID vo.CompanyID, s entities.Settings) error
+	SaveSystem(ctx context.Context, companyID vo.CompanyID, c entities.SystemChange) error
+	// HasPostedFrom: มีเอกสารสต็อกที่ผ่านแล้ว (ยังไม่ยกเลิก) ในปีบัญชี year เป็นต้นไป
+	HasPostedFrom(ctx context.Context, companyID vo.CompanyID, year int) (bool, error)
+}
+
+type ClosingRepository interface {
+	// Create คืน domain.ErrClosingExists เมื่องวดนี้มีที่ posted อยู่แล้ว
+	Create(ctx context.Context, c *entities.PeriodClosing) error
+	UpdateStatus(ctx context.Context, c *entities.PeriodClosing) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.ClosingID) (*entities.PeriodClosing, error)
+	// PostedOnOrAfter: มีการปิดงวด (posted) ที่วันสิ้นงวดตั้งแต่ date — เอกสารสต็อกวันที่นั้นจะทำให้ยอดปิดงวดผิด
+	PostedOnOrAfter(ctx context.Context, companyID vo.CompanyID, date time.Time) (bool, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.ClosingID) (dto.Closing, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.ClosingFilter) (listing.Result[dto.Closing], error)
 }

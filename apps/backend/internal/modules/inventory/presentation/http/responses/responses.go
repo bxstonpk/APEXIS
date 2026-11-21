@@ -50,6 +50,24 @@ func FromMaster(m dto.Master) Master {
 	return Master{ID: m.ID, Code: m.Code, Name: m.Name, Status: m.Status}
 }
 
+type Accounts struct {
+	PurchaseAccountID  *string `json:"purchase_account_id"`
+	InventoryAccountID *string `json:"inventory_account_id"`
+}
+
+func accounts(a dto.Accounts) Accounts {
+	return Accounts{PurchaseAccountID: a.PurchaseAccountID, InventoryAccountID: a.InventoryAccountID}
+}
+
+type Category struct {
+	Master
+	Accounts
+}
+
+func FromCategory(m dto.Master) Category {
+	return Category{Master: FromMaster(m), Accounts: accounts(m.Accounts)}
+}
+
 type Warehouse struct {
 	Master
 	BranchID *string `json:"branch_id"`
@@ -68,13 +86,14 @@ type Item struct {
 	Uom          Ref     `json:"uom"`
 	Category     *Ref    `json:"category"`
 	ReorderPoint *string `json:"reorder_point"`
-	Status       string  `json:"status"`
+	Accounts
+	Status string `json:"status"`
 }
 
 func FromItem(i dto.Item) Item {
 	out := Item{
 		ID: i.ID, Code: i.Code, Name: i.Name, NameEN: i.NameEN, Type: i.Type, Uom: ref(i.Uom),
-		ReorderPoint: optDecimal(i.ReorderPoint), Status: i.Status,
+		ReorderPoint: optDecimal(i.ReorderPoint), Accounts: accounts(i.Accounts), Status: i.Status,
 	}
 	if i.Category != nil {
 		c := ref(*i.Category)
@@ -229,4 +248,53 @@ func FromStockCard(book string, c dto.StockCard) StockCardBody {
 		out.Warehouse = &w
 	}
 	return StockCardBody{Data: out, Meta: meta(c.Lines)}
+}
+
+// ---------- ค่าตั้ง / ปิดงวด ----------
+
+type SystemSetting struct {
+	FromYear int    `json:"from_fiscal_year"`
+	System   string `json:"system"`
+}
+
+type Settings struct {
+	DefaultPurchaseAccountID  *string         `json:"default_purchase_account_id"`
+	DefaultInventoryAccountID *string         `json:"default_inventory_account_id"`
+	CogsAccountID             *string         `json:"cogs_account_id"`
+	JournalID                 *string         `json:"journal_id"`
+	AccountingSystems         []SystemSetting `json:"accounting_systems"` // ปีที่ไม่ได้ตั้ง = perpetual
+}
+
+func FromSettings(s dto.Settings) Settings {
+	out := Settings{
+		DefaultPurchaseAccountID: s.Defaults.PurchaseAccountID, DefaultInventoryAccountID: s.Defaults.InventoryAccountID,
+		CogsAccountID: s.CogsAccountID, JournalID: s.JournalID, AccountingSystems: make([]SystemSetting, len(s.Systems)),
+	}
+	for i, x := range s.Systems {
+		out.AccountingSystems[i] = SystemSetting{FromYear: x.FromYear, System: x.System}
+	}
+	return out
+}
+
+type Closing struct {
+	ID             string     `json:"id"`
+	FiscalPeriodID string     `json:"fiscal_period_id"`
+	FiscalYear     int        `json:"fiscal_year"`
+	PeriodEnd      string     `json:"period_end"`
+	EntryID        *string    `json:"entry_id"` // null = ไม่มีส่วนต่างต้องปรับ
+	EntryNo        string     `json:"entry_no"`
+	Adjustment     string     `json:"adjustment"` // สินค้าคงเหลือเพิ่ม (+) / ลด (-)
+	Status         string     `json:"status"`
+	CreatedBy      string     `json:"created_by"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CancelledBy    *string    `json:"cancelled_by"`
+	CancelledAt    *time.Time `json:"cancelled_at"`
+}
+
+func FromClosing(c dto.Closing) Closing {
+	return Closing{
+		ID: c.ID, FiscalPeriodID: c.PeriodID, FiscalYear: c.FiscalYear, PeriodEnd: date(c.PeriodEnd), EntryID: c.EntryID,
+		EntryNo: c.EntryNo, Adjustment: c.Adjustment.String(), Status: c.Status, CreatedBy: c.CreatedBy, CreatedAt: c.CreatedAt,
+		CancelledBy: c.CancelledBy, CancelledAt: c.CancelledAt,
+	}
 }

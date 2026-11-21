@@ -13,15 +13,21 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
+	"apexis/backend/internal/modules/ledger/application/dto"
 	"apexis/backend/internal/modules/ledger/application/usecases"
+	"apexis/backend/internal/modules/ledger/domain/entities"
+	domain "apexis/backend/internal/modules/ledger/domain/errors"
+	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	gp "apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm"
 	"apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/ledger/infrastructure/services"
 	ledgerhttp "apexis/backend/internal/modules/ledger/presentation/http"
 	"apexis/backend/internal/modules/ledger/presentation/http/handlers"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -65,6 +71,77 @@ func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 // RegisterReports ลงทะเบียน book ของ ledger กับ GET /reports?book=
 func (m *Module) RegisterReports(reg *reports.Registry) {
 	ledgerhttp.RegisterReports(reg, m.handler)
+}
+
+// ---------- public API สำหรับ module อื่น (จัดซื้อ / ขาย / คลัง) ----------
+//
+// ไม่ตรวจสิทธิ์ของ ledger (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎบัญชีครบ
+// ทำงานใน transaction ของผู้เรียก (ctx); error กฎบัญชีถูกห่อเป็น integration.ErrRejected
+
+func reject(err error) error {
+	if err != nil && domain.IsBusiness(err) {
+		return integration.Reject("ledger", err)
+	}
+	return err
+}
+
+// PostEntry สร้างรายการบัญชีแล้วผ่านทันที
+func (m *Module) PostEntry(ctx context.Context, companyID, userID, journalID uuid.UUID, date time.Time, description, reference string, lines []integration.JournalLine) (integration.PostedEntry, error) {
+	data := entities.EntryData{
+		JournalID: vo.JournalID(journalID), Date: date, Description: description, Reference: reference,
+		Lines: make([]entities.LineData, len(lines)),
+	}
+	for i, l := range lines {
+		data.Lines[i] = entities.LineData{AccountID: vo.AccountID(l.AccountID), Description: l.Description, Debit: l.Debit, Credit: l.Credit}
+	}
+	id, no, err := m.UseCases.Entries.PostSystem(ctx, dto.Actor{UserID: vo.UserID(userID), CompanyID: vo.CompanyID(companyID)}, data)
+	if err != nil {
+		return integration.PostedEntry{}, reject(err)
+	}
+	return integration.PostedEntry{EntryID: uuid.UUID(id), EntryNo: no}, nil
+}
+
+// ReverseEntry กลับรายการที่ลงไว้ ณ วันที่ date (งวดต้องเปิด)
+func (m *Module) ReverseEntry(ctx context.Context, companyID, userID, entryID uuid.UUID, date time.Time, description string) (integration.PostedEntry, error) {
+	id, no, err := m.UseCases.Entries.ReverseSystem(ctx, dto.Actor{UserID: vo.UserID(userID), CompanyID: vo.CompanyID(companyID)},
+		vo.EntryID(entryID), date, description)
+	if err != nil {
+		return integration.PostedEntry{}, reject(err)
+	}
+	return integration.PostedEntry{EntryID: uuid.UUID(id), EntryNo: no}, nil
+}
+
+// InvalidPostingAccounts คืนบัญชีที่ใช้ลงรายการไม่ได้ (ไม่พบ / บัญชีคุม / inactive) — ว่าง = ใช้ได้ทั้งหมด
+func (m *Module) InvalidPostingAccounts(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID) ([]uuid.UUID, error) {
+	ids := make([]vo.AccountID, len(accountIDs))
+	for i, id := range accountIDs {
+		ids[i] = vo.AccountID(id)
+	}
+	bad, err := m.UseCases.Accounts.InvalidPostingAccounts(ctx, vo.CompanyID(companyID), ids)
+	out := make([]uuid.UUID, len(bad))
+	for i, id := range bad {
+		out[i] = uuid.UUID(id)
+	}
+	return out, err
+}
+
+// AccountBalances คือยอด (เดบิต - เครดิต) สะสมถึงวันที่ ของบัญชีที่ขอ
+func (m *Module) AccountBalances(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID, asOf time.Time) (map[uuid.UUID]decimal.Decimal, error) {
+	ids := make([]vo.AccountID, len(accountIDs))
+	for i, id := range accountIDs {
+		ids[i] = vo.AccountID(id)
+	}
+	b, err := m.UseCases.Reports.Balances(ctx, vo.CompanyID(companyID), ids, asOf)
+	out := make(map[uuid.UUID]decimal.Decimal, len(b))
+	for id, v := range b {
+		out[uuid.UUID(id)] = v
+	}
+	return out, err
+}
+
+// JournalUsable: สมุดรายวันมีอยู่และ active
+func (m *Module) JournalUsable(ctx context.Context, companyID, journalID uuid.UUID) (bool, error) {
+	return m.UseCases.Journals.JournalUsable(ctx, vo.CompanyID(companyID), vo.JournalID(journalID))
 }
 
 // Migrate สร้างตารางของ ledger

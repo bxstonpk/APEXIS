@@ -59,11 +59,21 @@ func UomToEntity(m models.UomModel) *entities.Uom {
 
 func CategoryToModel(c *entities.Category) models.CategoryModel {
 	d := c.Data()
-	return models.CategoryModel{ID: uuid.UUID(c.ID()), CompanyID: uuid.UUID(c.CompanyID()), Code: d.Code, Name: d.Name, Status: string(d.Status)}
+	return models.CategoryModel{
+		ID: uuid.UUID(c.ID()), CompanyID: uuid.UUID(c.CompanyID()), Code: d.Code, Name: d.Name, Status: string(d.Status),
+		PurchaseAccountID: optUUID(d.Accounts.Purchase), InventoryAccountID: optUUID(d.Accounts.Inventory),
+	}
 }
 
 func CategoryToEntity(m models.CategoryModel) *entities.Category {
-	return entities.RehydrateCategory(vo.CategoryID(m.ID), vo.CompanyID(m.CompanyID), entities.MasterData{Code: m.Code, Name: m.Name, Status: vo.Status(m.Status)})
+	return entities.RehydrateCategory(vo.CategoryID(m.ID), vo.CompanyID(m.CompanyID), entities.MasterData{
+		Code: m.Code, Name: m.Name, Status: vo.Status(m.Status), Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID),
+	})
+}
+
+// GLAccounts แปลงคอลัมน์บัญชี (nullable) เป็น value object
+func GLAccounts(purchase, inventory *uuid.UUID) vo.GLAccounts {
+	return vo.GLAccounts{Purchase: optID[vo.AccountID](purchase), Inventory: optID[vo.AccountID](inventory)}
 }
 
 func WarehouseToModel(w *entities.Warehouse) models.WarehouseModel {
@@ -86,6 +96,7 @@ func ItemToModel(i *entities.Item) models.ItemModel {
 		ID: uuid.UUID(i.ID()), CompanyID: uuid.UUID(i.CompanyID()), Code: d.Code, Name: d.Name, NameEN: d.NameEN,
 		Type: string(d.Type), UomID: uuid.UUID(d.UomID), CategoryID: optUUID(d.CategoryID),
 		ReorderPoint: optDecimal(d.ReorderPoint), Status: string(d.Status),
+		PurchaseAccountID: optUUID(d.Accounts.Purchase), InventoryAccountID: optUUID(d.Accounts.Inventory),
 	}
 }
 
@@ -93,6 +104,7 @@ func ItemToEntity(m models.ItemModel) *entities.Item {
 	return entities.RehydrateItem(vo.ItemID(m.ID), vo.CompanyID(m.CompanyID), entities.ItemData{
 		Code: m.Code, Name: m.Name, NameEN: m.NameEN, Type: vo.ItemType(m.Type), UomID: vo.UomID(m.UomID),
 		CategoryID: optID[vo.CategoryID](m.CategoryID), ReorderPoint: optDecimal(m.ReorderPoint), Status: vo.Status(m.Status),
+		Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID),
 	})
 }
 
@@ -107,8 +119,8 @@ func DocumentToModel(doc *entities.Document) models.DocumentModel {
 		CreatedBy: uuid.UUID(s.CreatedBy), TotalValue: decimal.Zero,
 	}
 	if p := s.Posting; p != nil {
-		no, period, by, at := p.DocumentNo, uuid.UUID(p.PeriodID), uuid.UUID(p.By), p.At
-		m.DocumentNo, m.FiscalPeriodID, m.PostedBy, m.PostedAt = &no, &period, &by, &at
+		no, period, year, by, at := p.DocumentNo, uuid.UUID(p.PeriodID), p.FiscalYear, uuid.UUID(p.By), p.At
+		m.DocumentNo, m.FiscalPeriodID, m.FiscalYear, m.PostedBy, m.PostedAt = &no, &period, &year, &by, &at
 	}
 	if c := s.Cancellation; c != nil {
 		by, at := uuid.UUID(c.By), c.At
@@ -139,6 +151,9 @@ func DocumentToEntity(m models.DocumentModel) *entities.Document {
 		s.Posting = &entities.Posting{
 			DocumentNo: *m.DocumentNo, PeriodID: vo.FiscalPeriodID(*m.FiscalPeriodID), By: vo.UserID(*m.PostedBy), At: *m.PostedAt,
 		}
+		if m.FiscalYear != nil {
+			s.Posting.FiscalYear = *m.FiscalYear
+		}
 	}
 	if m.CancelledBy != nil && m.CancelledAt != nil {
 		s.Cancellation = &entities.Cancellation{By: vo.UserID(*m.CancelledBy), At: *m.CancelledAt}
@@ -150,6 +165,40 @@ func DocumentToEntity(m models.DocumentModel) *entities.Document {
 		}
 	}
 	return entities.RehydrateDocument(s)
+}
+
+// ---------- ค่าตั้ง / ปิดงวด ----------
+
+func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.SettingsModel {
+	return models.SettingsModel{
+		CompanyID: uuid.UUID(companyID), DefaultPurchaseAccountID: optUUID(s.Defaults.Purchase),
+		DefaultInventoryAccountID: optUUID(s.Defaults.Inventory), CogsAccountID: optUUID(s.CogsAccountID), JournalID: optUUID(s.JournalID),
+	}
+}
+
+func SettingsToEntity(m models.SettingsModel) entities.Settings {
+	return entities.Settings{
+		Defaults:      GLAccounts(m.DefaultPurchaseAccountID, m.DefaultInventoryAccountID),
+		CogsAccountID: optID[vo.AccountID](m.CogsAccountID), JournalID: optID[vo.JournalID](m.JournalID),
+	}
+}
+
+func ClosingToModel(c *entities.PeriodClosing) models.ClosingModel {
+	s := c.State()
+	return models.ClosingModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), FiscalPeriodID: uuid.UUID(s.PeriodID), FiscalYear: s.FiscalYear,
+		PeriodEnd: s.PeriodEnd, EntryID: optUUID(s.EntryID), EntryNo: s.EntryNo, Adjustment: s.Adjustment, Status: string(s.Status),
+		CreatedBy: uuid.UUID(s.CreatedBy), CancelledBy: optUUID(s.CancelledBy), CancelledAt: s.CancelledAt,
+	}
+}
+
+func ClosingToEntity(m models.ClosingModel) *entities.PeriodClosing {
+	return entities.RehydratePeriodClosing(entities.ClosingState{
+		ID: vo.ClosingID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
+		FiscalYear: m.FiscalYear, PeriodEnd: DateUTC(m.PeriodEnd), EntryID: optID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo,
+		Adjustment: m.Adjustment, Status: entities.ClosingStatus(m.Status), CreatedBy: vo.UserID(m.CreatedBy),
+		CancelledBy: optID[vo.UserID](m.CancelledBy), CancelledAt: m.CancelledAt,
+	})
 }
 
 // ---------- stock ----------

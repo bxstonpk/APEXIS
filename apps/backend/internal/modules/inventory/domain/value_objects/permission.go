@@ -16,6 +16,10 @@ const (
 	PermDocumentManage  Permission = "inventory.document:manage" // สร้าง / แก้ / ลบ draft
 	PermDocumentPost    Permission = "inventory.document:post"   // ผ่านเอกสาร / ยกเลิก
 	PermReportRead      Permission = "inventory.report:read"
+	PermSettingsRead    Permission = "inventory.settings:read"
+	PermSettingsManage  Permission = "inventory.settings:manage" // บัญชี / ระบบบัญชีสินค้า
+	PermClosingRead     Permission = "inventory.closing:read"
+	PermClosingPost     Permission = "inventory.closing:post" // ปรับปรุงสินค้าคงเหลือสิ้นงวด / ยกเลิก
 )
 
 func (p Permission) String() string { return string(p) }

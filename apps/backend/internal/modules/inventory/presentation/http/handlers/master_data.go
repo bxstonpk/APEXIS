@@ -18,7 +18,9 @@ type CRUD struct {
 }
 
 // masterCRUD สร้าง handler ของหน่วยนับ / หมวดสินค้า (รูปแบบเดียวกัน) — param คือชื่อ path parameter ของ id
-func masterCRUD[ID ~[16]byte, E any](h *Handler, uc *usecases.MasterUseCases[ID, E], param string) CRUD {
+func masterCRUD[ID ~[16]byte, E any, Req interface {
+	ToData(bool) (entities.MasterData, error)
+}, Resp any](h *Handler, uc *usecases.MasterUseCases[ID, E], param string, toResp func(dto.Master) Resp) CRUD {
 	return CRUD{
 		List: func(w http.ResponseWriter, r *http.Request) {
 			h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
@@ -27,7 +29,7 @@ func masterCRUD[ID ~[16]byte, E any](h *Handler, uc *usecases.MasterUseCases[ID,
 					return nil, err
 				}
 				res, err := uc.List(r.Context(), dto.List[dto.MasterFilter]{Actor: a, Filter: f})
-				return httpx.ToList(res, responses.FromMaster), err
+				return httpx.ToList(res, toResp), err
 			})
 		},
 		Get: func(w http.ResponseWriter, r *http.Request) {
@@ -37,17 +39,17 @@ func masterCRUD[ID ~[16]byte, E any](h *Handler, uc *usecases.MasterUseCases[ID,
 					return nil, err
 				}
 				m, err := uc.Get(r.Context(), dto.ByID[ID]{Actor: a, ID: id})
-				return one(responses.FromMaster(m), err)
+				return one(toResp(m), err)
 			})
 		},
 		Create: func(w http.ResponseWriter, r *http.Request) {
 			h.serve(w, r, http.StatusCreated, func(a dto.Actor) (any, error) {
-				data, err := decodeData[requests.Master, entities.MasterData](w, r, true)
+				data, err := decodeData[Req, entities.MasterData](w, r, true)
 				if err != nil {
 					return nil, err
 				}
 				m, err := uc.Create(r.Context(), dto.Create[entities.MasterData]{Actor: a, Data: data})
-				return one(responses.FromMaster(m), err)
+				return one(toResp(m), err)
 			})
 		},
 		Update: func(w http.ResponseWriter, r *http.Request) {
@@ -56,12 +58,12 @@ func masterCRUD[ID ~[16]byte, E any](h *Handler, uc *usecases.MasterUseCases[ID,
 				if err != nil {
 					return nil, err
 				}
-				data, err := decodeData[requests.Master, entities.MasterData](w, r, false)
+				data, err := decodeData[Req, entities.MasterData](w, r, false)
 				if err != nil {
 					return nil, err
 				}
 				m, err := uc.Update(r.Context(), dto.Update[ID, entities.MasterData]{Actor: a, ID: id, Data: data})
-				return one(responses.FromMaster(m), err)
+				return one(toResp(m), err)
 			})
 		},
 		Delete: func(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +79,14 @@ func masterCRUD[ID ~[16]byte, E any](h *Handler, uc *usecases.MasterUseCases[ID,
 }
 
 // Uoms: /uoms[/{uomID}]
-func (h *Handler) Uoms() CRUD { return masterCRUD(h, h.uc.Uoms, "uomID") }
+func (h *Handler) Uoms() CRUD {
+	return masterCRUD[vo.UomID, *entities.Uom, requests.Master](h, h.uc.Uoms, "uomID", responses.FromMaster)
+}
 
 // Categories: /item-categories[/{categoryID}]
-func (h *Handler) Categories() CRUD { return masterCRUD(h, h.uc.Categories, "categoryID") }
+func (h *Handler) Categories() CRUD {
+	return masterCRUD[vo.CategoryID, *entities.Category, requests.Category](h, h.uc.Categories, "categoryID", responses.FromCategory)
+}
 
 // Warehouses: /warehouses[/{warehouseID}] — ?branch_id= กรองตามสาขา
 func (h *Handler) Warehouses() CRUD {

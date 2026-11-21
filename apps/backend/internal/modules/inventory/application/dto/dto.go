@@ -117,6 +117,19 @@ type StockCardFilter struct {
 	Page        listing.Page
 }
 
+var (
+	ClosingSortKeys    = []string{"period_end", "created_at"}
+	DefaultClosingSort = []listing.Sort{{Key: "period_end", Desc: true}, {Key: "created_at", Desc: true}}
+)
+
+// ClosingFilter: GET /inventory-closings?fiscal_year=&status=&sort=&page=&page_size=
+type ClosingFilter struct {
+	FiscalYear *int
+	Statuses   []string
+	Sort       []listing.Sort
+	Page       listing.Page
+}
+
 // ---------- Output (read model) ----------
 //
 // จำนวน / มูลค่าเป็น decimal ตามค่าจริง — frontend จัดรูปแบบตามทศนิยมที่บริษัทกำหนด
@@ -127,11 +140,18 @@ type Ref struct {
 	Name string
 }
 
+// Accounts คือบัญชีแยกประเภทที่ตั้งไว้ (nil = ไม่ได้ตั้ง)
+type Accounts struct {
+	PurchaseAccountID  *string
+	InventoryAccountID *string
+}
+
 type Master struct {
 	ID       string
 	Code     string
 	Name     string
-	BranchID *string // เฉพาะ warehouse
+	BranchID *string  // เฉพาะ warehouse
+	Accounts Accounts // เฉพาะหมวดสินค้า
 	Status   string
 }
 
@@ -144,6 +164,7 @@ type Item struct {
 	Uom          Ref
 	Category     *Ref
 	ReorderPoint *vo.Quantity
+	Accounts     Accounts
 	Status       string
 }
 
@@ -215,4 +236,66 @@ type StockCard struct {
 	OpeningQuantity vo.Quantity
 	OpeningValue    vo.Money
 	Lines           listing.Result[StockCardLine]
+}
+
+// Settings คือค่าตั้งบัญชีสินค้า + ระบบบัญชีตามปีบัญชี
+type Settings struct {
+	Defaults      Accounts
+	CogsAccountID *string
+	JournalID     *string
+	Systems       []SystemSetting // เรียงตามปี
+}
+
+type SystemSetting struct {
+	FromYear int
+	System   string
+}
+
+type Closing struct {
+	ID          string
+	PeriodID    string
+	FiscalYear  int
+	PeriodEnd   time.Time
+	EntryID     *string
+	EntryNo     string
+	Adjustment  vo.Money
+	Status      string
+	CreatedBy   string
+	CreatedAt   time.Time
+	CancelledBy *string
+	CancelledAt *time.Time
+}
+
+// ItemAccounts คือสินค้า + บัญชีที่ตั้งไว้ที่สินค้าและหมวด (ยังไม่ resolve กับค่าเริ่มต้น)
+type ItemAccounts struct {
+	ID       vo.ItemID
+	Code     string
+	Name     string
+	Type     vo.ItemType
+	Status   vo.Status
+	Item     vo.GLAccounts
+	Category vo.GLAccounts
+}
+
+// PurchaseItem คือสินค้าพร้อมบัญชีที่ใช้จริง (สินค้า -> หมวด -> ค่าเริ่มต้นของบริษัท)
+type PurchaseItem struct {
+	ID       vo.ItemID
+	Code     string
+	Name     string
+	Stock    bool // ชนิด stock (รับเข้าคลัง)
+	Active   bool
+	Accounts vo.GLAccounts
+}
+
+// StockReceipt คือผลของใบรับสินค้าที่ module อื่นสร้าง
+type StockReceipt struct {
+	DocumentID vo.DocumentID
+	DocumentNo string
+	LineValues []vo.Money // มูลค่าต่อบรรทัด (ปัดตามทศนิยมของบริษัท)
+}
+
+// ItemStockValue คือมูลค่าสต็อก (FIFO) ของสินค้า ณ วันที่ — รวมทุกคลัง
+type ItemStockValue struct {
+	ItemAccounts
+	Value vo.Money
 }

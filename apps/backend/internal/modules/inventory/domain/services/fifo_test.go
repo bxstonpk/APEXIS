@@ -164,3 +164,19 @@ func TestCancelRestoresLayersAndRejectsUsedReceipt(t *testing.T) {
 		t.Fatalf("cancel used receipt: %v", err)
 	}
 }
+
+func TestPlanClosingAdjustsInventoryAgainstCogs(t *testing.T) {
+	invA, invB, cogs := vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID]()
+	// A: ควรมี 150 แต่ ledger มี 100 -> Dr 50; B: ควรมี 0 แต่ ledger มี 30 -> Cr 30; ต้นทุนขาย Cr 20
+	lines := PlanClosing(map[vo.AccountID]vo.Money{invA: d("150")}, map[vo.AccountID]vo.Money{invA: d("100"), invB: d("30")}, cogs)
+	debit, credit := d("0"), d("0")
+	for _, l := range lines {
+		debit, credit = debit.Add(l.Debit), credit.Add(l.Credit)
+	}
+	if len(lines) != 3 || !debit.Equal(credit) || !debit.Equal(d("50")) || lines[2].AccountID != cogs || !lines[2].Credit.Equal(d("20")) {
+		t.Fatalf("closing lines = %+v", lines)
+	}
+	if got := PlanClosing(map[vo.AccountID]vo.Money{invA: d("10")}, map[vo.AccountID]vo.Money{invA: d("10")}, cogs); got != nil {
+		t.Fatalf("no difference should give no lines: %+v", got)
+	}
+}

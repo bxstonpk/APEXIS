@@ -32,6 +32,17 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("PUT "+base+"/stock-documents/{documentID}", h.UpdateDocument)
 	handle("PATCH "+base+"/stock-documents/{documentID}", h.UpdateDocumentStatus)
 	handle("DELETE "+base+"/stock-documents/{documentID}", h.DeleteDocument)
+
+	// ค่าตั้งบัญชีสินค้า + ระบบบัญชี (perpetual / periodic) ตั้งแต่ปีบัญชี
+	handle("GET "+base+"/inventory-settings", h.GetSettings)
+	handle("PUT "+base+"/inventory-settings", h.UpdateSettings)
+	handle("PUT "+base+"/inventory-settings/accounting-systems/{fiscalYear}", h.SetAccountingSystem)
+
+	// ปรับปรุงสินค้าคงเหลือสิ้นงวด (periodic): posted -> (PATCH status=cancelled) -> cancelled
+	handle("GET "+base+"/inventory-closings", h.ListClosings)
+	handle("POST "+base+"/inventory-closings", h.CreateClosing)
+	handle("GET "+base+"/inventory-closings/{closingID}", h.GetClosing)
+	handle("PATCH "+base+"/inventory-closings/{closingID}", h.UpdateClosingStatus)
 }
 
 // RegisterReports ลงทะเบียนรายงานของ inventory กับ GET /reports?book= (registry ถูก mount พร้อม Authenticate แล้ว)

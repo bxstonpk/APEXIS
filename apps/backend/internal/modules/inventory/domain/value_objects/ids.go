@@ -21,6 +21,10 @@ type (
 	DocumentID     uuid.UUID
 	LayerID        uuid.UUID
 	MovementID     uuid.UUID
+	ClosingID      uuid.UUID
+	AccountID      uuid.UUID // บัญชีของ ledger
+	JournalID      uuid.UUID // สมุดรายวันของ ledger
+	EntryID        uuid.UUID // รายการบัญชีของ ledger
 )
 
 type anyID interface {
@@ -46,3 +50,7 @@ func (id CategoryID) String() string  { return IDString(id) }
 func (id ItemID) String() string      { return IDString(id) }
 func (id WarehouseID) String() string { return IDString(id) }
 func (id DocumentID) String() string  { return IDString(id) }
+func (id ClosingID) String() string   { return IDString(id) }
+func (id AccountID) String() string   { return IDString(id) }
+func (id JournalID) String() string   { return IDString(id) }
+func (id EntryID) String() string     { return IDString(id) }

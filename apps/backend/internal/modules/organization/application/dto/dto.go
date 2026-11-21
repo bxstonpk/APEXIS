@@ -223,6 +223,8 @@ type PeriodAt struct {
 	PeriodID   vo.FiscalPeriodID
 	FiscalYear int
 	YearStart  time.Time
+	Start      time.Time // วันแรกของงวด
+	End        time.Time // วันสุดท้ายของงวด
 	Status     vo.PeriodStatus
 }
 

@@ -15,6 +15,7 @@ import (
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/platform/config"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/reports"
@@ -56,6 +57,9 @@ func run(logger *slog.Logger) error {
 	if err := inventory.Migrate(db); err != nil {
 		return err
 	}
+	if err := purchasing.Migrate(db); err != nil {
+		return err
+	}
 
 	identityModule, err := identity.New(db, identity.Config{
 		JWTSecret: []byte(cfg.JWTSecret),
@@ -79,13 +83,16 @@ func run(logger *slog.Logger) error {
 	organizationModule.RegisterRoutes(mux)
 	ledgerModule := ledger.New(db, identityModule, organizationModule)
 	ledgerModule.RegisterRoutes(mux)
-	inventoryModule := inventory.New(db, identityModule, organizationModule)
+	inventoryModule := inventory.New(db, identityModule, organizationModule, ledgerModule)
 	inventoryModule.RegisterRoutes(mux)
+	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
+	purchasingModule.RegisterRoutes(mux)
 
 	// รายงานทุก module ผ่าน endpoint เดียว: GET /reports?book=... (หน้ารายงานของ frontend เป็นหน้าเดียว)
 	reportBooks := reports.NewRegistry()
 	ledgerModule.RegisterReports(reportBooks)
 	inventoryModule.RegisterReports(reportBooks)
+	purchasingModule.RegisterReports(reportBooks)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
 
 	srv := &http.Server{

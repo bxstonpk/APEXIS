@@ -71,7 +71,7 @@ type CategoryRepository struct{ db *gorm.DB }
 
 func NewCategoryRepository(db *gorm.DB) *CategoryRepository { return &CategoryRepository{db: db} }
 
-var categoryTable = masterTable{table: "inventory_item_categories", notFound: domain.ErrCategoryNotFound}
+var categoryTable = masterTable{table: "inventory_item_categories", notFound: domain.ErrCategoryNotFound, hasAccounts: true}
 
 func (r *CategoryRepository) Create(ctx context.Context, c *entities.Category) error {
 	m := gp.CategoryToModel(c)
@@ -80,7 +80,8 @@ func (r *CategoryRepository) Create(ctx context.Context, c *entities.Category) e
 
 func (r *CategoryRepository) Update(ctx context.Context, c *entities.Category) error {
 	m := gp.CategoryToModel(c)
-	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "status"}, domain.ErrCodeExists, domain.ErrCategoryNotFound)
+	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "status", "purchase_account_id", "inventory_account_id"},
+		domain.ErrCodeExists, domain.ErrCategoryNotFound)
 }
 
 func (r *CategoryRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.CategoryID) error {
@@ -179,7 +180,7 @@ func (r *ItemRepository) Create(ctx context.Context, i *entities.Item) error {
 func (r *ItemRepository) Update(ctx context.Context, i *entities.Item) error {
 	m := gp.ItemToModel(i)
 	return update(ctx, r.db, &m, m.CompanyID,
-		[]string{"code", "name", "name_en", "type", "uom_id", "category_id", "reorder_point", "status"},
+		[]string{"code", "name", "name_en", "type", "uom_id", "category_id", "reorder_point", "status", "purchase_account_id", "inventory_account_id"},
 		domain.ErrCodeExists, domain.ErrItemNotFound)
 }
 
@@ -215,26 +216,29 @@ func (r *ItemRepository) HasMovements(ctx context.Context, companyID vo.CompanyI
 }
 
 type itemRow struct {
-	ID           uuid.UUID
-	Code         string
-	Name         string
-	NameEN       string
-	Type         string
-	UomID        uuid.UUID
-	UomCode      string
-	UomName      string
-	CategoryID   *uuid.UUID
-	CategoryCode *string
-	CategoryName *string
-	ReorderPoint *decimal.Decimal
-	Status       string
-	Total        int64
+	ID                 uuid.UUID
+	Code               string
+	Name               string
+	NameEN             string
+	Type               string
+	UomID              uuid.UUID
+	UomCode            string
+	UomName            string
+	CategoryID         *uuid.UUID
+	CategoryCode       *string
+	CategoryName       *string
+	ReorderPoint       *decimal.Decimal
+	PurchaseAccountID  *uuid.UUID
+	InventoryAccountID *uuid.UUID
+	Status             string
+	Total              int64
 }
 
 func (r itemRow) dto() dto.Item {
 	out := dto.Item{
 		ID: r.ID.String(), Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: r.Type,
 		Uom: dto.Ref{ID: r.UomID.String(), Code: r.UomCode, Name: r.UomName}, ReorderPoint: r.ReorderPoint, Status: r.Status,
+		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID),
 	}
 	if r.CategoryID != nil && r.CategoryCode != nil {
 		out.Category = &dto.Ref{ID: r.CategoryID.String(), Code: *r.CategoryCode, Name: *r.CategoryName}
@@ -243,7 +247,8 @@ func (r itemRow) dto() dto.Item {
 }
 
 const itemColumns = `i.id, i.code, i.name, i.name_en, i.type, i.uom_id, u.code AS uom_code, u.name AS uom_name,
-	i.category_id, c.code AS category_code, c.name AS category_name, i.reorder_point, i.status`
+	i.category_id, c.code AS category_code, c.name AS category_name, i.reorder_point,
+	i.purchase_account_id, i.inventory_account_id, i.status`
 
 // base: items JOIN หน่วยนับ LEFT JOIN หมวด — 1 query ได้ชื่อของ record ที่อ้างถึง
 func (r *ItemRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
@@ -287,4 +292,58 @@ func (r *ItemRepository) List(ctx context.Context, companyID vo.CompanyID, f dto
 	}
 	rows, total, err := database.FetchPage(base, itemColumns, order, f.Page, func(r itemRow) int64 { return r.Total })
 	return toResult(rows, total, f.Page, itemRow.dto), err
+}
+
+// ItemAccountsRow: exported เพื่อให้ gorm scan ผ่าน struct ที่ embed ได้
+type ItemAccountsRow struct {
+	ID                         uuid.UUID
+	Code                       string
+	Name                       string
+	Type                       string
+	Status                     string
+	PurchaseAccountID          *uuid.UUID
+	InventoryAccountID         *uuid.UUID
+	CategoryPurchaseAccountID  *uuid.UUID
+	CategoryInventoryAccountID *uuid.UUID
+}
+
+func (r ItemAccountsRow) dto() dto.ItemAccounts {
+	return dto.ItemAccounts{
+		ID: vo.ItemID(r.ID), Code: r.Code, Name: r.Name, Type: vo.ItemType(r.Type), Status: vo.Status(r.Status),
+		Item:     gp.GLAccounts(r.PurchaseAccountID, r.InventoryAccountID),
+		Category: gp.GLAccounts(r.CategoryPurchaseAccountID, r.CategoryInventoryAccountID),
+	}
+}
+
+const itemAccountColumns = `i.id, i.code, i.name, i.type, i.status, i.purchase_account_id, i.inventory_account_id,
+	c.purchase_account_id AS category_purchase_account_id, c.inventory_account_id AS category_inventory_account_id`
+
+// AccountsOf: items LEFT JOIN หมวด — query เดียว
+func (r *ItemRepository) AccountsOf(ctx context.Context, companyID vo.CompanyID, ids []vo.ItemID) ([]dto.ItemAccounts, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []ItemAccountsRow
+	err := database.Conn(ctx, r.db).Table("inventory_items AS i").
+		Joins("LEFT JOIN inventory_item_categories AS c ON c.id = i.category_id AND c.deleted_at IS NULL").
+		Where("i.company_id = ? AND i.deleted_at IS NULL AND i.id IN ?", uuidOf(companyID), uuids(ids)).
+		Select(itemAccountColumns).Scan(&rows).Error
+	return toResult(rows, 0, listing.Page{}, ItemAccountsRow.dto).Items, err
+}
+
+// InventoryAccountIDs: UNION ของบัญชีสินค้าคงเหลือที่ตั้งที่สินค้าและหมวด — query เดียว
+func (r *ItemRepository) InventoryAccountIDs(ctx context.Context, companyID vo.CompanyID) ([]vo.AccountID, error) {
+	var ids []uuid.UUID
+	err := database.Conn(ctx, r.db).Raw(`
+		SELECT inventory_account_id FROM inventory_items
+		 WHERE company_id = ? AND deleted_at IS NULL AND inventory_account_id IS NOT NULL
+		UNION
+		SELECT inventory_account_id FROM inventory_item_categories
+		 WHERE company_id = ? AND deleted_at IS NULL AND inventory_account_id IS NOT NULL`,
+		uuidOf(companyID), uuidOf(companyID)).Scan(&ids).Error
+	out := make([]vo.AccountID, len(ids))
+	for i, id := range ids {
+		out[i] = vo.AccountID(id)
+	}
+	return out, err
 }

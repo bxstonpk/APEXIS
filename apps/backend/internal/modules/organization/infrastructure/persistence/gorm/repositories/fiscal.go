@@ -89,9 +89,11 @@ func (r *FiscalRepository) PeriodAt(ctx context.Context, companyID vo.CompanyID,
 		Status    string
 		Year      int
 		YearStart time.Time
+		StartDate time.Time
+		EndDate   time.Time
 	}
 	err := database.Conn(ctx, r.db).Raw(`
-		SELECT p.id, p.status, y.year, y.start_date AS year_start
+		SELECT p.id, p.status, y.year, y.start_date AS year_start, p.start_date, p.end_date
 		FROM organization_fiscal_periods AS p
 		JOIN organization_fiscal_years AS y ON y.id = p.fiscal_year_id
 		WHERE y.company_id = ? AND p.start_date <= ? AND p.end_date >= ?
@@ -105,7 +107,8 @@ func (r *FiscalRepository) PeriodAt(ctx context.Context, companyID vo.CompanyID,
 	}
 	p := rows[0]
 	return dto.PeriodAt{
-		PeriodID: vo.FiscalPeriodID(p.ID), FiscalYear: p.Year, YearStart: dateUTC(p.YearStart), Status: vo.PeriodStatus(p.Status),
+		PeriodID: vo.FiscalPeriodID(p.ID), FiscalYear: p.Year, YearStart: dateUTC(p.YearStart),
+		Start: dateUTC(p.StartDate), End: dateUTC(p.EndDate), Status: vo.PeriodStatus(p.Status),
 	}, nil
 }
 

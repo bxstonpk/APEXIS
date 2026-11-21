@@ -132,29 +132,43 @@ func optString(u *uuid.UUID) *string {
 
 // masterTable คือ Get / List ที่ตารางรูปแบบเดียวกันใช้ร่วมกัน
 type masterTable struct {
-	table     string
-	notFound  error
-	hasBranch bool
+	table       string
+	notFound    error
+	hasBranch   bool
+	hasAccounts bool
 }
 
 type masterRow struct {
-	ID       uuid.UUID
-	Code     string
-	Name     string
-	BranchID *uuid.UUID
-	Status   string
-	Total    int64
+	ID                 uuid.UUID
+	Code               string
+	Name               string
+	BranchID           *uuid.UUID
+	PurchaseAccountID  *uuid.UUID
+	InventoryAccountID *uuid.UUID
+	Status             string
+	Total              int64
 }
 
 func (r masterRow) dto() dto.Master {
-	return dto.Master{ID: r.ID.String(), Code: r.Code, Name: r.Name, BranchID: optString(r.BranchID), Status: r.Status}
+	return dto.Master{
+		ID: r.ID.String(), Code: r.Code, Name: r.Name, BranchID: optString(r.BranchID), Status: r.Status,
+		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID),
+	}
+}
+
+func accountsDTO(purchase, inventory *uuid.UUID) dto.Accounts {
+	return dto.Accounts{PurchaseAccountID: optString(purchase), InventoryAccountID: optString(inventory)}
 }
 
 func (t masterTable) columns() string {
+	c := "x.id, x.code, x.name, x.status"
 	if t.hasBranch {
-		return "x.id, x.code, x.name, x.branch_id, x.status"
+		c += ", x.branch_id"
 	}
-	return "x.id, x.code, x.name, x.status"
+	if t.hasAccounts {
+		c += ", x.purchase_account_id, x.inventory_account_id"
+	}
+	return c
 }
 
 func (t masterTable) base(ctx context.Context, db *gorm.DB, companyID uuid.UUID) *gorm.DB {

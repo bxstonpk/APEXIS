@@ -11,14 +11,15 @@ import (
 
 // MasterData คือข้อมูลของ master แบบง่าย (หน่วยนับ / หมวดสินค้า): รหัส + ชื่อ + สถานะ
 type MasterData struct {
-	Code   string
-	Name   string
-	Status vo.Status
+	Code     string
+	Name     string
+	Status   vo.Status
+	Accounts vo.GLAccounts // เฉพาะหมวดสินค้า: บัญชีของสินค้าในหมวด (ใช้เมื่อสินค้าไม่ได้ตั้งเอง)
 }
 
 func normalizeMaster(d MasterData) (MasterData, error) {
 	var err error
-	out := MasterData{}
+	out := MasterData{Accounts: d.Accounts}
 	if out.Code, err = vo.NewCode(d.Code); err != nil {
 		return MasterData{}, err
 	}

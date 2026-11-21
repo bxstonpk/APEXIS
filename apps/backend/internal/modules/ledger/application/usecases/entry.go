@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"apexis/backend/internal/modules/ledger/application/dto"
 	"apexis/backend/internal/modules/ledger/application/ports"
@@ -129,28 +130,36 @@ func (uc *EntryUseCases) Post(ctx context.Context, in dto.ByID[vo.EntryID]) (dto
 func (uc *EntryUseCases) Reverse(ctx context.Context, in dto.ReverseEntry) (dto.Entry, error) {
 	var reversal *entities.Entry
 	err := uc.write(ctx, in.Actor, vo.PermEntryPost, func(ctx context.Context) error {
-		original, err := uc.entries.FindForUpdate(ctx, in.CompanyID, in.ID)
-		if err != nil {
-			return err
-		}
-		if reversal, err = original.Reversal(in.Date, in.Description, in.UserID); err != nil {
-			return err
-		}
-		if err := uc.post(ctx, in.Actor, reversal, nil); err != nil {
-			return err
-		}
-		if err := uc.entries.Create(ctx, reversal); err != nil {
-			return err
-		}
-		if err := original.MarkReversed(reversal.ID()); err != nil {
-			return err
-		}
-		return uc.entries.UpdateStatus(ctx, original)
+		var err error
+		reversal, err = uc.reverse(ctx, in.Actor, in.ID, in.Date, in.Description)
+		return err
 	})
 	if err != nil {
 		return dto.Entry{}, err
 	}
 	return uc.entries.Get(ctx, in.CompanyID, reversal.ID())
+}
+
+// reverse คือขั้นตอนกลับรายการ (ต้องอยู่ใน transaction ที่ตรวจสิทธิ์ / สถานะบริษัทแล้ว)
+func (uc *EntryUseCases) reverse(ctx context.Context, a dto.Actor, id vo.EntryID, date time.Time, description string) (*entities.Entry, error) {
+	original, err := uc.entries.FindForUpdate(ctx, a.CompanyID, id)
+	if err != nil {
+		return nil, err
+	}
+	reversal, err := original.Reversal(date, description, a.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.post(ctx, a, reversal, nil); err != nil {
+		return nil, err
+	}
+	if err := uc.entries.Create(ctx, reversal); err != nil {
+		return nil, err
+	}
+	if err := original.MarkReversed(reversal.ID()); err != nil {
+		return nil, err
+	}
+	return reversal, uc.entries.UpdateStatus(ctx, original)
 }
 
 // post: กฎที่ต้องใช้ข้อมูลภายนอก entity — งวดบัญชีต้องมีและเปิด, ออกเลขที่เรียงไม่ขาดตอน

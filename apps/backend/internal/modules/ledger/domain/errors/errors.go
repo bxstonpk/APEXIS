@@ -54,3 +54,47 @@ var (
 
 // สิทธิ์ (403)
 var ErrForbidden = errors.New("permission denied")
+
+// all คือ error ทั้งหมดของ module นี้ (ล้วนเป็นกฎธุรกิจ / ข้อมูลไม่ถูกต้อง ไม่ใช่ปัญหาของระบบ)
+var all = []error{
+	ErrInvalidID,
+	ErrInvalidCode,
+	ErrInvalidName,
+	ErrInvalidText,
+	ErrInvalidStatus,
+	ErrInvalidAccountType,
+	ErrInvalidAmount,
+	ErrInvalidLine,
+	ErrInvalidDate,
+	ErrAccountNotFound,
+	ErrJournalNotFound,
+	ErrEntryNotFound,
+	ErrDimensionNotFound,
+	ErrCodeExists,
+	ErrInUse,
+	ErrCompanyInactive,
+	ErrHierarchyCycle,
+	ErrParentNotHeader,
+	ErrParentTypeMismatch,
+	ErrAccountHasChildren,
+	ErrAccountNotPostable,
+	ErrJournalInactive,
+	ErrEntryNotDraft,
+	ErrEntryNotPosted,
+	ErrEntryIncomplete,
+	ErrUnbalanced,
+	ErrNoFiscalPeriod,
+	ErrRangeCrossesYear,
+	ErrPeriodClosed,
+	ErrForbidden,
+}
+
+// IsBusiness: err เป็นการปฏิเสธด้วยกฎธุรกิจของ module นี้ (public API ใช้แปลงเป็น integration.ErrRejected)
+func IsBusiness(err error) bool {
+	for _, e := range all {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}

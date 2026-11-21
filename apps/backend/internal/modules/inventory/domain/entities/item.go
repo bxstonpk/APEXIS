@@ -15,7 +15,8 @@ type ItemData struct {
 	Type         vo.ItemType
 	UomID        vo.UomID
 	CategoryID   *vo.CategoryID
-	ReorderPoint *vo.Quantity // จุดสั่งซื้อ (ไม่บังคับ)
+	ReorderPoint *vo.Quantity  // จุดสั่งซื้อ (ไม่บังคับ)
+	Accounts     vo.GLAccounts // บัญชีของสินค้า (ไม่ตั้ง = ใช้ของหมวด แล้วค่าเริ่มต้นของบริษัท)
 	Status       vo.Status
 }
 
@@ -68,7 +69,7 @@ func (i *Item) Update(d ItemData, quantityDecimals int, hasMovements bool) error
 
 func normalizeItem(d ItemData, quantityDecimals int) (ItemData, error) {
 	var err error
-	out := ItemData{UomID: d.UomID, CategoryID: d.CategoryID}
+	out := ItemData{UomID: d.UomID, CategoryID: d.CategoryID, Accounts: d.Accounts}
 	if out.Code, err = vo.NewCode(d.Code); err != nil {
 		return ItemData{}, err
 	}
