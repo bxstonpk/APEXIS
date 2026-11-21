@@ -147,6 +147,23 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 |---|---|---|
 | CB-01 | **ทะเบียน** (`cash-accounts`) CRUD + ค้นหา: รหัส, ชื่อ, ประเภท (cash / bank), ธนาคาร, สาขา, เลขที่บัญชี, บัญชีแยกประเภท | ธนาคารต้องมีชื่อธนาคาร + เลขที่บัญชี; ผูกผังบัญชีย่อยที่ active 1 บัญชี; เอกสารรับ / จ่ายเงินเลือกทะเบียนแล้วลงบัญชีที่ผูกไว้ |
 
+## 1.4.5 Functional Requirements — `sales` (ขาย)
+
+| ID | ความต้องการ | กฎธุรกิจ |
+|---|---|---|
+| SAL-01 | **ค่าตั้งขาย**: บริษัทจด VAT หรือไม่ + อัตรา, สมุดรายวัน, บัญชีลูกหนี้ / ภาษีขาย / รายได้ค่าเริ่มต้น / ต้นทุนขาย / ภาษีถูกหัก ณ ที่จ่าย | ไม่จด VAT = 0% ทุกเอกสาร (เลือกราคารวม VAT = 422); เปลี่ยนแล้วมีผลกับเอกสารใหม่เท่านั้น |
+| SAL-02 | **ลูกค้า** CRUD + ค้นหา: เลขผู้เสียภาษี, สาขา, เครดิตเทอม, `tax_type`, **วงเงินเครดิต** (ไม่ตั้ง = ไม่จำกัด) | มีเอกสารแล้วลบไม่ได้ |
+| SAL-03 | **ใบเสนอราคา** draft → sent (ออกเลขที่) → accepted / rejected | เก็บเงื่อนไข VAT / เครดิตเทอมตอนสร้าง; ไม่ลงบัญชี / ไม่กระทบสต็อก; แปลงเป็นใบสั่งขายได้ครั้งเดียว เมื่อส่งแล้ว / ยอมรับ และยังไม่หมดอายุ (`valid_until`) |
+| SAL-04 | **ใบสั่งขาย** draft → approved → closed / cancelled | สร้างเองหรือจากใบเสนอราคา (คัดลอกลูกค้า / บรรทัด / เงื่อนไข); อนุมัติต้องมีสิทธิ์ `approve`; **เกินวงเงินเครดิต = อนุมัติได้แต่ตอบ `warnings`** (ยอดค้าง = ลูกหนี้คงค้าง + ใบสั่งขายที่อนุมัติแล้วส่วนที่ยังไม่ออกบิล + ใบนี้) |
+| SAL-05 | **ใบส่งของ** (แยกใบ) | ส่งบางส่วนได้ไม่เกินที่เหลือ; สินค้า stock ตัดสต็อก FIFO (ห้ามติดลบ) ผ่าน inventory; perpetual: Dr ต้นทุนขาย / Cr สินค้าคงเหลือ; periodic ไม่มีรายการ |
+| SAL-06 | **ใบแจ้งหนี้ / ใบกำกับภาษี** — แยกใบ (ไม่เกินที่ส่งแล้ว) หรือ **รวมใบ `with_delivery`** (ส่งของ + ออกบิลในเอกสารเดียว) | Dr ลูกหนี้ / Cr รายได้ (สินค้า → หมวด → ค่าตั้ง) + Cr ภาษีขาย; รวมใบเพิ่มต้นทุนขายในรายการเดียวกัน; วันครบกำหนด = วันที่ + เครดิตเทอมในใบสั่งขาย; ส่งครบ + ออกบิลครบ = ปิดใบสั่งขายอัตโนมัติ |
+| SAL-07 | **ใบเสร็จรับเงิน** ลูกค้า 1 รายต่อใบ, หลายใบแจ้งหนี้ / รับบางส่วน, หลายช่องทาง (cashbank) | ลูกค้าหัก ณ ที่จ่ายต่อบรรทัด (`wht`); รวมช่องทาง = ยอดตัดหนี้ - ถูกหัก; Dr เงินสด / ธนาคาร + ภาษีถูกหัก ณ ที่จ่าย / Cr ลูกหนี้ |
+| SAL-08 | **ยกเลิก** ใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จ | กลับรายการ ณ วันที่เดิม; ใบแจ้งหนี้ที่รับเงินแล้วต้องยกเลิกใบเสร็จก่อน; ใบส่งของที่ออกบิลแล้วต้องยกเลิกบิลก่อน; คืนสต็อกอัตโนมัติ |
+| SAL-09 | **รายงาน** `outstanding-sales-orders`, `ar-aging` (หักยอดรับถึงวันที่), `output-vat` (ภาษีขาย), `withholding-tax-received` | ผ่าน `GET /reports?book=` |
+
+ข้อตกลง: เลขที่ QT / SO / DO / IV / RV ตั้งรูปแบบได้ (ORG-09); ใบกำกับภาษีแยกใบและรวมใบใช้เลขชุดเดียวกัน (IV); ทุกรายการบัญชี 1 ผังบัญชี = 1 บรรทัด
+ยังไม่ทำ: ใบลดหนี้ / รับคืนสินค้า, ราคาขายตามลูกค้า, ส่วนลดท้ายบิล, สกุลเงินต่างประเทศ, พิมพ์ฟอร์ม
+
 ## 1.5 สิทธิ์ (Permissions)
 
 | Module | Permission |
@@ -157,6 +174,7 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read`, `inventory.settings:{read,manage}`, `inventory.closing:read`, `inventory.closing:post` (ปรับปรุงสิ้นงวด / ยกเลิก) |
 | purchasing | `purchasing.{settings,supplier}:{read,manage}` (ประเภทภาษีหัก ณ ที่จ่ายใช้สิทธิ์ settings), `purchasing.order:{read,manage}`, `purchasing.order:approve`, `purchasing.receipt:{read,post}`, `purchasing.invoice:{read,post}`, `purchasing.payment:{read,post}`, `purchasing.report:read` |
 | cashbank | `cashbank.account:{read,manage}` |
+| sales | `sales.{settings,customer,quotation}:{read,manage}`, `sales.order:{read,manage}`, `sales.order:approve`, `sales.{delivery,invoice,receipt}:{read,post}`, `sales.report:read` |
 | organization (เลขที่) | `organization.numbering:{read,manage}` |
 | ledger | `ledger.account:{read,manage}`, `ledger.journal:{read,manage}`, `ledger.entry:read`, `ledger.entry:manage` (สร้าง / แก้ / ลบ draft), `ledger.entry:post` (ผ่าน / กลับรายการ), `ledger.report:read` |
 

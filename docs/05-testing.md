@@ -81,6 +81,13 @@ PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
 | `domain/entities/entities_test.go` | `TestWithholdingOnPreVatAmount`, `TestPaymentRulesAndJournalOneLinePerAccount`, `TestInvoicePayRules` | ฐานภาษีหัก ณ ที่จ่าย (จ่ายครบ / บางส่วน), ยอดช่องทางจ่าย, **รายการบัญชี 1 ผังบัญชี = 1 บรรทัด**, จ่ายเกิน / ผู้ขายผิด, ใบแจ้งหนี้ที่จ่ายแล้วยกเลิกไม่ได้ |
 | `payment_integration_test.go` | `TestSupplierPayments` | **รูปแบบเลขที่ (organization + สมุดรายวัน พ.ศ.)**, ทะเบียนเงินสด / ธนาคาร, ประเภทภาษีหัก ณ ที่จ่าย, จ่าย 2 ใบแจ้งหนี้ / 2 ช่องทาง, **บรรทัดบัญชีเทียบตัวเลข**, ยอดค้าง, อายุเจ้าหนี้ก่อน / หลังจ่าย, รายงาน ภ.ง.ด.53 / 3, ยกเลิกแล้วยอดกลับ, เลขที่ต่อเนื่อง |
 
+### sales
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/entities/entities_test.go` | `TestVatTermsFollowCompanySettings`, `TestQuotationConvertRules`, `TestOrderDeliverInvoiceBothStyles`, `TestInvoiceJournalWithDeliveryOneLinePerAccount`, `TestReceiptRules` | VAT ตามค่าตั้ง, แปลงใบเสนอราคา (สถานะ / หมดอายุ / ซ้ำ), ส่ง / ออกบิลแยกใบและรวมใบ + ปิดอัตโนมัติ, **รายการบัญชีรวมใบ 1 ผังบัญชี = 1 บรรทัด**, ยอดช่องทางรับเงิน |
+| `sales_integration_test.go` | `TestSalesFlow` | ใบเสนอราคา → ใบสั่งขาย, **เตือนวงเงินเครดิต**, ส่งของ (FIFO 180) → ออกบิลแยกใบ, **ส่งของ / ใบกำกับภาษีรวมใบ (บรรทัดบัญชีเทียบตัวเลข)**, สต็อกคงเหลือ, ใบเสร็จหลายช่องทาง + ถูกหัก ณ ที่จ่าย, ยอดค้าง, รายงาน (อายุลูกหนี้ก่อน / หลังรับเงิน, ภาษีขาย, ถูกหัก, ค้างส่ง), ยกเลิกย้อนลำดับ (คืนสต็อก, ใบสั่งขายเปิดกลับ) |
+
 ### platform
 
 | ไฟล์ | Test |

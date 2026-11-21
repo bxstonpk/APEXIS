@@ -305,3 +305,39 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 ```
 
 - ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม
+
+## 4.9 Endpoint — sales
+
+| Resource | Path | Filter เพิ่ม | สิทธิ์ |
+|---|---|---|---|
+| ค่าตั้ง | `GET`, `PUT /sales-settings` | — | `sales.settings:read\|manage` |
+| ลูกค้า | `/customers[/{customerID}]` | `status` | `sales.customer:read\|manage` |
+| ใบเสนอราคา | `GET`, `POST /quotations`; `GET`, `PUT`, `PATCH`, `DELETE /quotations/{quotationID}` | `status, customer_id, item_id, start_date, end_date` | `sales.quotation:read\|manage` |
+| ใบสั่งขาย | `GET`, `POST /sales-orders`; `GET`, `PUT`, `PATCH`, `DELETE /sales-orders/{orderID}` | เหมือนใบเสนอราคา | `sales.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `sales.order:approve` |
+| ใบส่งของ | `GET`, `POST /deliveries`; `GET`, `PATCH /deliveries/{deliveryID}` | `status, customer_id, order_id, start_date, end_date` | `sales.delivery:read\|post` |
+| ใบแจ้งหนี้ / ใบกำกับภาษี | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | เหมือนใบส่งของ | `sales.invoice:read\|post` |
+| ใบเสร็จรับเงิน | `GET`, `POST /customer-receipts`; `GET`, `PATCH /customer-receipts/{receiptID}` | `status, customer_id, start_date, end_date` | `sales.receipt:read\|post` |
+
+- ใบเสนอราคา `PATCH` รับ `sent` / `accepted` / `rejected`; ใบสั่งขาย `PATCH` รับ `approved` / `closed` / `cancelled` (approved ตอบ `warnings`)
+- ใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`
+
+```jsonc
+// POST /sales-orders จากใบเสนอราคา (ไม่ส่ง customer_id / lines)
+{ "quotation_id": "…", "date": "2026-03-05" }
+// POST /sales-invoices — แยกใบ (ไม่เกินที่ส่งแล้ว) หรือรวมใบ with_delivery (ต้องมี warehouse_id เมื่อมีสินค้า stock)
+{ "order_id": "…", "date": "2026-03-07", "with_delivery": true, "warehouse_id": "…",
+  "lines": [ { "order_line_no": 1, "quantity": "5" }, { "order_line_no": 2, "quantity": "1" } ] }
+// POST /customer-receipts — wht = ภาษีที่ลูกค้าหัก (ไม่ส่ง = 0)
+{ "customer_id": "…", "date": "2026-03-20",
+  "lines": [ { "invoice_id": "…", "amount": "321", "wht": "9" } ],
+  "methods": [ { "cash_account_id": "…", "amount": "312" } ] }
+```
+
+| `book` (`sales.report:read`) | parameter | ผลลัพธ์ |
+|---|---|---|
+| `outstanding-sales-orders` | `customer_id, item_id, q, sort, page, page_size` | บรรทัดค้างส่ง (`to_deliver`) / ค้างออกบิล (`to_invoice`) |
+| `ar-aging` | `end_date` (บังคับ), `customer_id, q, page, page_size` | ยอดค้างต่อลูกค้า (หักยอดรับถึงวันที่) แยกช่วงอายุ + `totals` |
+| `output-vat` | `start_date, end_date` (บังคับ), `customer_id, sort, page, page_size` | ใบกำกับภาษี: ลูกค้า + เลขผู้เสียภาษี / สาขา, ฐาน (ก่อน VAT), ภาษีขาย + ยอดรวม |
+| `withholding-tax-received` | เหมือน `output-vat` | ใบเสร็จที่ลูกค้าหัก ณ ที่จ่าย: ฐาน (ยอดตัดหนี้), ภาษีถูกหัก + ยอดรวม |
+
+หมวดสินค้า / สินค้า รับ `revenue_account_id` เพิ่ม

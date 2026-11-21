@@ -103,7 +103,7 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `inventory_accounting_systems` | company_id, from_year, system | PK `(company_id, from_year)`; CHECK system IN (perpetual, periodic) |
 | `inventory_period_closings` | id, company_id, fiscal_period_id, fiscal_year, period_end, entry_id, entry_no, adjustment, status, created_by, cancelled_at/by | **partial UNIQUE `(company_id, fiscal_period_id) WHERE status = 'posted'`** (งวดละครั้ง); index `(company_id, period_end)` |
 
-เพิ่มในตารางเดิม: `inventory_items` / `inventory_item_categories` มี `purchase_account_id`, `inventory_account_id` (บัญชีของ ledger, ไม่มี FK); `inventory_documents` มี `fiscal_year` (ใช้ตรวจการเปลี่ยนระบบบัญชี — เอกสารเก่าเติมจากเลขที่ตอน migrate)
+เพิ่มในตารางเดิม: `inventory_items` / `inventory_item_categories` มี `purchase_account_id`, `inventory_account_id`, `revenue_account_id` (บัญชีของ ledger, ไม่มี FK); `inventory_documents` มี `fiscal_year` (ใช้ตรวจการเปลี่ยนระบบบัญชี — เอกสารเก่าเติมจากเลขที่ตอน migrate)
 
 - จำนวน / มูลค่าทั้งหมดเป็น `NUMERIC(24,6)`
 - ยอดคงเหลือ = ผลรวมของ `inventory_movements` (เท่ากับ remaining ของชั้นทั้งหมด) — ไม่มีตารางยอดสะสมแยก
@@ -132,6 +132,19 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `cashbank_accounts` | id, company_id, code, name, type, bank_name, bank_branch, account_no, gl_account_id, status, deleted_at | partial UNIQUE code; CHECK type IN (cash, bank); **CHECK bank ต้องมี bank_name + account_no** |
 
 - สินค้า / คลัง / บัญชี / งวด / เอกสารสต็อก / รายการบัญชี เก็บเป็น id ของ module เจ้าของ (ไม่มี FK ข้าม module)
+
+## 3.3.5 ตาราง — sales
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `sales_settings` | company_id, vat_registered, vat_rate, journal_id, ar / output_vat / revenue / cogs / wht account_id | PK company_id; CHECK vat_rate 0–100 |
+| `sales_customers` | id, code, name, tax_id, branch_no, address, payment_term_days, tax_type, credit_limit, status, deleted_at | partial UNIQUE code; CHECK credit_limit ≥ 0 |
+| `sales_quotations` (+ `_lines`) | id, quotation_no, doc_date, valid_until, customer_id, เงื่อนไข VAT / เครดิตเทอม, total_net/vat/gross, status, order_id | UNIQUE เลขที่ (เมื่อมี); CHECK valid_until ≥ doc_date; **CHECK ไม่จด VAT ⇒ อัตรา 0 + ราคาไม่รวม VAT** |
+| `sales_orders` (+ `_lines`) | id, order_no, quotation_id, doc_date, delivery_date, เงื่อนไข VAT / เครดิตเทอม, totals, status; บรรทัด: delivered_qty, invoiced_qty | UNIQUE เลขที่; **UNIQUE quotation_id (แปลงได้ครั้งเดียว)**; **CHECK 0 ≤ delivered ≤ quantity, 0 ≤ invoiced ≤ delivered** |
+| `sales_deliveries` (+ `_lines`) | id, document_no, order_id, customer_id, doc_date, warehouse_id, system, stock_document_id/no, total_cost, entry_id/no, status; บรรทัด: quantity, stock, cost, inventory_account_id | UNIQUE `(company_id, document_no)` |
+| `sales_invoices` (+ `_lines`) | id, document_no, order_id, with_delivery, doc_date, due_date, vat_rate, totals, **received_amount**, stock_*, entry_id/no, status; บรรทัด: quantity, unit_price, net/vat/gross, revenue_account_id, cost | UNIQUE เลขที่; CHECK gross = net + vat; **CHECK 0 ≤ received ≤ gross** |
+| `sales_receipts` (+ `_lines`, `_methods`) | id, document_no, customer_id, doc_date, total_amount, total_wht, total_received; บรรทัด: invoice_id, amount, wht; ช่องทาง: cash_account_id, gl_account_id, amount, reference | **CHECK total_received = total_amount - total_wht**; CHECK 0 ≤ wht ≤ amount |
+| `sales_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` |
 
 ## 3.4 ข้อตกลงด้านข้อมูล
 

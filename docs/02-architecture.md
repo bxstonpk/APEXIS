@@ -186,7 +186,8 @@ module ที่ให้บริการ module อื่นมี public API
 | organization | `CompanySettings`, `FiscalPeriodAt`, `FiscalPeriodRange`, `MissingDimensions`, `RegisterDocumentTypes`, `DocumentFormat` | ทุก module |
 | ledger | `PostEntry`, `ReverseEntry`, `InvalidPostingAccounts`, `JournalUsable`, `AccountBalances` | inventory, purchasing |
 | inventory | `PurchaseItems`, `PurchaseContext` (ระบบบัญชีของปี + บัญชีของสินค้า, lock ค่าตั้ง FOR SHARE), `PostReceipt`, `CancelDocument` | purchasing |
-| cashbank | `CashAccounts` (ทะเบียน + บัญชีแยกประเภทที่ผูกไว้) | purchasing |
+| cashbank | `CashAccounts` (ทะเบียน + บัญชีแยกประเภทที่ผูกไว้) | purchasing, sales |
+| inventory (ขาย) | `SalesItems`, `SalesContext` (บัญชีรายได้ / สินค้าคงเหลือ + ระบบบัญชี), `PostIssue` (ใบเบิก FIFO ห้ามติดลบ, คืนต้นทุนต่อบรรทัด), `CancelDocument` | sales |
 
 - ไม่ตรวจสิทธิ์ของผู้ให้บริการ (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎธุรกิจครบ และเข้าร่วม transaction ใน ctx ของผู้เรียก
 - error กฎธุรกิจถูกห่อเป็น `integration.ErrRejected` (ข้อความเดิม) — ผู้เรียกแปลงเป็น 422 พร้อมรายละเอียด
@@ -233,6 +234,24 @@ POST /supplier-payments
 - ledger ใช้ engine เดียวกันแต่รูปแบบอยู่ที่สมุดรายวัน (`number_template`, prefix = รหัสสมุด)
 - เปลี่ยนรูปแบบจนเลขชนกับเลขเดิม → UNIQUE ของเลขที่ปฏิเสธ (409 `document number is already used`)
 
+### sales → inventory + ledger + cashbank
+
+ใบส่งของ / ใบกำกับภาษี (รวมใบ) — transaction เดียว:
+
+```text
+POST /sales-invoices {"with_delivery": true}
+  BEGIN
+    SELECT sales_orders ... FOR UPDATE                     ← กันส่ง / ออกบิลเกินเมื่อทำพร้อมกัน
+    ตรวจจำนวน (domain) / งวดเปิด / inventory.SalesContext  ← ระบบบัญชี + บัญชีรายได้ / สินค้าคงเหลือ
+    เลขที่ IV ตามรูปแบบ
+    inventory.PostIssue                                    ← ตัดชั้นต้นทุน FIFO (lock ชั้น, ห้ามติดลบ) คืนต้นทุนต่อบรรทัด
+    ledger.PostEntry  Dr ลูกหนี้ / Cr รายได้ + ภาษีขาย ; Dr ต้นทุนขาย / Cr สินค้าคงเหลือ (รายการเดียว)
+    INSERT sales_invoices (+ lines) ; UPDATE sales_order_lines (ส่งแล้ว / ออกบิลแล้ว)
+  COMMIT
+```
+
+เตือนวงเงินเครดิต: ตอนอนุมัติใบสั่งขาย คำนวณยอดค้างด้วย 1 query (ลูกหนี้คงค้าง + ใบสั่งขายที่ยังไม่ออกบิล) — ไม่ห้าม แต่ตอบ `warnings`
+
 ### รายการบัญชี: 1 ผังบัญชี = 1 บรรทัด
 
 ทุกเอกสารที่ลงบัญชี (ใบรับสินค้า, ใบแจ้งหนี้, ใบจ่าย, ปรับปรุงสิ้นงวด) สร้างบรรทัดผ่านตัวรวมยอด (`services.Journal` / `PlanClosing`) ที่รวมยอดสุทธิต่อบัญชีก่อนส่งให้ ledger — บัญชีที่ยอดสุทธิเป็นศูนย์ไม่ถูกส่ง
@@ -244,6 +263,7 @@ POST /supplier-payments
   - ledger: `trial-balance`, `balance-sheet`, `income-statement`, `general-ledger`
   - inventory: `stock-on-hand`, `stock-card`
   - purchasing: `outstanding-purchase-orders`, `ap-aging`, `withholding-tax`
+  - sales: `outstanding-sales-orders`, `ar-aging`, `output-vat`, `withholding-tax-received`
 - registry ส่งต่อตาม `book`; book ไม่รู้จัก = 400 พร้อมรายชื่อ book ทั้งหมด; ชื่อซ้ำข้าม module = panic ตอนเริ่มโปรแกรม
 - `main.go` mount registry พร้อม `Authenticate`; แต่ละ handler ตรวจสิทธิ์ของ module ตัวเอง
 
