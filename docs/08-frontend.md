@@ -23,30 +23,52 @@ apps/frontend/
 ├── postcss.config.mjs          # Tailwind (@tailwindcss/postcss)
 ├── vitest.config.ts            # alias @ -> src, jsdom, setup
 ├── .env.example                # APEXIS_API_URL (ที่อยู่ backend — ใช้ฝั่ง server เท่านั้น)
-├── public/                     # favicon, brand/apexis-logo.webp (ทำจาก docs/brand/ — ดู §8.7)
+├── public/                     # favicon, brand/apexis-logo.webp (ทำจาก docs/brand/ — ดู §8.8)
 └── src/
     ├── proxy.ts                # ★ ด่านหน้า: ไม่มี session -> /login?redirect=<หน้าเดิม + query>
     ├── app/
     │   ├── layout.tsx          # <html lang="th">, ชื่อแท็บ "%s | APEXIS", favicon, โหลด styles/app.css
     │   ├── (auth)/login/page.tsx   # หน้า login (เข้าสู่ระบบแล้ว = ไปหน้าเดิม)
-    │   ├── (app)/page.tsx      # หน้าหลักชั่วคราว
+    │   ├── (app)/
+    │   │   ├── page.tsx                    # / -> บริษัทล่าสุด / บริษัทเดียว / หน้าเลือกบริษัท
+    │   │   ├── companies/page.tsx, new/    # เลือกบริษัท (?q=&page=), สร้างบริษัท
+    │   │   └── c/[companyId]/
+    │   │       ├── page.tsx                # ★ หน้ารวมแอป (ไอคอนกลางจอ)
+    │   │       ├── [app]/                  # แอปที่ยังไม่มีหน้าจริง: layout (AppShell), หน้า "กำลังพัฒนา"
+    │   │       └── organization/           # ★ แอปที่มีหน้าจริงแล้วมีโฟลเดอร์ของตัวเอง (Next เลือกก่อน [app])
+    │   │           ├── layout.tsx          #   AppShell appKey="organization"
+    │   │           ├── branches/           #   รายการ / new / [branchId] — แม่แบบของหน้ารายการ
+    │   │           └── [...rest]/          #   เมนูที่ยังไม่ทำ = "กำลังพัฒนา"
     │   └── api/
     │       ├── session/route.ts       # ★ POST เข้าสู่ระบบ / GET ผู้ใช้ปัจจุบัน / DELETE ออกจากระบบ
+    │       ├── session/expired/       # backend ตอบ 401 ระหว่าง render -> ลบ cookie แล้วไป login
     │       └── v1/[...path]/route.ts  # ★ ส่งต่อไป backend + เติม Bearer จาก cookie
     ├── config/
     │   ├── locales/th.ts       # ★ ข้อความทั้งหมดของแอป (ภาษาไทย)
     │   ├── texts.ts            # เลือกภาษา + format('{name}') แทนค่าตัวแปร
-    │   ├── app.ts              # ★ ค่าตั้ง: API path, routes, ชื่อ cookie
+    │   ├── app.ts              # ★ ค่าตั้ง: API path, routes, ชื่อ cookie, page size
+    │   ├── apps.ts             # ★ แอป + เมนู + สิทธิ์ที่ต้องมี + ไอคอน / สี
     │   └── brand.ts            # ★ โลโก้ (ไฟล์ + ขนาด), favicon
     ├── styles/app.css          # ★ Tailwind + design tokens (@theme)
     ├── components/             # UI พื้นฐาน ไม่มีข้อความในตัว (รับผ่าน props)
-    │   ├── Button  TextField  PasswordField  Alert  Card  Spinner
-    ├── features/auth/          # login / logout API, LoginForm, LoginPanel, LogoutButton (client)
+    │   ├── Button  ButtonLink  TextField  PasswordField  SelectField  Alert  Badge  Card  Spinner
+    │   └── PageHeader  DataTable (เรียงด้วยลิงก์ ?sort=)  Pagination (ลิงก์ ?page=)
+    ├── features/
+    │   ├── auth/               # login / logout API, LoginForm, LoginPanel, LogoutButton (client)
+    │   ├── shell/              # TopBar, AppTile, AppShell, AppNav, CloseAppButton, MessagePanel
+    │   ├── companies/          # CompanyForm
+    │   └── branches/           # types, BranchForm
     ├── layouts/AuthLayout.tsx  # โครงหน้าก่อนเข้าสู่ระบบ
     └── lib/
         ├── http.ts             # เรียก API (same-origin) + แปลง error.code -> ข้อความ
+        ├── permissions.ts      # can / covers — กติกาเดียวกับ backend
+        ├── url.ts              # param, pickQuery, withQuery (เงื่อนไขค้นหาใน URL)
+        ├── validation.ts       # รูปแบบ code / เลขที่สาขา / รหัสไปรษณีย์ ... (ตรงกับ backend)
         ├── cx.ts
-        └── server/session.ts   # ★ อ่าน / เขียน cookie, backendUrl, safeRedirect, ตรวจ origin
+        └── server/
+            ├── session.ts      # ★ อ่าน / เขียน cookie, backendUrl, safeRedirect, ตรวจ origin
+            ├── backend.ts      # ★ backendGet — server component อ่านข้อมูลจาก backend พร้อม token
+            └── company.ts      # ★ getCompanyContext — บริษัท + สิทธิ์ (cache ต่อ request)
 ```
 
 ## 8.3 แก้ข้อความ / สี
@@ -98,7 +120,43 @@ browser --(cookie apexis_session)--> Next server --(Authorization: Bearer <token
 - กัน CSRF: คำขอที่เปลี่ยนข้อมูล (POST / PUT / PATCH / DELETE) ต้องมี `Origin` ตรงกับแอป (ไม่มี Origin ใช้ `Sec-Fetch-Site`) ไม่ตรง = 403 `permission_denied`
 - component ฝั่ง client เรียก `apiRequest('/companies?...')` → `/api/v1/companies?...` ตามปกติ ไม่ต้องจัดการ token
 
-## 8.5 รัน / ทดสอบ
+## 8.5 หน้ารวมแอป (แบบ app launcher)
+
+```text
+/  ──>  บริษัทที่เปิดล่าสุด (cookie apexis_company) หรือบริษัทเดียว ──> /c/{companyId}
+   └─>  นอกนั้น ──> /companies (เลือก / ค้นหา / สร้างบริษัท)
+
+/c/{companyId}                 หน้ารวมแอป: ไอคอนแอปกลางจอ (เฉพาะแอปที่มีสิทธิ์)
+  │  กดไอคอน = window.open(url, "apexis-{companyId}-{app}") — แท็บใหม่ ชื่อแท็บต่อแอป
+  ▼                              (กดแอปเดิมซ้ำ = กลับไปแท็บเดิม ไม่เปิดซ้ำ)
+/c/{companyId}/{app}/{menu}    แท็บของแอป: [✕] [ไอคอน ชื่อแอป] [เมนูของแอป ...] [ชื่อบริษัท]
+     ✕ = window.close() กลับไปแท็บหน้ารวมแอป
+         (แท็บที่เปิดเอง เช่น พิมพ์ URL / bookmark ปิดด้วย script ไม่ได้ -> ไปหน้ารวมแอปในแท็บนั้นแทน)
+```
+
+- แอป / เมนู / สิทธิ์อยู่ที่ `src/config/apps.ts` ที่เดียว, ชื่ออยู่ที่ `texts.apps`, สีไอคอนเป็น token `--color-app-*`
+  - เมนูแสดงเมื่อมีสิทธิ์ `permission` ของเมนู (ตรวจแบบเดียวกับ backend: `*`, `sales.*:read`, `sales.order:*`)
+  - แอปแสดงเมื่อเหลืออย่างน้อยหนึ่งเมนู; หน้าแรกของแอป = เมนูแรกที่มีสิทธิ์
+  - ซ่อนเมนูเพื่อความสะดวกเท่านั้น — backend ตรวจสิทธิ์ทุกคำขอเสมอ
+- บริษัท + สิทธิ์โหลดด้วย `getCompanyContext(companyId)`: 2 คำขอพร้อมกัน (`/companies/{id}/access`, `/companies/{id}`) ครั้งเดียวต่อ request (React `cache`) แม้ layout / page เรียกซ้ำ
+  - สมาชิกที่ไม่มีสิทธิ์ `organization.company:read` เข้าได้แต่ไม่เห็นชื่อบริษัท (ถ้าต้องการ ควรให้ `/access` ส่งชื่อบริษัทมาด้วย)
+- เมนูที่ยังไม่มีหน้าจริงแสดง "หน้านี้กำลังพัฒนา"
+
+### หน้ารายการ (แม่แบบ: สาขา `organization/branches`)
+
+| ส่วน | ทำอย่างไร |
+|---|---|
+| อ่านข้อมูล | server component: `pickQuery(searchParams, KEYS)` → `backendGet(path, query)` — ส่งเงื่อนไขจาก URL ให้ API ตรงๆ คิวรี 1 ครั้ง |
+| ค้นหา / กรอง | `<Form action="">` ของ `next/form` (GET) — เขียนลง URL, กด Back ได้เงื่อนไขเดิม; ส่ง `sort` / `page_size` เดิมเป็น hidden |
+| เรียง | `DataTable` หัวคอลัมน์เป็นลิงก์ `?sort=key` / `?sort=-key` (กลับหน้า 1) |
+| แบ่งหน้า | `Pagination` ลิงก์ `?page=` จาก `meta` ของ API |
+| เพิ่ม / แก้ไข | หน้าแยก `/new`, `/{id}` — ฟอร์มเป็น client component เรียก `/api/v1/*` (POST / PUT / DELETE) แล้ว `router.push(listHref)` + `router.refresh()` |
+| กลับหน้ารายการเดิม | ลิงก์แถวพา `?back=<query ของรายการ>`; หน้าแก้ไขกรองด้วย `pickQuery` อีกชั้นก่อนใช้ |
+| สิทธิ์ | ปุ่ม "สร้าง" / บันทึก / ลบ แสดงเมื่อ `can(permissions, '...:manage')`; ไม่มีสิทธิ์ = ฟอร์มอ่านอย่างเดียว |
+
+เพิ่มหน้าจริงให้แอปใหม่: สร้างโฟลเดอร์ `c/[companyId]/<app>/` ที่มี `layout.tsx` (AppShell), `page.tsx` (`redirectToFirstMenu`), `[...rest]/page.tsx` (`ComingSoon`) แบบเดียวกับ `organization/` แล้วเพิ่มหน้าของเมนูนั้น
+
+## 8.6 รัน / ทดสอบ
 
 ```bash
 cd apps/frontend
@@ -117,15 +175,21 @@ test ที่มี:
   - `lib/server/session.server.test.ts` — encode / decode cookie, หมดอายุ, กัน open redirect, ตรวจ origin
   - `proxy.server.test.ts` — redirect ไป login พร้อม query เดิม, cookie เสีย, ผ่านเมื่อมี session
   - `app/api/session/route.server.test.ts` — ตั้ง HttpOnly cookie โดยไม่คืน token, ส่งต่อ error, backend ล่ม, ต่าง origin = 403, GET / DELETE
+  - `proxy.server.test.ts` ยังตรวจการจำบริษัทล่าสุด (cookie `apexis_company`)
+- `lib/permissions.test.ts` — `covers` ตรงกับ backend, `visibleApps` กรองแอป / เมนูตามสิทธิ์
+- `lib/url.test.ts` — `param`, `pickQuery`, `withQuery`
+- `components/DataTable/DataTable.test.tsx` — ลิงก์เรียง (ขึ้น / ลง), `aria-sort`, ตารางว่าง, `Pagination`
+- `features/shell/shell.test.tsx` — ไอคอนเปิดแท็บใหม่ด้วยชื่อแท็บของแอป, ปุ่มปิด (ปิดไม่ได้ → กลับหน้ารวมแอป)
+- `features/branches/BranchForm.test.tsx` — validation, สร้าง (POST + รหัสพิมพ์ใหญ่), สำนักงานใหญ่แก้ / ลบไม่ได้, ลบแล้ว backend ปฏิเสธ, อ่านอย่างเดียว
 
-## 8.6 เวอร์ชัน
+## 8.7 เวอร์ชัน
 
 ล็อกเวอร์ชันตรง (ไม่มี `^`):
-- Next.js 16.4, React 19.3, TypeScript 5.9, Tailwind 4.3, Vitest 3.2
+- Next.js 16.4, React 19.3, TypeScript 5.9, Tailwind 4.3, Vitest 3.2, lucide-react 1.69 (ไอคอน)
 - Next 16 ใช้ `proxy.ts` แทน `middleware.ts` เดิม
 - เลือก major ที่ตรวจสอบ API ได้แล้ว (มี TS 7 ออกแล้ว) — การอัปเกรด major ควรทำเป็นงานแยก
 
-## 8.7 โลโก้
+## 8.8 โลโก้
 
 - ต้นฉบับ: [`docs/brand/Apexis_Enterprise_Growth_Logo.png`](brand/Apexis_Enterprise_Growth_Logo.png)
   - 1536×1024, พื้นหลังโปร่งใส, 1.2 MB — เก็บไว้เป็นต้นฉบับ ไม่ได้ใช้บนเว็บโดยตรง

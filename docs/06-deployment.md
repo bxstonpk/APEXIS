@@ -41,7 +41,7 @@ curl http://localhost:8080/healthz   # 200
 HTTP server timeout: read header 10s, read 30s, write 30s, idle 120s
 DB pool: max open 25, max idle 5, conn lifetime 30 นาที; log คิวรีที่ช้ากว่า 200ms
 
-Frontend: Next.js (ดู [08-frontend.md §8.5](08-frontend.md)) — server ของ Next ส่งต่อ `/api/v1/*` ไป backend เอง
+Frontend: Next.js (ดู [08-frontend.md §8.6](08-frontend.md)) — server ของ Next ส่งต่อ `/api/v1/*` ไป backend เอง
 - dev: `npm run dev` (http://localhost:5173)
 - production: `npm run build` ได้ `.next/standalone/` → รัน `node server.js`
   - คัดลอก `public/` ไปที่ `.next/standalone/public` และ `.next/static/` ไปที่ `.next/standalone/.next/static`
