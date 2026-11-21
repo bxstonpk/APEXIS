@@ -107,11 +107,32 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | INV-06 | **ห้ามสต็อกติดลบ** | เบิกเกินยอดที่มี ณ วันที่เอกสาร = 422; ทำงานถูกต้องเมื่อเบิกพร้อมกันหลายคน |
 | INV-07 | **ยกเลิกเอกสาร** | กลับผลที่วันที่เดิม (งวดต้องยังเปิด); เอกสารที่ของที่รับเข้าถูกใช้ไปแล้วยกเลิกไม่ได้ (ต้องยกเลิกเอกสารที่ใช้ก่อน) |
 | INV-08 | **รายงาน** `stock-on-hand` (ยอดคงเหลือ + มูลค่า ณ วันที่), `stock-card` (การเคลื่อนไหวพร้อมยอดสะสม) | ผ่าน `GET /reports?book=` เดียวกับ ledger |
+| INV-09 | **ระบบบัญชีสินค้า** perpetual / periodic ตั้งต่อปีบัญชี (`inventory-settings/accounting-systems/{ปี}`) | ไม่ตั้ง = perpetual; เปลี่ยนได้เฉพาะปีที่ยังไม่มีเอกสารสต็อกที่ผ่านแล้ว (ปีนั้นและปีถัดไป) |
+| INV-10 | **บัญชีของสินค้า** บัญชีซื้อ / บัญชีสินค้าคงเหลือ ตั้งที่สินค้า → หมวด → ค่าเริ่มต้นของบริษัท | ใช้ตัวแรกที่ตั้งไว้; ต้องเป็นบัญชีย่อยที่ active ใน ledger |
+| INV-11 | **ปรับปรุงสินค้าคงเหลือสิ้นงวด** (เฉพาะ periodic) `inventory-closings` | ปรับบัญชีสินค้าคงเหลือให้เท่ามูลค่า FIFO ณ วันสิ้นงวด ส่วนต่างลงต้นทุนขาย (ลงผ่าน ledger); งวดละครั้ง, ปิดเรียงงวด, ยกเลิก (กลับรายการ) ย้อนจากงวดล่าสุด; ปิดแล้วห้ามมีเอกสารสต็อกลงวันที่ในงวดนั้นหรือก่อนหน้า |
 
 ข้อตกลง:
-- **inventory ไม่ลงบัญชีเอง** — module ที่เกี่ยวข้อง (ซื้อ / ขาย) เป็นผู้ลงบัญชี โดยใช้ต้นทุนจากเอกสารสต็อก
+- **เอกสารสต็อกไม่ลงบัญชีเอง** — module ที่เกี่ยวข้อง (ซื้อ / ขาย) เป็นผู้ลงบัญชี โดยใช้ต้นทุนจากเอกสารสต็อก; inventory ลงบัญชีเองเฉพาะรายการปรับปรุงสิ้นงวด
 - จำนวนสินค้าทศนิยมตาม `quantity_decimals`; มูลค่าปัดตาม `amount_decimals`; ต้นทุนต่อหน่วยรับได้ถึง 6 ตำแหน่ง
 - การตัดชั้น FIFO บางส่วนปัดมูลค่าตามทศนิยมของเงิน; การตัดหมดชั้นใช้มูลค่าคงเหลือทั้งหมด จึงไม่มีเศษค้าง
+
+## 1.4.3 Functional Requirements — `purchasing` (จัดซื้อ)
+
+| ID | ความต้องการ | กฎธุรกิจ |
+|---|---|---|
+| PUR-01 | **ค่าตั้งจัดซื้อ** อัตรา VAT (เริ่มต้น 7%), สมุดรายวัน, บัญชี GR/IR, เจ้าหนี้, ภาษีซื้อ, ผลต่างราคา | บัญชีต้องเป็นบัญชีย่อยที่ active; อัตราใหม่มีผลกับใบสั่งซื้อที่สร้างหลังจากนี้ |
+| PUR-02 | **ผู้ขาย** CRUD + ค้นหา (`vat_registered`, เลขผู้เสียภาษี 13 หลัก, เลขสาขา 5 หลัก, เครดิตเทอม) | แก้สถานะจด VAT ได้ — มีผลกับเอกสารที่สร้างหลังแก้เท่านั้น; มีใบสั่งซื้อแล้วลบไม่ได้ |
+| PUR-03 | **ใบสั่งซื้อ** draft → approved → closed / cancelled | ผู้ขายจด VAT: VAT ตามอัตราที่ตั้ง เลือกราคารวม / แยก VAT ได้; ไม่จด: 0% ทุกใบ (เลือกรวม VAT = 422); **เก็บเงื่อนไข VAT + เครดิตเทอมไว้ในใบตอนสร้าง** เอกสารที่ตามมาไม่กลับไปดูผู้ขาย; อนุมัติต้องมีสิทธิ์ `approve` และได้เลขที่ `PO{ปีบัญชี}-000001` |
+| PUR-04 | **ใบรับสินค้า** ตามใบสั่งซื้อ (รับบางส่วนได้) | ไม่เกินจำนวนที่เหลือ; สินค้า stock ออกใบรับเข้าคลังของ inventory (FIFO) ใน transaction เดียว; ลงบัญชี Dr สินค้าคงเหลือ (perpetual + stock) หรือบัญชีซื้อ (periodic / ไม่นับสต็อก / บริการ) / Cr GR/IR; ต้นทุนไม่รวม VAT |
+| PUR-05 | **ใบแจ้งหนี้ผู้ขาย** ตามใบสั่งซื้อ | แจ้งหนี้ได้ไม่เกินจำนวนที่รับแล้ว; ราคาใบแจ้งหนี้ต่างจากใบสั่งซื้อได้ — ผลต่างลงบัญชีผลต่างราคา (perpetual + stock) หรือบัญชีซื้อ; Dr GR/IR + ภาษีซื้อ / Cr เจ้าหนี้; วันครบกำหนด = วันที่ลงบัญชี + เครดิตเทอมในใบสั่งซื้อ; เลขที่ใบแจ้งหนี้ของผู้ขายห้ามซ้ำ (ยกเว้นใบที่ยกเลิก) |
+| PUR-06 | **ยกเลิก** ใบรับสินค้า / ใบแจ้งหนี้ | กลับรายการบัญชี ณ วันที่เดิม (งวดต้องเปิด); ใบรับที่แจ้งหนี้แล้วต้องยกเลิกใบแจ้งหนี้ก่อน; ของที่รับถูกใช้ไปแล้วยกเลิกไม่ได้ |
+| PUR-07 | **รายงาน** `outstanding-purchase-orders` (ค้างรับ / ค้างแจ้งหนี้), `ap-aging` (อายุเจ้าหนี้ ณ วันที่) | ผ่าน `GET /reports?book=` |
+
+ข้อตกลง:
+- VAT ปัดต่อบรรทัดตาม `amount_decimals`; ราคารวม VAT: VAT = ยอด × อัตรา / (100 + อัตรา)
+- รับครบและแจ้งหนี้ครบทุกบรรทัด = ปิดใบสั่งซื้ออัตโนมัติ; ปิดเอง = หยุดรับ (ยังแจ้งหนี้ของที่รับแล้วได้)
+- แจ้งหนี้ครบจำนวนที่รับ = ล้าง GR/IR เท่ายอดที่ลงไว้จริง (ไม่มีเศษปัดค้างใน GR/IR)
+- ยังไม่ทำ: ภาษีหัก ณ ที่จ่าย, จ่ายชำระ, ใบลดหนี้ / คืนสินค้า, สกุลเงินต่างประเทศ
 
 ## 1.5 สิทธิ์ (Permissions)
 
@@ -120,7 +141,8 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | identity | `identity.member:read`, `identity.member:manage`, `identity.role:read`, `identity.role:manage` |
 | organization | `organization.{company,branch,business_unit,department,cost_center,project_site}:{read,manage}` |
 | organization (บัญชี) | `organization.fiscal_period:read`, `organization.fiscal_period:manage` (สร้างปีบัญชี), `organization.fiscal_period:close` (ปิด/เปิดงวด) |
-| inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read` |
+| inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read`, `inventory.settings:{read,manage}`, `inventory.closing:read`, `inventory.closing:post` (ปรับปรุงสิ้นงวด / ยกเลิก) |
+| purchasing | `purchasing.{settings,supplier}:{read,manage}`, `purchasing.order:{read,manage}`, `purchasing.order:approve`, `purchasing.receipt:{read,post}`, `purchasing.invoice:{read,post}`, `purchasing.report:read` |
 | ledger | `ledger.account:{read,manage}`, `ledger.journal:{read,manage}`, `ledger.entry:read`, `ledger.entry:manage` (สร้าง / แก้ / ลบ draft), `ledger.entry:post` (ผ่าน / กลับรายการ), `ledger.report:read` |
 
 owner ได้สิทธิ์ `*` อัตโนมัติ — role อื่นต้องกำหนดสิทธิ์เอง

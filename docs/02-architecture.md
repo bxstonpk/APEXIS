@@ -175,6 +175,41 @@ COMMIT
 
 - FIFO และการยกเลิก (`PlanPosting`, `PlanCancel`) เป็น pure function ใน `domain/services` จึงทดสอบได้โดยไม่ต้องมีฐานข้อมูล
 - `inventory_movements` คือที่มาของยอดคงเหลือ / stock card; `inventory_layers` คือชั้นต้นทุนที่ยังเหลือ; `inventory_allocations` บันทึกว่าการเคลื่อนไหวขาออกตัดชั้นไหน (ใช้คืนชั้นตอนยกเลิก)
+- inventory → ledger: ตรวจบัญชี / สมุดรายวันในค่าตั้ง, อ่านยอดบัญชี และลงรายการปรับปรุงสินค้าคงเหลือสิ้นงวด (periodic)
+
+### สัญญากลาง (`platform/integration`)
+
+module ที่ให้บริการ module อื่นมี public API บน `*Module` ที่รับ / คืนเฉพาะ uuid, primitive และ type ใน `platform/integration`:
+
+| ผู้ให้บริการ | public API | ผู้ใช้ |
+|---|---|---|
+| organization | `CompanySettings`, `FiscalPeriodAt`, `FiscalPeriodRange`, `MissingDimensions` | ทุก module |
+| ledger | `PostEntry`, `ReverseEntry`, `InvalidPostingAccounts`, `JournalUsable`, `AccountBalances` | inventory, purchasing |
+| inventory | `PurchaseItems`, `PurchaseContext` (ระบบบัญชีของปี + บัญชีของสินค้า, lock ค่าตั้ง FOR SHARE), `PostReceipt`, `CancelDocument` | purchasing |
+
+- ไม่ตรวจสิทธิ์ของผู้ให้บริการ (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎธุรกิจครบ และเข้าร่วม transaction ใน ctx ของผู้เรียก
+- error กฎธุรกิจถูกห่อเป็น `integration.ErrRejected` (ข้อความเดิม) — ผู้เรียกแปลงเป็น 422 พร้อมรายละเอียด
+- ข้อมูลแสดงผลของ module อื่น (เช่น รหัส / ชื่อสินค้าในเอกสารจัดซื้อ) เติมผ่าน public API 1 ครั้งต่อ request — ไม่ JOIN ตารางข้าม module
+
+### purchasing → inventory + ledger
+
+รับสินค้า — transaction เดียวข้าม 3 module:
+
+```text
+POST /goods-receipts
+  BEGIN
+    identity.Authorize(purchasing.receipt:post) / organization.CompanySettings
+    SELECT purchasing_orders ... FOR UPDATE                    ← กันรับเกินเมื่อรับพร้อมกัน
+    ตรวจจำนวน (domain) / organization.FiscalPeriodAt           ← งวดต้องเปิด
+    inventory.PurchaseContext                                  ← ระบบบัญชีของปี + บัญชีของสินค้า (1 query)
+    INSERT purchasing_sequences ... RETURNING                  ← RC{ปี}-000001
+    inventory.PostReceipt                                      ← ใบรับเข้า + ชั้นต้นทุน FIFO
+    ledger.PostEntry  Dr สินค้าคงเหลือ / ซื้อ  Cr GR/IR
+    INSERT purchasing_receipts (+ lines) ; UPDATE purchasing_order_lines FROM (VALUES ...)
+  COMMIT  (ล้มที่จุดใด = rollback ทั้งใบรับเข้าคลังและรายการบัญชี)
+```
+
+ใบแจ้งหนี้ทำแบบเดียวกัน (ไม่มีขั้น inventory): Dr GR/IR ± ผลต่างราคา + Dr ภาษีซื้อ / Cr เจ้าหนี้
 
 ## 2.6.1 รายงานรวม (`platform/reports`)
 
@@ -182,6 +217,7 @@ COMMIT
 - แต่ละ module ลงทะเบียน book ของตัวเอง (`RegisterReports`):
   - ledger: `trial-balance`, `balance-sheet`, `income-statement`, `general-ledger`
   - inventory: `stock-on-hand`, `stock-card`
+  - purchasing: `outstanding-purchase-orders`, `ap-aging`
 - registry ส่งต่อตาม `book`; book ไม่รู้จัก = 400 พร้อมรายชื่อ book ทั้งหมด; ชื่อซ้ำข้าม module = panic ตอนเริ่มโปรแกรม
 - `main.go` mount registry พร้อม `Authenticate`; แต่ละ handler ตรวจสิทธิ์ของ module ตัวเอง
 
@@ -197,7 +233,7 @@ COMMIT
 - identity ไม่ตรวจสถานะบริษัท
 - organization บังคับใน `base.write`: ทุกการเขียนข้อมูลของบริษัท อ่าน `status` ของบริษัทใน transaction เดียวกัน ถ้า `inactive` → `422 company is inactive (read-only)`
 - การอ่านไม่ถูกกระทบ; `PUT /companies/{id}` ไม่ผ่านกฎนี้เพื่อให้เปิดใช้งานกลับได้
-- ledger และ inventory บังคับกฎเดียวกันผ่าน `organization.CompanySettings` ใน transaction ของการเขียน — module ที่จะสร้างต่อไปต้องทำแบบเดียวกัน
+- ledger, inventory และ purchasing บังคับกฎเดียวกันผ่าน `organization.CompanySettings` ใน transaction ของการเขียน — module ที่จะสร้างต่อไปต้องทำแบบเดียวกัน
 
 ## 2.8 Domain events
 

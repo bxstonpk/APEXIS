@@ -26,7 +26,8 @@ APEXIS คือระบบ ERP แบบ multi-company (หนึ่งผู�
 | Backend — `identity` (ผู้ใช้, ล็อกอิน, role, สิทธิ์, สมาชิกของบริษัท) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `organization` (บริษัท / นิติบุคคล, สาขา, หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ/ไซต์งาน, ปีบัญชี/งวด 12 งวด) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `ledger` (ผังบัญชี, สมุดรายวัน, รายการบัญชี draft/posted/reversed, งบทดลอง, บัญชีแยกประเภท, งบแสดงฐานะการเงิน, งบกำไรขาดทุน) | ✅ ใช้งานได้, มี unit + integration test |
-| Backend — `inventory` (หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, ต้นทุน FIFO, ยอดคงเหลือ, stock card) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — `inventory` (หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, ต้นทุน FIFO, ยอดคงเหลือ, stock card, ระบบ perpetual / periodic, ปรับปรุงสิ้นงวด) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — `purchasing` (ผู้ขาย, ใบสั่งซื้อ + VAT, ใบรับสินค้า, ใบแจ้งหนี้, ค้างรับ, อายุเจ้าหนี้) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — platform (config, database, httpx, listing, numeric, reports) | ✅ ใช้ร่วมกันทุก module |
 | Frontend (`apps/frontend`) — React + Tailwind | 🟡 หน้า login + หน้าหลักชั่วคราว, มี test |
 | `services/` | ⬜ ยังว่าง |
@@ -48,7 +49,8 @@ APEXIS/
 │   │           ├── identity/
 │   │           ├── organization/
 │   │           ├── ledger/
-│   │           └── inventory/
+│   │           ├── inventory/
+│   │           └── purchasing/
 │   └── frontend/             # React + Vite + Tailwind (ดู 08-frontend.md)
 └── services/                 # (ยังว่าง)
 ```

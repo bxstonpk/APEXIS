@@ -242,3 +242,46 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 |---|---|---|
 | `stock-on-hand` | `end_date` (บังคับ = ณ วันที่), `warehouse_id, item_id, category_id, q, sort` (item_code, item_name, warehouse_code, quantity, value), `page, page_size` | แถวต่อสินค้า × คลัง: จำนวน + มูลค่า; `total_value` = มูลค่ารวมทุกแถวที่ตรงเงื่อนไข; `meta` แบ่งหน้า |
 | `stock-card` | `item_id, start_date, end_date` (บังคับ), `warehouse_id` (ไม่ส่ง = ทุกคลัง), `page, page_size` | ยอดยกมา + การเคลื่อนไหว (± จำนวน / มูลค่า) พร้อมยอดสะสม; `meta` แบ่งหน้า |
+
+### ค่าตั้งบัญชีสินค้า / ปรับปรุงสิ้นงวด
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET / PUT | `/inventory-settings` | `inventory.settings:read\|manage` | `default_purchase_account_id, default_inventory_account_id, cogs_account_id, journal_id` + `accounting_systems` (อ่านอย่างเดียว) |
+| PUT | `/inventory-settings/accounting-systems/{fiscalYear}` | `inventory.settings:manage` | `{"system": "periodic"}` — ใช้ตั้งแต่ปีนั้น; ปีที่มีเอกสารผ่านแล้ว = 422 |
+| GET | `/inventory-closings` | `inventory.closing:read` | `?fiscal_year=&status=posted,cancelled&sort=period_end\|created_at` |
+| POST | `/inventory-closings` | `inventory.closing:post` | `{"date": "2026-01-31"}` (วันใดก็ได้ในงวด) → 201 พร้อม `adjustment`, `entry_no` |
+| PATCH | `/inventory-closings/{closingID}` | `inventory.closing:post` | `{"status": "cancelled"}` กลับรายการบัญชี |
+
+หมวดสินค้า / สินค้า รับ `purchase_account_id`, `inventory_account_id` เพิ่ม (ไม่ส่ง = ใช้ของหมวด / ค่าเริ่มต้น)
+
+## 4.8 Endpoint — purchasing
+
+| Resource | Path | Filter เพิ่ม | สิทธิ์ |
+|---|---|---|---|
+| ค่าตั้ง | `GET`, `PUT /purchasing-settings` | — | `purchasing.settings:read\|manage` |
+| ผู้ขาย | `/suppliers[/{supplierID}]` | `status, vat_registered` | `purchasing.supplier:read\|manage` |
+| ใบสั่งซื้อ | `GET`, `POST /purchase-orders`; `GET`, `PUT`, `PATCH`, `DELETE /purchase-orders/{orderID}` | `status, supplier_id, item_id, start_date, end_date`; sort `date\|order_no\|created_at` | `purchasing.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `purchasing.order:approve` |
+| ใบรับสินค้า | `GET`, `POST /goods-receipts`; `GET`, `PATCH /goods-receipts/{receiptID}` | `status, supplier_id, order_id, start_date, end_date` | `purchasing.receipt:read\|post` |
+| ใบแจ้งหนี้ | `GET`, `POST /supplier-invoices`; `GET`, `PATCH /supplier-invoices/{invoiceID}` | เหมือนใบรับสินค้า | `purchasing.invoice:read\|post` |
+
+- ใบสั่งซื้อ `PATCH` รับ `approved` / `closed` / `cancelled`; ใบรับ / ใบแจ้งหนี้ `PATCH` รับเฉพาะ `cancelled`
+- ใบรับ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที (response มี `entry_no` ของ ledger, ใบรับมี `stock_document_no` ของ inventory)
+
+```jsonc
+// POST /purchase-orders
+{ "supplier_id": "…", "date": "2026-02-01", "delivery_date": "2026-02-10", "price_includes_vat": false,
+  "lines": [ { "item_id": "…", "quantity": "10", "unit_price": "100" } ] }
+// POST /goods-receipts — warehouse_id บังคับเมื่อมีสินค้า stock
+{ "order_id": "…", "date": "2026-02-10", "warehouse_id": "…", "lines": [ { "order_line_no": 1, "quantity": "4" } ] }
+// POST /supplier-invoices — unit_price ไม่ส่ง = ราคาใบสั่งซื้อ; invoice_date ไม่ส่ง = date
+{ "order_id": "…", "supplier_invoice_no": "INV-001", "date": "2026-02-15",
+  "lines": [ { "order_line_no": 1, "quantity": "4", "unit_price": "110" } ] }
+```
+
+### รายงาน (`purchasing.report:read`)
+
+| `book` | parameter | ผลลัพธ์ |
+|---|---|---|
+| `outstanding-purchase-orders` | `supplier_id, item_id, q, sort` (date, order_no, supplier_code, delivery_date), `page, page_size` | บรรทัดใบสั่งซื้อที่ค้างรับ (`to_receive`) หรือค้างแจ้งหนี้ (`to_invoice`) |
+| `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย: `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |

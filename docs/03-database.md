@@ -98,10 +98,29 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `inventory_movements` | id, company_id, item_id, warehouse_id, movement_date, document_id, line_no, quantity (±), value (±) | index `(company_id, item_id, warehouse_id, movement_date)`; CHECK quantity ≠ 0 |
 | `inventory_allocations` | movement_id, layer_id, quantity, value | PK คู่; FK RESTRICT ทั้งสองฝั่ง |
 | `inventory_sequences` | company_id, doc_type, fiscal_year, last_no | PK `(company_id, doc_type, fiscal_year)` |
+| `inventory_settings` | company_id, default_purchase_account_id, default_inventory_account_id, cogs_account_id, journal_id | PK company_id — แถวนี้ใช้ lock การเปลี่ยนระบบบัญชี (FOR UPDATE) เทียบกับการลงบัญชีซื้อ (FOR SHARE) |
+| `inventory_accounting_systems` | company_id, from_year, system | PK `(company_id, from_year)`; CHECK system IN (perpetual, periodic) |
+| `inventory_period_closings` | id, company_id, fiscal_period_id, fiscal_year, period_end, entry_id, entry_no, adjustment, status, created_by, cancelled_at/by | **partial UNIQUE `(company_id, fiscal_period_id) WHERE status = 'posted'`** (งวดละครั้ง); index `(company_id, period_end)` |
+
+เพิ่มในตารางเดิม: `inventory_items` / `inventory_item_categories` มี `purchase_account_id`, `inventory_account_id` (บัญชีของ ledger, ไม่มี FK); `inventory_documents` มี `fiscal_year` (ใช้ตรวจการเปลี่ยนระบบบัญชี — เอกสารเก่าเติมจากเลขที่ตอน migrate)
 
 - จำนวน / มูลค่าทั้งหมดเป็น `NUMERIC(24,6)`
 - ยอดคงเหลือ = ผลรวมของ `inventory_movements` (เท่ากับ remaining ของชั้นทั้งหมด) — ไม่มีตารางยอดสะสมแยก
 - ยกเลิกเอกสาร: ชั้นที่เอกสารสร้างถูกปิด (remaining = 0, ไม่ลบ — ประวัติ allocation อ้างถึง), ชั้นที่ถูกตัดได้คืน, เพิ่มการเคลื่อนไหวกลับรายการ
+
+## 3.3.3 ตาราง — purchasing
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `purchasing_settings` | company_id, vat_rate, journal_id, grir_account_id, ap_account_id, input_vat_account_id, price_variance_account_id | PK company_id; CHECK vat_rate 0–100 |
+| `purchasing_suppliers` | id, company_id, code, name, tax_id, branch_no, address, payment_term_days, vat_registered, status, deleted_at | partial UNIQUE code; CHECK term 0–365 |
+| `purchasing_orders` | id, company_id, order_no, fiscal_year, supplier_id, order_date, delivery_date, **vat_registered, vat_rate, price_includes_vat, payment_term_days** (เงื่อนไขที่เก็บตอนสร้าง), total_net/vat/gross, status, approved/closed/cancelled by/at | UNIQUE `(company_id, order_no) WHERE order_no IS NOT NULL`; FK supplier RESTRICT; **CHECK ผู้ขายไม่จด VAT ⇒ อัตรา 0 และราคาไม่รวม VAT**; CHECK อนุมัติแล้วต้องมีเลขที่ |
+| `purchasing_order_lines` | order_id, line_no, item_id, quantity, unit_price, net, vat, gross, received_qty, invoiced_qty, received_value, cleared_value | **CHECK 0 ≤ received ≤ quantity, 0 ≤ invoiced ≤ received** |
+| `purchasing_receipts` (+ `_lines`) | id, document_no, fiscal_year, fiscal_period_id, order_id, supplier_id, receipt_date, warehouse_id, system, stock_document_id/no, total_value, entry_id/no, status; บรรทัด: order_line_no, item_id, stock, quantity, unit_cost, value, account_id | UNIQUE `(company_id, document_no)`; FK order / supplier RESTRICT |
+| `purchasing_invoices` (+ `_lines`) | id, document_no, supplier_invoice_no, invoice_date, posting_date, due_date, vat_rate, price_includes_vat, total_net/vat/gross, entry_id/no, status; บรรทัด: quantity, unit_price, net, vat, gross, cleared, variance_account_id | UNIQUE `(company_id, document_no)`; **partial UNIQUE `(company_id, supplier_id, supplier_invoice_no) WHERE status = 'posted'`**; CHECK gross = net + vat |
+| `purchasing_sequences` | company_id, prefix (PO / RC / PI), fiscal_year, last_no | PK `(company_id, prefix, fiscal_year)` |
+
+- สินค้า / คลัง / บัญชี / งวด / เอกสารสต็อก / รายการบัญชี เก็บเป็น id ของ module เจ้าของ (ไม่มี FK ข้าม module)
 
 ## 3.4 ข้อตกลงด้านข้อมูล
 

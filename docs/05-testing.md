@@ -66,7 +66,17 @@ PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
 |---|---|---|
 | `domain/services/fifo_test.go` | `TestReceiptValueRoundsToCompanyDecimals`, `TestIssueConsumesOldestLayersFirst`, `TestPartialConsumptionLeavesNoRoundingDust`, `TestNoNegativeStockAndNoFutureLayers`, `TestTransferCarriesFifoCost`, `TestAdjustmentInThenOutInSameDocument`, `TestCancelRestoresLayersAndRejectsUsedReceipt` | FIFO (pure function ไม่ต้องใช้ DB) |
 | `domain/entities/entities_test.go` | `TestDocumentLineRules`, `TestDocumentLifecycle`, `TestItemRules` | กฎบรรทัดเอกสาร, ทศนิยมตามบริษัท, draft → posted → cancelled |
+| `domain/services/fifo_test.go` | `TestPlanClosingAdjustsInventoryAgainstCogs` | รายการปรับปรุงสิ้นงวด (ปรับสินค้าคงเหลือ, ส่วนต่างลงต้นทุนขาย) |
+| `domain/entities/entities_test.go` | `TestAccountingSystemByFiscalYear` | ระบบบัญชีตามปี, ล็อกปีที่มีเอกสาร |
+| `closing_integration_test.go` | `TestPeriodicClosing` | บัญชีของหมวด / สินค้าตรวจกับ ledger, ค่าตั้ง, ระบบบัญชีต่อปี, **ปิดงวด ม.ค. / ก.พ. ส่วนต่างคำนวณมือแล้วเทียบ**, ห้ามปิดซ้ำ, ห้ามเอกสารย้อนหลังในงวดที่ปิด, ยกเลิกย้อนจากงวดล่าสุด |
 | `inventory_integration_test.go` | `TestInventoryFlow` | master / สาขาไม่พบ, รับ / เบิก / โอน / ปรับปรุง, **มูลค่า FIFO คำนวณมือแล้วเทียบ**, ห้ามติดลบ / ห้ามใช้ชั้นวันที่อนาคต, ทศนิยมตามบริษัท, รายงาน stock-on-hand / stock-card (แบ่งหน้า), ลำดับการยกเลิก, **เบิกพร้อมกัน 10 ครั้งจากของ 5 ชิ้น = สำเร็จ 5 พอดี**, สิทธิ์, งวดปิด, บริษัท inactive, query ผิดรูปแบบ |
+
+### purchasing
+
+| ไฟล์ | Test | ครอบคลุม |
+|---|---|---|
+| `domain/entities/entities_test.go` | `TestVatTermsFollowSupplierAtCreation`, `TestLineAmounts`, `TestOrderReceiveInvoiceAndAutoClose`, `TestInvoiceJournalBalances` | VAT ตามผู้ขาย, รวม / แยก VAT, รับไม่เกิน / แจ้งหนี้ไม่เกิน, ล้าง GR/IR ไม่มีเศษปัด, ปิดอัตโนมัติ, รายการบัญชีสมดุล |
+| `purchasing_integration_test.go` | `TestPurchasingFlow` | ค่าตั้ง / ผู้ขาย, ใบสั่งซื้อ VAT, สิทธิ์อนุมัติ, ผู้ขายเลิกจด VAT แล้วใบเดิมยังคิด VAT, **รับสินค้า → สต็อก FIFO + GL, แจ้งหนี้ราคาต่าง → ผลต่างราคา, งบทดลองเทียบตัวเลข**, รายงานค้างรับ / อายุเจ้าหนี้, ลำดับการยกเลิก (GL / สต็อกกลับเป็นศูนย์), เลขใบแจ้งหนี้ซ้ำ, ปิดใบสั่งซื้อ, **periodic: รับสินค้าลงบัญชีซื้อ**, ปิดอัตโนมัติ |
 
 ### platform
 
@@ -76,7 +86,7 @@ PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
 | `platform/listing/listing_test.go` | `TestParsePage`, `TestParseSort`, `TestParseSearch`, `TestParseDateRange`, `TestParseListAndOptional` |
 | `platform/database/database_test.go` | `TestLikeContainsEscapesWildcards` |
 
-## 5.4 ผลล่าสุด (2026-11-12)
+## 5.4 ผลล่าสุด (2026-11-21)
 
 `go build ./...`, `go vet ./...` และ `go test -p 1 ./...` (รวม integration กับ PostgreSQL 16) — **ผ่านทั้งหมด**
 
