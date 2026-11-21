@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"account/backend/internal/modules/identity/domain"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	domain "apexis/backend/internal/modules/identity/domain/errors"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 var roleCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,49}$`)

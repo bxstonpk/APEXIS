@@ -1,0 +1,105 @@
+/*
+ * สไตล์ทั้งหมดใช้ Tailwind CSS — component ใช้ utility class เท่านั้น ไม่มีไฟล์ CSS แยก
+ *
+ * Design tokens อยู่ใน @theme ด้านล่างที่เดียว: Tailwind สร้าง class จาก token ให้อัตโนมัติ
+ * เช่น --color-primary -> bg-primary / text-primary / border-primary / ring-primary
+ * เปลี่ยนสีหรือฟอนต์ของทั้งแอปได้ด้วยการแก้ค่าที่นี่
+ *
+ * แนวทาง: สีจากโลโก้ (กรมท่า + ส้ม), พื้นเรียบ เส้นบาง เงาน้อย, ขนาดกระชับแบบโปรแกรมทำงาน (ERP)
+ */
+@import 'tailwindcss';
+
+@theme {
+  /* IBM Plex Sans Thai (self-hosted ผ่าน @fontsource — โหลดใน app/layout.tsx) มีทั้งอักษรไทยและละติน */
+  --font-sans: 'IBM Plex Sans Thai', 'Leelawadee UI', Tahoma, system-ui, sans-serif;
+
+  /* พื้นหลัง / พื้นผิว / เส้นขอบ */
+  --color-canvas: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-subtle: #f9fafb;
+  --color-line: #e4e7ec;
+  --color-line-strong: #cfd4dc;
+
+  /* ตัวอักษร */
+  --color-ink: #161b26;
+  --color-ink-muted: #5a6376;
+  --color-ink-subtle: #687083; /* 4.9:1 บนพื้นขาว (เดิม #8b93a3 = 3.1:1 ต่ำกว่าเกณฑ์ WCAG AA) */
+
+  /* สีหลัก = กรมท่าของโลโก้, สีเน้น = ส้มของโลโก้ */
+  --color-primary: #1d3f8f;
+  --color-primary-hover: #17337a;
+  --color-primary-soft: #eef2fb;
+  --color-on-primary: #ffffff;
+  --color-accent: #f28c1a;
+
+  /* แถบด้านบนของแอป */
+  --color-nav: #101c3b;
+  --color-nav-hover: #1b2a52;
+
+  /* สถานะ */
+  --color-danger: #c4320a;
+  --color-danger-soft: #fef3ee;
+  --color-danger-line: #f9cdb9;
+  --color-info-soft: #eef2fb;
+  --color-info-line: #cbd6f2;
+  --color-success: #12795a;
+  --color-success-soft: #ebf7f2;
+  --color-warning: #b54708;
+  --color-warning-soft: #fef6e7;
+  --color-neutral-soft: #f0f2f5;
+
+  /* สีไอคอนแอปในหน้ารวมแอป (key ตรงกับ src/config/apps.ts) — โทนลึก ไม่สด */
+  --color-app-sales: #c2414f;
+  --color-app-purchasing: #2c5fb8;
+  --color-app-inventory: #c46f17;
+  --color-app-accounting: #11795b;
+  --color-app-cashbank: #0f7c91;
+  --color-app-organization: #5b48b8;
+  --color-app-users: #475467;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-pop: 0 4px 6px -2px rgb(16 24 40 / 0.05), 0 12px 24px -4px rgb(16 24 40 / 0.12);
+  --shadow-tile: 0 1px 2px rgb(16 24 40 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@layer base {
+  html,
+  body {
+    @apply h-full;
+  }
+
+  /* แถบบนของแอป (48px) และแถบปุ่มท้ายฟอร์ม (sticky) ต้องไม่บังช่องที่กำลังโฟกัส (WCAG 2.2 focus not obscured) */
+  html {
+    scroll-padding-top: 4rem;
+    scroll-padding-bottom: 5rem;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-[15px] leading-relaxed text-ink antialiased;
+    font-feature-settings: 'tnum' 0;
+  }
+
+  ::selection {
+    @apply bg-primary/15;
+  }
+}
+
+/* ผู้ใช้ที่ตั้งค่าลดการเคลื่อนไหว: ปิด transition / animation (spinner ยังหมุนช้าๆ ตามที่ตั้งใน Spinner) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

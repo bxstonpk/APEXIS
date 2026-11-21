@@ -6,24 +6,28 @@ package identity_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"account/backend/internal/modules/identity"
-	"account/backend/internal/platform/database"
+	"apexis/backend/internal/modules/identity"
+	"apexis/backend/internal/platform/database"
 )
 
 type api struct {
 	t   *testing.T
 	srv *httptest.Server
 	db  *gorm.DB
+	mod *identity.Module
 }
 
 type resp struct {
@@ -33,6 +37,7 @@ type resp struct {
 
 func (r resp) data() map[string]any { return r.body["data"].(map[string]any) }
 func (r resp) list() []any          { return r.body["data"].([]any) }
+func (r resp) total() int           { return int(r.body["meta"].(map[string]any)["total"].(float64)) }
 
 func (a api) do(method, path, token string, body any) resp {
 	a.t.Helper()
@@ -49,7 +54,7 @@ func (a api) do(method, path, token string, body any) resp {
 	if err != nil {
 		a.t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	out := resp{status: res.StatusCode, body: map[string]any{}}
 	_ = json.NewDecoder(res.Body).Decode(&out.body)
 	return out
@@ -65,13 +70,26 @@ func (a api) expect(r resp, status int, what string) resp {
 
 func (a api) register(email, name string) {
 	a.t.Helper()
-	a.expect(a.do("POST", "/api/v1/auth/register", "", map[string]any{"email": email, "name": name, "password": "secret-pass-1"}), 201, "register "+email)
+	a.expect(a.do("POST", "/api/v1/users", "", map[string]any{"email": email, "name": name, "password": "secret-pass-1"}), 201, "register "+email)
 }
 
 func (a api) login(email string) string {
 	a.t.Helper()
-	r := a.expect(a.do("POST", "/api/v1/auth/login", "", map[string]any{"email": email, "password": "secret-pass-1"}), 200, "login "+email)
+	r := a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": email, "password": "secret-pass-1"}), 201, "login "+email)
 	return r.data()["access_token"].(string)
+}
+
+// createCompany: ตัวบริษัทอยู่ที่ organization module — test ของ identity จำลองการสร้างบริษัท
+// ด้วย id ใหม่ แล้วเรียก ProvisionCompanyOwner แบบเดียวกับที่ organization เรียก
+func (a api) createCompany(token string) string {
+	a.t.Helper()
+	me := a.expect(a.do("GET", "/api/v1/me", token, nil), 200, "me").data()["id"].(string)
+	id := uuid.New()
+	ok, err := a.mod.ProvisionCompanyOwner(context.Background(), id, uuid.MustParse(me))
+	if err != nil || !ok {
+		a.t.Fatalf("provision owner: ok=%v err=%v", ok, err)
+	}
+	return id.String()
 }
 
 func setup(t *testing.T) api {
@@ -83,7 +101,7 @@ func setup(t *testing.T) api {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tbl := range []string{"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_companies", "identity_users"} {
+	for _, tbl := range []string{"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_users"} {
 		if err := db.Exec("DROP TABLE IF EXISTS " + tbl + " CASCADE").Error; err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +117,7 @@ func setup(t *testing.T) api {
 	mod.RegisterRoutes(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return api{t: t, srv: srv, db: db}
+	return api{t: t, srv: srv, db: db, mod: mod}
 }
 
 func TestMultiCompanyAccessFlow(t *testing.T) {
@@ -108,29 +126,25 @@ func TestMultiCompanyAccessFlow(t *testing.T) {
 	a.register("owner@example.com", "Owner")
 	a.register("staff@example.com", "Staff")
 	a.register("hr@example.com", "HR Admin")
-	a.expect(a.do("POST", "/api/v1/auth/register", "", map[string]any{"email": "OWNER@example.com", "name": "Dup", "password": "secret-pass-1"}), 409, "duplicate email")
-	a.expect(a.do("POST", "/api/v1/auth/login", "", map[string]any{"email": "owner@example.com", "password": "wrong-password"}), 401, "wrong password")
+	a.expect(a.do("POST", "/api/v1/users", "", map[string]any{"email": "OWNER@example.com", "name": "Dup", "password": "secret-pass-1"}), 409, "duplicate email")
+	a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "owner@example.com", "password": "wrong-password"}), 401, "wrong password")
 	a.expect(a.do("GET", "/api/v1/me", "", nil), 401, "no token")
 
 	owner := a.login("owner@example.com")
 	staff := a.login("staff@example.com")
 	hr := a.login("hr@example.com")
 
-	// owner สร้าง 2 บริษัท
-	compA := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "acme", "name": "ACME Co., Ltd.", "tax_id": "0105556000000"}), 201, "create A").data()["id"].(string)
-	compB := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "BETA", "name": "Beta Co., Ltd."}), 201, "create B").data()["id"].(string)
-	a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "ACME", "name": "Dup"}), 409, "duplicate company code")
-
-	if n := len(a.expect(a.do("GET", "/api/v1/me/companies", owner, nil), 200, "owner companies").list()); n != 2 {
-		t.Fatalf("owner should see 2 companies, got %d", n)
+	// owner สร้าง 2 บริษัท (ได้ role owner + เป็นสมาชิก)
+	compA := a.createCompany(owner)
+	compB := a.createCompany(owner)
+	if ids, err := a.mod.MemberCompanyIDs(context.Background(), uuid.MustParse(a.expect(a.do("GET", "/api/v1/me", owner, nil), 200, "me").data()["id"].(string))); err != nil || len(ids) != 2 {
+		t.Fatalf("owner companies = %v %v", ids, err)
 	}
-	if n := len(a.expect(a.do("GET", "/api/v1/me/companies", staff, nil), 200, "staff companies").list()); n != 0 {
-		t.Fatalf("staff should see 0 companies, got %d", n)
-	}
+	a.expect(a.do("GET", "/api/v1/companies/"+compA+"/access", staff, nil), 403, "non-member access")
 
 	base := "/api/v1/companies/" + compA
 	salesRole := a.expect(a.do("POST", base+"/roles", owner, map[string]any{
-		"code": "sales", "name": "Sales", "permissions": []string{"sales.order:*", "identity.company:read"},
+		"code": "sales", "name": "Sales", "permissions": []string{"sales.order:*", "organization.company:read"},
 	}), 201, "create sales role").data()["id"].(string)
 	hrRole := a.expect(a.do("POST", base+"/roles", owner, map[string]any{
 		"code": "hr-admin", "name": "HR Admin",
@@ -149,11 +163,10 @@ func TestMultiCompanyAccessFlow(t *testing.T) {
 	// staff เห็นสิทธิ์ของตัวเองใน A, เข้า B ไม่ได้, ดูรายชื่อพนักงานไม่ได้
 	acc := a.expect(a.do("GET", base+"/access", staff, nil), 200, "staff access").data()
 	perms := toStrings(acc["permissions"].([]any))
-	if !slices.Equal(perms, []string{"identity.company:read", "sales.order:*"}) {
+	if !slices.Equal(perms, []string{"organization.company:read", "sales.order:*"}) {
 		t.Fatalf("staff permissions = %v", perms)
 	}
-	a.expect(a.do("GET", base, staff, nil), 200, "staff read company A")
-	a.expect(a.do("GET", "/api/v1/companies/"+compB, staff, nil), 403, "staff read company B")
+	a.expect(a.do("GET", "/api/v1/companies/"+compB+"/access", staff, nil), 403, "staff access company B")
 	a.expect(a.do("GET", base+"/members", staff, nil), 403, "staff list members")
 
 	// HR: จัดการพนักงานได้ แต่ให้สิทธิ์เกินตัวเองไม่ได้ และแตะ owner ไม่ได้
@@ -161,23 +174,25 @@ func TestMultiCompanyAccessFlow(t *testing.T) {
 		t.Fatalf("members = %d, want 3", n)
 	}
 	a.expect(a.do("POST", base+"/roles", hr, map[string]any{"code": "x", "name": "X", "permissions": []string{"*"}}), 403, "hr create role (no role:manage)")
+	suspended := map[string]any{"status": "suspended"}
 	ownerID := a.expect(a.do("GET", "/api/v1/me", owner, nil), 200, "owner me").data()["id"].(string)
 	staffID := a.expect(a.do("GET", "/api/v1/me", staff, nil), 200, "staff me").data()["id"].(string)
 	hrID := a.expect(a.do("GET", "/api/v1/me", hr, nil), 200, "hr me").data()["id"].(string)
-	a.expect(a.do("POST", base+"/members/"+ownerID+"/suspend", hr, nil), 403, "hr suspend owner")
-	a.expect(a.do("POST", base+"/members/"+hrID+"/suspend", hr, nil), 422, "hr suspend self")
-	// staff ถือ identity.company:read ซึ่ง hr ไม่มี -> hr จัดการ staff ไม่ได้
+	a.expect(a.do("PATCH", base+"/members/"+ownerID, hr, suspended), 403, "hr suspend owner")
+	a.expect(a.do("PATCH", base+"/members/"+hrID, hr, suspended), 422, "hr suspend self")
+	// staff ถือ organization.company:read ซึ่ง hr ไม่มี -> hr จัดการ staff ไม่ได้
 	a.expect(a.do("PUT", base+"/members/"+staffID+"/roles", hr, map[string]any{"role_ids": []string{hrRole}}), 403, "hr manage member with more perms")
 	a.expect(a.do("PUT", base+"/roles/"+hrRole, owner, map[string]any{
 		"name":        "HR Admin",
-		"permissions": []string{"identity.company:read", "identity.member:read", "identity.member:manage", "identity.role:read", "sales.order:*"},
+		"permissions": []string{"organization.company:read", "identity.member:read", "identity.member:manage", "identity.role:read", "sales.order:*"},
 	}), 200, "owner widen hr role")
 	a.expect(a.do("PUT", base+"/members/"+staffID+"/roles", hr, map[string]any{"role_ids": []string{hrRole}}), 200, "hr promote staff to hr")
 
 	// ระงับ staff แล้วเข้าไม่ได้ทันที (token เดิมยังใช้ได้ แต่สิทธิ์ resolve จาก DB)
-	a.expect(a.do("POST", base+"/members/"+staffID+"/suspend", hr, nil), 204, "suspend staff")
+	a.expect(a.do("PATCH", base+"/members/"+staffID, hr, map[string]any{"status": "deleted"}), 400, "invalid member status")
+	a.expect(a.do("PATCH", base+"/members/"+staffID, hr, suspended), 200, "suspend staff")
 	a.expect(a.do("GET", base+"/access", staff, nil), 403, "suspended staff access")
-	a.expect(a.do("POST", base+"/members/"+staffID+"/activate", hr, nil), 204, "activate staff")
+	a.expect(a.do("PATCH", base+"/members/"+staffID, hr, map[string]any{"status": "active"}), 200, "activate staff")
 	a.expect(a.do("GET", base+"/access", staff, nil), 200, "reactivated staff access")
 
 	// role
@@ -188,33 +203,30 @@ func TestMultiCompanyAccessFlow(t *testing.T) {
 		t.Fatalf("first role should be system owner, got %v", ownerRole)
 	}
 	a.expect(a.do("PUT", base+"/roles/"+ownerRole["id"].(string), owner, map[string]any{"name": "Boss", "permissions": []string{}}), 422, "edit owner role")
-	upd := a.expect(a.do("PUT", base+"/roles/"+salesRole, owner, map[string]any{"name": "Sales Team", "permissions": []string{"sales.order:read"}}), 200, "update sales role").data()
-	if got := toStrings(upd["permissions"].([]any)); !slices.Equal(got, []string{"sales.order:read"}) {
-		t.Fatalf("updated permissions = %v", got)
-	}
-	a.expect(a.do("DELETE", base+"/roles/"+salesRole, owner, nil), 204, "delete unused sales role")
-
-	// บริษัท — timestamp ถูกจัดการโดย gorm (domain ไม่รู้จัก created_at/updated_at)
-	before := a.companyTimestamps(compA)
+	// timestamp ถูกจัดการโดย gorm (domain ไม่รู้จัก created_at/updated_at)
+	before := a.roleTimestamps(salesRole)
 	time.Sleep(20 * time.Millisecond)
-	a.expect(a.do("PUT", base, owner, map[string]any{"name": "ACME Thailand", "tax_id": ""}), 200, "owner update company")
-	after := a.companyTimestamps(compA)
+	upd := a.expect(a.do("PUT", base+"/roles/"+salesRole, owner, map[string]any{"name": "Sales Team", "permissions": []string{"sales.order:read"}}), 200, "update sales role").data()
+	after := a.roleTimestamps(salesRole)
 	if before.CreatedAt.IsZero() || !after.CreatedAt.Equal(before.CreatedAt) {
 		t.Fatalf("created_at should be set once and never change: before=%v after=%v", before.CreatedAt, after.CreatedAt)
 	}
 	if !after.UpdatedAt.After(before.UpdatedAt) {
 		t.Fatalf("updated_at should move forward on update: before=%v after=%v", before.UpdatedAt, after.UpdatedAt)
 	}
-	a.expect(a.do("PUT", base, hr, map[string]any{"name": "Hacked"}), 403, "hr update company")
-	a.expect(a.do("GET", "/api/v1/companies/not-a-uuid", owner, nil), 400, "bad company id")
+	if got := toStrings(upd["permissions"].([]any)); !slices.Equal(got, []string{"sales.order:read"}) {
+		t.Fatalf("updated permissions = %v", got)
+	}
+	a.expect(a.do("DELETE", base+"/roles/"+salesRole, owner, nil), 204, "delete unused sales role")
+	a.expect(a.do("GET", "/api/v1/companies/not-a-uuid/access", owner, nil), 400, "bad company id")
 }
 
 type timestamps struct{ CreatedAt, UpdatedAt time.Time }
 
-func (a api) companyTimestamps(id string) timestamps {
+func (a api) roleTimestamps(id string) timestamps {
 	a.t.Helper()
 	var ts timestamps
-	if err := a.db.Raw("SELECT created_at, updated_at FROM identity_companies WHERE id = ?", id).Scan(&ts).Error; err != nil {
+	if err := a.db.Raw("SELECT created_at, updated_at FROM identity_roles WHERE id = ?", id).Scan(&ts).Error; err != nil {
 		a.t.Fatal(err)
 	}
 	return ts
@@ -226,4 +238,168 @@ func toStrings(in []any) []string {
 		out[i] = v.(string)
 	}
 	return out
+}
+
+// TestListSearchViaURLQuery: การค้นหา/กรอง/เรียง/แบ่งหน้าผ่าน URL query
+// frontend ส่ง query ของหน้าเดิมมาตรงๆ ต้องได้ผลเหมือนเดิมทุกครั้ง (กด Back แล้วได้หน้าการค้นหาเดิม)
+func TestListSearchViaURLQuery(t *testing.T) {
+	a := setup(t)
+	a.register("owner@example.com", "Owner")
+	for _, n := range []string{"Somchai", "Somsak", "Malee", "Niran_x"} {
+		a.register(strings.ToLower(n)+"@example.com", n)
+	}
+	owner := a.login("owner@example.com")
+	compA := a.createCompany(owner)
+	base := "/api/v1/companies/" + compA
+	sales := a.expect(a.do("POST", base+"/roles", owner, map[string]any{"code": "sales", "name": "Sales", "permissions": []string{"sales.order:*"}}), 201, "role").data()["id"].(string)
+	for _, n := range []string{"somchai", "somsak", "malee", "niran_x"} {
+		a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": n + "@example.com", "role_ids": []string{sales}}), 201, "add "+n)
+	}
+	maleeID := ""
+	for _, m := range a.expect(a.do("GET", base+"/members?q=malee", owner, nil), 200, "find malee").list() {
+		maleeID = m.(map[string]any)["user"].(map[string]any)["id"].(string)
+	}
+	a.expect(a.do("PATCH", base+"/members/"+maleeID, owner, map[string]any{"status": "suspended"}), 200, "suspend malee")
+
+	names := func(r resp) []string {
+		var out []string
+		for _, m := range r.list() {
+			out = append(out, m.(map[string]any)["user"].(map[string]any)["name"].(string))
+		}
+		return out
+	}
+
+	// ค่าเริ่มต้น: เรียงตามชื่อ, หน้า 1, 20 ต่อหน้า
+	r := a.expect(a.do("GET", base+"/members", owner, nil), 200, "list members")
+	if got := names(r); !slices.Equal(got, []string{"Malee", "Niran_x", "Owner", "Somchai", "Somsak"}) || r.total() != 5 {
+		t.Fatalf("default list = %v total=%d", got, r.total())
+	}
+	meta := r.body["meta"].(map[string]any)
+	if meta["page"].(float64) != 1 || meta["page_size"].(float64) != 20 {
+		t.Fatalf("meta = %v", meta)
+	}
+
+	// ค้นหาข้อความ (ไม่สนตัวพิมพ์) + เรียงมากไปน้อย
+	if got := names(a.expect(a.do("GET", base+"/members?q=SOM&sort=-name", owner, nil), 200, "search som")); !slices.Equal(got, []string{"Somsak", "Somchai"}) {
+		t.Fatalf("q=SOM = %v", got)
+	}
+	// "_" ต้องถูกค้นแบบตรงตัว ไม่ใช่ wildcard
+	if got := names(a.expect(a.do("GET", base+"/members?q=n_x", owner, nil), 200, "search underscore")); !slices.Equal(got, []string{"Niran_x"}) {
+		t.Fatalf("q=n_x = %v", got)
+	}
+	// filter หลายค่า + filter ตาม role
+	if got := names(a.expect(a.do("GET", base+"/members?status=suspended", owner, nil), 200, "status")); !slices.Equal(got, []string{"Malee"}) {
+		t.Fatalf("status=suspended = %v", got)
+	}
+	if r := a.expect(a.do("GET", base+"/members?status=active,suspended&role_id="+sales, owner, nil), 200, "role filter"); r.total() != 4 {
+		t.Fatalf("role_id filter total = %d, want 4", r.total())
+	}
+
+	// แบ่งหน้าใน DB: total คงที่, หน้าไม่ซ้ำกัน, หน้าเกินข้อมูลยังได้ total ถูก
+	p1 := a.expect(a.do("GET", base+"/members?page_size=2&page=1", owner, nil), 200, "page 1")
+	p3 := a.expect(a.do("GET", base+"/members?page_size=2&page=3", owner, nil), 200, "page 3")
+	p9 := a.expect(a.do("GET", base+"/members?page_size=2&page=9", owner, nil), 200, "page 9")
+	if !slices.Equal(names(p1), []string{"Malee", "Niran_x"}) || !slices.Equal(names(p3), []string{"Somsak"}) {
+		t.Fatalf("pages = %v / %v", names(p1), names(p3))
+	}
+	if len(p9.list()) != 0 || p9.total() != 5 || p1.total() != 5 {
+		t.Fatalf("page 9 = %v total=%d", p9.list(), p9.total())
+	}
+
+	// query parameter ที่ผิด -> 400, ที่ไม่รู้จัก -> เพิกเฉย
+	for _, bad := range []string{"page=0", "page_size=101", "sort=password_hash", "status=deleted", "role_id=x"} {
+		a.expect(a.do("GET", base+"/members?"+bad, owner, nil), 400, "bad query "+bad)
+	}
+	a.expect(a.do("GET", base+"/members?utm_source=mail", owner, nil), 200, "unknown param ignored")
+
+	// roles ใช้รูปแบบเดียวกัน (me/companies อยู่ที่ organization module)
+	if r := a.expect(a.do("GET", base+"/roles?is_system=false", owner, nil), 200, "roles"); r.total() != 1 {
+		t.Fatalf("non-system roles = %d", r.total())
+	}
+	if r := a.expect(a.do("GET", base+"/roles?q=own", owner, nil), 200, "roles q"); r.total() != 1 || r.list()[0].(map[string]any)["code"] != "owner" {
+		t.Fatalf("roles q=own = %v", r.list())
+	}
+}
+
+// TestSeedUser: ผู้ดูแลระบบเริ่มต้น (INITIAL_ADMIN_*) ถูกสร้างครั้งเดียว — เริ่มโปรแกรมใหม่ไม่สร้างซ้ำ / ไม่รีเซ็ตรหัสผ่าน
+func TestSeedUser(t *testing.T) {
+	a := setup(t)
+	ctx := context.Background()
+
+	created, err := a.mod.SeedUser(ctx, "Admin@Example.com", "Administrator", "admin-pass-123")
+	if err != nil || !created {
+		t.Fatalf("first seed: created=%v err=%v", created, err)
+	}
+	r := a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "admin-pass-123"}), 201, "admin login")
+	if u := r.data()["user"].(map[string]any); u["name"] != "Administrator" || u["status"] != "active" {
+		t.Fatalf("admin = %v", u)
+	}
+
+	created, err = a.mod.SeedUser(ctx, "admin@example.com", "Administrator", "changed-pass-456")
+	if err != nil || created {
+		t.Fatalf("second seed: created=%v err=%v", created, err)
+	}
+	a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "admin-pass-123"}), 201, "old password still works")
+	a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "admin@example.com", "password": "changed-pass-456"}), 401, "password not reset")
+
+	if _, err := a.mod.SeedUser(ctx, "ADMIN_USERNAME", "Administrator", "admin-pass-123"); err == nil {
+		t.Fatal("placeholder username (not an email) must be rejected")
+	}
+	if _, err := a.mod.SeedUser(ctx, "other@example.com", "Administrator", "short"); err == nil {
+		t.Fatal("short password must be rejected")
+	}
+}
+
+// ผู้ดูแลบริษัทสร้างบัญชีให้พนักงานที่ยังไม่มีบัญชี (รหัสผ่านชั่วคราว) แล้วพนักงานต้องเปลี่ยนรหัสผ่านก่อนใช้งานบริษัท
+func TestAddMemberWithNewAccount(t *testing.T) {
+	a := setup(t)
+	a.register("owner@example.com", "Owner")
+	a.register("existing@example.com", "Existing")
+	owner := a.login("owner@example.com")
+	base := "/api/v1/companies/" + a.createCompany(owner)
+	role := a.expect(a.do("POST", base+"/roles", owner, map[string]any{
+		"code": "viewer", "name": "Viewer", "permissions": []string{"identity.member:read"},
+	}), 201, "create role").data()["id"].(string)
+
+	// ไม่พบบัญชี และไม่ได้ขอสร้าง = 404 (frontend แสดงช่องสร้างบัญชี)
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "new@example.com", "role_ids": []string{role}}), 404, "unknown email")
+
+	newUser := map[string]any{"name": "New Staff", "password": "temp-pass-123"}
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "new@example.com", "role_ids": []string{role}, "new_user": map[string]any{"name": "x", "password": "short"}}), 400, "weak temp password")
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "New@Example.com", "role_ids": []string{role}, "new_user": newUser}), 201, "add with new account")
+	// มีบัญชีอยู่แล้ว = ไม่ตั้งรหัสผ่านทับ
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "existing@example.com", "role_ids": []string{role}, "new_user": newUser}), 409, "new_user for existing email")
+
+	login := a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "new@example.com", "password": "temp-pass-123"}), 201, "login with temp password")
+	if u := login.data()["user"].(map[string]any); u["must_change_password"] != true || u["name"] != "New Staff" {
+		t.Fatalf("new user = %v", u)
+	}
+	staff := login.data()["access_token"].(string)
+	newID := login.data()["user"].(map[string]any)["id"].(string)
+
+	// ผู้ดูแลเห็นสมาชิกใหม่ว่า "รอเปลี่ยนรหัสผ่าน" และเปิดหน้าสมาชิก / บทบาทรายตัวได้
+	if m := a.expect(a.do("GET", base+"/members/"+newID, owner, nil), 200, "get member").data(); m["user"].(map[string]any)["must_change_password"] != true || len(m["role_ids"].([]any)) != 1 {
+		t.Fatalf("member = %v", m)
+	}
+	a.expect(a.do("GET", base+"/members/"+uuid.NewString(), owner, nil), 404, "get non-member")
+	if r := a.expect(a.do("GET", base+"/roles/"+role, owner, nil), 200, "get role").data(); r["code"] != "viewer" {
+		t.Fatalf("role = %v", r)
+	}
+	a.expect(a.do("GET", base+"/roles/"+uuid.NewString(), owner, nil), 404, "get unknown role")
+
+	// ยังไม่เปลี่ยนรหัสผ่าน: เข้าข้อมูลบริษัทไม่ได้ แต่ดู / เปลี่ยนข้อมูลตัวเองได้
+	if r := a.expect(a.do("GET", base+"/members", staff, nil), 403, "before password change"); r.body["error"].(map[string]any)["code"] != "password_change_required" {
+		t.Fatalf("error = %v", r.body)
+	}
+	ok, err := a.mod.Authorize(context.Background(), uuid.MustParse(login.data()["user"].(map[string]any)["id"].(string)), uuid.MustParse(base[len("/api/v1/companies/"):]), "identity.member:read")
+	if err != nil || ok {
+		t.Fatalf("facade authorize before change = %v %v", ok, err)
+	}
+	a.expect(a.do("GET", "/api/v1/me", staff, nil), 200, "me before change")
+	a.expect(a.do("PUT", "/api/v1/me/password", staff, map[string]any{"old_password": "temp-pass-123", "new_password": "my-own-pass-1"}), 204, "change password")
+
+	if me := a.expect(a.do("GET", "/api/v1/me", staff, nil), 200, "me after change").data(); me["must_change_password"] != false {
+		t.Fatalf("me = %v", me)
+	}
+	a.expect(a.do("GET", base+"/members", staff, nil), 200, "after password change")
 }

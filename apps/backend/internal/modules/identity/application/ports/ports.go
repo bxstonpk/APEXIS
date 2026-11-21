@@ -1,18 +1,19 @@
 // Package ports คือ interface ที่ application ต้องการจากโลกภายนอก
-// (นอกเหนือจาก repository ที่ domain กำหนด) — implementation อยู่ใน infrastructure
+// implementation อยู่ใน infrastructure (repository อยู่ใน ports/repositories)
 package ports
 
 import (
 	"context"
 	"time"
 
-	"account/backend/internal/modules/identity/domain/events"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	"apexis/backend/internal/modules/identity/domain/events"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
-// TxManager: repository ทุกตัวที่ถูกเรียกภายใน fn จะใช้ transaction เดียวกันผ่าน ctx
-type TxManager interface {
-	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
+// TransactionManager: repository ทุกตัวที่ถูกเรียกภายใน fn จะใช้ transaction เดียวกันผ่าน ctx
+// ถ้า fn คืน error จะ rollback ทั้งหมด
+type TransactionManager interface {
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type PasswordHasher interface {

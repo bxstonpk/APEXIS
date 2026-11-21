@@ -1,0 +1,323 @@
+// Package gormpersistence คือ adapter ระหว่าง domain กับ gorm ของ purchasing
+//   - mapper.go       แปลง domain <-> gorm model (ที่เดียวที่รู้จักทั้งสองฝั่ง)
+//   - transaction.go  implement ports.TransactionManager
+//   - models/         รูปร่างตาราง
+//   - repositories/   implement application/ports/repositories
+package gormpersistence
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+
+	"apexis/backend/internal/modules/purchasing/domain/entities"
+	"apexis/backend/internal/modules/purchasing/domain/services"
+	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
+	"apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/models"
+)
+
+func OptUUID[T ~[16]byte](id *T) *uuid.UUID {
+	if id == nil {
+		return nil
+	}
+	u := uuid.UUID(*id)
+	return &u
+}
+
+func OptID[T ~[16]byte](u *uuid.UUID) *T {
+	if u == nil {
+		return nil
+	}
+	id := T(*u)
+	return &id
+}
+
+// DateUTC: คอลัมน์ date อ่านกลับมาอาจมี location ของ driver — แปลงเป็นเที่ยงคืน UTC ตามข้อตกลงของ domain
+func DateUTC(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func optDate(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	d := DateUTC(*t)
+	return &d
+}
+
+// ---------- ค่าตั้ง / ผู้ขาย ----------
+
+func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.SettingsModel {
+	return models.SettingsModel{
+		CompanyID: uuid.UUID(companyID), VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
+		GRIRAccountID: OptUUID(s.GRIRAccountID), APAccountID: OptUUID(s.APAccountID),
+		InputVatAccountID: OptUUID(s.InputVatAccountID), PriceVarianceAccountID: OptUUID(s.PriceVarianceAccountID),
+		WhtPnd3AccountID: OptUUID(s.WhtPnd3AccountID), WhtPnd53AccountID: OptUUID(s.WhtPnd53AccountID),
+	}
+}
+
+func SettingsToEntity(m models.SettingsModel) entities.Settings {
+	return entities.Settings{
+		VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
+		GRIRAccountID: OptID[vo.AccountID](m.GRIRAccountID), APAccountID: OptID[vo.AccountID](m.APAccountID),
+		InputVatAccountID: OptID[vo.AccountID](m.InputVatAccountID), PriceVarianceAccountID: OptID[vo.AccountID](m.PriceVarianceAccountID),
+		WhtPnd3AccountID: OptID[vo.AccountID](m.WhtPnd3AccountID), WhtPnd53AccountID: OptID[vo.AccountID](m.WhtPnd53AccountID),
+	}
+}
+
+func SupplierToModel(s *entities.Supplier) models.SupplierModel {
+	d := s.Data()
+	return models.SupplierModel{
+		ID: uuid.UUID(s.ID()), CompanyID: uuid.UUID(s.CompanyID()), Code: d.Code, Name: d.Name, TaxID: d.TaxID,
+		BranchNo: d.BranchNo, Address: d.Address, PaymentTermDays: d.PaymentTermDays, VatRegistered: d.VatRegistered, TaxType: string(d.TaxType),
+		Status: string(d.Status),
+	}
+}
+
+func SupplierToEntity(m models.SupplierModel) *entities.Supplier {
+	return entities.RehydrateSupplier(vo.SupplierID(m.ID), vo.CompanyID(m.CompanyID), entities.SupplierData{
+		Code: m.Code, Name: m.Name, TaxID: m.TaxID, BranchNo: m.BranchNo, Address: m.Address,
+		PaymentTermDays: m.PaymentTermDays, VatRegistered: m.VatRegistered, TaxType: vo.TaxType(m.TaxType), Status: vo.Status(m.Status),
+	})
+}
+
+// ---------- ใบสั่งซื้อ ----------
+
+func OrderToModel(o *entities.Order) models.OrderModel {
+	s := o.State()
+	m := models.OrderModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), SupplierID: uuid.UUID(s.Data.SupplierID),
+		OrderDate: s.Data.Date, DeliveryDate: s.Data.DeliveryDate, Reference: s.Data.Reference, Description: s.Data.Description,
+		VatRegistered: s.Terms.Vat.Registered, VatRate: s.Terms.Vat.Rate, PriceIncludesVat: s.Terms.Vat.Inclusive,
+		PaymentTermDays: s.Terms.PaymentTermDays, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
+		Status: string(s.Status), CreatedBy: uuid.UUID(s.CreatedBy),
+	}
+	if a := s.Approval; a != nil {
+		no, year, by, at := a.OrderNo, a.FiscalYear, uuid.UUID(a.By), a.At
+		m.OrderNo, m.FiscalYear, m.ApprovedBy, m.ApprovedAt = &no, &year, &by, &at
+	}
+	if c := s.Closure; c != nil {
+		at := c.At
+		m.ClosedBy, m.ClosedAt = OptUUID(c.By), &at
+	}
+	if c := s.Cancellation; c != nil {
+		by, at := uuid.UUID(c.By), c.At
+		m.CancelledBy, m.CancelledAt = &by, &at
+	}
+	m.Lines = make([]models.OrderLineModel, len(s.Data.Lines))
+	for i, l := range s.Data.Lines {
+		p, a := s.Progress[i], s.Amounts[i]
+		m.Lines[i] = models.OrderLineModel{
+			OrderID: m.ID, LineNo: i + 1, ItemID: uuid.UUID(l.ItemID), Description: l.Description, Quantity: l.Quantity,
+			UnitPrice: l.UnitPrice, Net: a.Net, Vat: a.Vat, Gross: a.Gross, ReceivedQty: p.Received, InvoicedQty: p.Invoiced,
+			ReceivedValue: p.ReceivedValue, ClearedValue: p.ClearedValue,
+		}
+	}
+	return m
+}
+
+func OrderToEntity(m models.OrderModel) *entities.Order {
+	s := entities.OrderState{
+		ID: vo.OrderID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Status: vo.OrderStatus(m.Status), CreatedBy: vo.UserID(m.CreatedBy),
+		Data: entities.OrderData{
+			SupplierID: vo.SupplierID(m.SupplierID), Date: DateUTC(m.OrderDate), DeliveryDate: optDate(m.DeliveryDate),
+			Reference: m.Reference, Description: m.Description, PriceIncludesVat: m.PriceIncludesVat,
+			Lines: make([]entities.OrderLineData, len(m.Lines)),
+		},
+		Terms: entities.Terms{
+			Vat:             services.VatTerms{Registered: m.VatRegistered, Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+			PaymentTermDays: m.PaymentTermDays,
+		},
+		Totals:   services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross},
+		Amounts:  make([]services.Amounts, len(m.Lines)),
+		Progress: make([]entities.Progress, len(m.Lines)),
+	}
+	if m.OrderNo != nil && m.FiscalYear != nil && m.ApprovedBy != nil && m.ApprovedAt != nil {
+		s.Approval = &entities.Approval{OrderNo: *m.OrderNo, FiscalYear: *m.FiscalYear, By: vo.UserID(*m.ApprovedBy), At: *m.ApprovedAt}
+	}
+	if m.ClosedAt != nil {
+		s.Closure = &entities.Closure{By: OptID[vo.UserID](m.ClosedBy), At: *m.ClosedAt}
+	}
+	if m.CancelledBy != nil && m.CancelledAt != nil {
+		s.Cancellation = &entities.Cancellation{By: vo.UserID(*m.CancelledBy), At: *m.CancelledAt}
+	}
+	for i, l := range m.Lines {
+		s.Data.Lines[i] = entities.OrderLineData{ItemID: vo.ItemID(l.ItemID), Description: l.Description, Quantity: l.Quantity, UnitPrice: l.UnitPrice}
+		s.Amounts[i] = services.Amounts{Net: l.Net, Vat: l.Vat, Gross: l.Gross}
+		s.Progress[i] = entities.Progress{Received: l.ReceivedQty, Invoiced: l.InvoicedQty, ReceivedValue: l.ReceivedValue, ClearedValue: l.ClearedValue}
+	}
+	return entities.RehydrateOrder(s)
+}
+
+// ---------- ใบรับสินค้า / ใบแจ้งหนี้ ----------
+
+func cancellation(c *entities.Cancellation) (*uuid.UUID, *time.Time) {
+	if c == nil {
+		return nil, nil
+	}
+	by, at := uuid.UUID(c.By), c.At
+	return &by, &at
+}
+
+func toCancellation(by *uuid.UUID, at *time.Time) *entities.Cancellation {
+	if by == nil || at == nil {
+		return nil
+	}
+	return &entities.Cancellation{By: vo.UserID(*by), At: *at}
+}
+
+func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
+	s := r.State()
+	m := models.ReceiptModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
+		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), OrderID: uuid.UUID(s.OrderID), SupplierID: uuid.UUID(s.SupplierID),
+		ReceiptDate: s.Date, WarehouseID: OptUUID(s.WarehouseID), Reference: s.Reference, Description: s.Description,
+		System: string(s.System), StockDocumentID: OptUUID(s.StockDocumentID), StockDocumentNo: s.StockDocumentNo,
+		TotalValue: decimal.Zero, EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
+		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
+	}
+	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
+	m.Lines = make([]models.ReceiptLineModel, len(s.Lines))
+	for i, l := range s.Lines {
+		m.TotalValue = m.TotalValue.Add(l.Value)
+		m.Lines[i] = models.ReceiptLineModel{
+			ReceiptID: m.ID, LineNo: i + 1, OrderLineNo: l.OrderLineNo, ItemID: uuid.UUID(l.ItemID), Stock: l.Stock,
+			Quantity: l.Quantity, UnitCost: l.UnitCost, Value: l.Value, AccountID: uuid.UUID(l.AccountID),
+		}
+	}
+	return m
+}
+
+func ReceiptToEntity(m models.ReceiptModel) *entities.Receipt {
+	s := entities.ReceiptState{
+		ID: vo.ReceiptID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), SupplierID: vo.SupplierID(m.SupplierID),
+		Date: DateUTC(m.ReceiptDate), WarehouseID: OptID[vo.WarehouseID](m.WarehouseID), Reference: m.Reference,
+		Description: m.Description, System: vo.AccountingSystem(m.System), StockDocumentID: OptID[vo.StockDocumentID](m.StockDocumentID),
+		StockDocumentNo: m.StockDocumentNo, Status: vo.DocStatus(m.Status), Lines: make([]entities.ReceiptLine, len(m.Lines)),
+		Posting: entities.Posting{
+			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
+			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
+		},
+		Cancellation: toCancellation(m.CancelledBy, m.CancelledAt),
+	}
+	for i, l := range m.Lines {
+		s.Lines[i] = entities.ReceiptLine{
+			OrderLineNo: l.OrderLineNo, ItemID: vo.ItemID(l.ItemID), Stock: l.Stock, Quantity: l.Quantity,
+			UnitCost: l.UnitCost, Value: l.Value, AccountID: vo.AccountID(l.AccountID),
+		}
+	}
+	return entities.RehydrateReceipt(s)
+}
+
+func InvoiceToModel(inv *entities.Invoice) models.InvoiceModel {
+	s := inv.State()
+	m := models.InvoiceModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
+		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), OrderID: uuid.UUID(s.OrderID), SupplierID: uuid.UUID(s.SupplierID),
+		SupplierInvoiceNo: s.SupplierInvoiceNo, InvoiceDate: s.InvoiceDate, PostingDate: s.Date, DueDate: s.DueDate,
+		Description: s.Description, VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive,
+		TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross, PaidAmount: s.Paid,
+		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
+		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
+	}
+	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
+	m.Lines = make([]models.InvoiceLineModel, len(s.Lines))
+	for i, l := range s.Lines {
+		m.Lines[i] = models.InvoiceLineModel{
+			InvoiceID: m.ID, LineNo: i + 1, OrderLineNo: l.OrderLineNo, ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity,
+			UnitPrice: l.UnitPrice, Net: l.Amounts.Net, Vat: l.Amounts.Vat, Gross: l.Amounts.Gross, Cleared: l.Cleared,
+			VarianceAccountID: OptUUID(l.VarianceAccountID),
+		}
+	}
+	return m
+}
+
+func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
+	s := entities.InvoiceState{
+		ID: vo.InvoiceID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), SupplierID: vo.SupplierID(m.SupplierID),
+		SupplierInvoiceNo: m.SupplierInvoiceNo, InvoiceDate: DateUTC(m.InvoiceDate), Date: DateUTC(m.PostingDate),
+		DueDate: DateUTC(m.DueDate), Description: m.Description,
+		Vat:    services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+		Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross}, Paid: m.PaidAmount,
+		Status: vo.DocStatus(m.Status), Lines: make([]entities.InvoiceLine, len(m.Lines)),
+		Posting: entities.Posting{
+			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
+			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
+		},
+		Cancellation: toCancellation(m.CancelledBy, m.CancelledAt),
+	}
+	for i, l := range m.Lines {
+		s.Lines[i] = entities.InvoiceLine{
+			OrderLineNo: l.OrderLineNo, ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			Amounts: services.Amounts{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, Cleared: l.Cleared,
+			VarianceAccountID: OptID[vo.AccountID](l.VarianceAccountID),
+		}
+	}
+	return entities.RehydrateInvoice(s)
+}
+
+// ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่าย ----------
+
+func WhtTypeToModel(w *entities.WhtType) models.WhtTypeModel {
+	d := w.Data()
+	return models.WhtTypeModel{ID: uuid.UUID(w.ID()), CompanyID: uuid.UUID(w.CompanyID()), Code: d.Code, Name: d.Name, Rate: d.Rate, Status: string(d.Status)}
+}
+
+func WhtTypeToEntity(m models.WhtTypeModel) *entities.WhtType {
+	return entities.RehydrateWhtType(vo.WhtTypeID(m.ID), vo.CompanyID(m.CompanyID), entities.WhtTypeData{
+		Code: m.Code, Name: m.Name, Rate: m.Rate, Status: vo.Status(m.Status),
+	})
+}
+
+func PaymentToModel(p *entities.Payment) models.PaymentModel {
+	s := p.State()
+	m := models.PaymentModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
+		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), SupplierID: uuid.UUID(s.SupplierID), TaxType: string(s.TaxType),
+		PaymentDate: s.Date, Description: s.Description, TotalAmount: s.Totals.Amount, TotalWht: s.Totals.Wht, TotalPaid: s.Totals.Paid,
+		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
+		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
+		Lines: make([]models.PaymentLineModel, len(s.Lines)), Methods: make([]models.PaymentMethodModel, len(s.Methods)),
+	}
+	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
+	for i, l := range s.Lines {
+		m.Lines[i] = models.PaymentLineModel{
+			PaymentID: m.ID, LineNo: i + 1, InvoiceID: uuid.UUID(l.InvoiceID), Amount: l.Amount, WhtTypeID: OptUUID(l.WhtTypeID),
+			WhtRate: l.WhtRate, WhtBase: l.WhtBase, Wht: l.Wht,
+		}
+	}
+	for i, x := range s.Methods {
+		m.Methods[i] = models.PaymentMethodModel{
+			PaymentID: m.ID, LineNo: i + 1, CashAccountID: uuid.UUID(x.CashAccountID), GLAccountID: uuid.UUID(x.GLAccountID),
+			Amount: x.Amount, Reference: x.Reference,
+		}
+	}
+	return m
+}
+
+func PaymentToEntity(m models.PaymentModel) *entities.Payment {
+	s := entities.PaymentState{
+		ID: vo.PaymentID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), SupplierID: vo.SupplierID(m.SupplierID), TaxType: vo.TaxType(m.TaxType),
+		Date: DateUTC(m.PaymentDate), Description: m.Description, Status: vo.DocStatus(m.Status),
+		Totals: entities.PaymentTotals{Amount: m.TotalAmount, Wht: m.TotalWht, Paid: m.TotalPaid},
+		Lines:  make([]entities.PaymentLine, len(m.Lines)), Methods: make([]entities.PaymentMethod, len(m.Methods)),
+		Posting: entities.Posting{
+			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
+			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
+		},
+		Cancellation: toCancellation(m.CancelledBy, m.CancelledAt),
+	}
+	for i, l := range m.Lines {
+		s.Lines[i] = entities.PaymentLine{
+			InvoiceID: vo.InvoiceID(l.InvoiceID), Amount: l.Amount, WhtTypeID: OptID[vo.WhtTypeID](l.WhtTypeID),
+			WhtRate: l.WhtRate, WhtBase: l.WhtBase, Wht: l.Wht,
+		}
+	}
+	for i, x := range m.Methods {
+		s.Methods[i] = entities.PaymentMethod{
+			CashAccountID: vo.CashAccountID(x.CashAccountID), GLAccountID: vo.AccountID(x.GLAccountID), Amount: x.Amount, Reference: x.Reference,
+		}
+	}
+	return entities.RehydratePayment(s)
+}

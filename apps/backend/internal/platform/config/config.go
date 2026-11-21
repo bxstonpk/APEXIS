@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"account/backend/internal/platform/database"
+	"apexis/backend/internal/platform/database"
 )
 
 type Config struct {
@@ -18,6 +18,13 @@ type Config struct {
 	JWTSecret string
 	JWTTTL    time.Duration
 	JWTIssuer string
+	// InitialAdmin คือผู้ใช้ที่สร้างตอนเริ่มโปรแกรมถ้ายังไม่มี (ว่างทั้งคู่ = ไม่ seed)
+	InitialAdmin InitialAdmin
+}
+
+type InitialAdmin struct {
+	Email    string // INITIAL_ADMIN_USERNAME — ระบบเข้าสู่ระบบด้วยอีเมล จึงต้องเป็นอีเมล
+	Password string // INITIAL_ADMIN_PASSWORD — 8-72 ตัวอักษร
 }
 
 func Load() (Config, error) {
@@ -39,6 +46,13 @@ func Load() (Config, error) {
 		JWTSecret: env("JWT_SECRET", ""),
 		JWTTTL:    ttl,
 		JWTIssuer: env("JWT_ISSUER", "erp-api"),
+		InitialAdmin: InitialAdmin{
+			Email:    strings.TrimSpace(env("INITIAL_ADMIN_USERNAME", "")),
+			Password: env("INITIAL_ADMIN_PASSWORD", ""),
+		},
+	}
+	if (cfg.InitialAdmin.Email == "") != (cfg.InitialAdmin.Password == "") {
+		return Config{}, errors.New("config: INITIAL_ADMIN_USERNAME and INITIAL_ADMIN_PASSWORD must be set together")
 	}
 	if cfg.Database.User == "" || cfg.Database.Name == "" {
 		return Config{}, errors.New("config: DATABASE_USER and DATABASE_NAME are required")

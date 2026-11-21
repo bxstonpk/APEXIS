@@ -1,0 +1,143 @@
+# 7. Status & Roadmap
+
+ข้อมูล ณ 2026-11-11 — มี commit เดียว (`first commit`) งานทั้งหมดด้านล่างยังไม่ได้ commit
+
+## 7.1 สถานะตามขั้นของ SDLC
+
+| ขั้น | สถานะ | หลักฐาน |
+|---|---|---|
+| Requirements | 🟡 บางส่วน — ครอบคลุม identity + organization | [01-requirements.md](01-requirements.md) |
+| Design | ✅ สถาปัตยกรรม, DB, API ของสอง module | [02](02-architecture.md), [03](03-database.md), [04](04-api.md), [CLAUDE.md](../CLAUDE.md) |
+| Implementation | 🟡 backend 3 module เสร็จ, frontend มีหน้า login | `apps/backend`, `apps/frontend` |
+| Testing | 🟡 unit + integration ผ่าน, ยังไม่มี CI | [05-testing.md](05-testing.md) |
+| Deployment | ⬜ รันในเครื่องได้, ยังไม่มี pipeline / image | [06-deployment.md](06-deployment.md) |
+| Maintenance | ⬜ ยังไม่เริ่ม | — |
+
+## 7.2 ประวัติการเปลี่ยนแปลง (ยังไม่ commit)
+
+1. **ปรับ identity ให้ตรงสเปก CLAUDE.md**
+   - ย้ายโครงสร้างให้ตรงสเปก (`application/usecases`, `application/ports/repositories`, `domain/value_objects`, `domain/errors`, `infrastructure/persistence/gorm/{mapper,transaction}.go`)
+   - เปลี่ยน route ให้เป็น REST: `POST /users` (สมัคร), `POST /auth/tokens` (ล็อกอิน), `PATCH /members/{userID}` แทน route suspend / activate
+   - list ทั้งหมดรองรับการค้นหา / เรียง / แบ่งหน้าผ่าน URL query
+   - ตรวจสิทธิ์ด้วยคิวรี JOIN เดียว; `GET /members` ลดจาก ~9–10 คิวรีเหลือ 3
+2. **เปลี่ยนชื่อ Go module** เป็น `apexis/backend`
+3. **เพิ่ม platform**: `httpx` (envelope / error mapper), `listing` (URL query), `database/query.go` (`OrderBy`, `FetchPage`)
+4. **สร้าง module organization** — 7 resource ตาม [01-requirements.md §1.4](01-requirements.md)
+5. **ย้ายบริษัทจาก identity มา organization** (ตัดสินใจ 2026-11-11)
+   - ตาราง `identity_companies` + `organization_company_profiles` รวมเป็น `organization_companies`
+   - ตารางอื่นของ organization มี FK มาที่ตารางนี้
+   - `POST /companies`, `GET/PUT /companies/{id}`, `GET /me/companies` ย้ายมา organization
+   - `/companies/{id}/profile` ถูกยกเลิก
+   - identity เหลือแค่ role / สมาชิก / สิทธิ์ และมี facade `ProvisionCompanyOwner`, `MemberCompanyIDs`
+   - permission `identity.company:*` ถูกยกเลิก → ใช้ `organization.company:read|manage`
+6. **งวดบัญชี 12 งวดต่อปี** (ตัดสินใจ 2026-11-11) — ไม่มีงวดที่ 13
+7. **สร้าง module ledger**
+   - ผังบัญชี, สมุดรายวัน, รายการบัญชี (draft → posted → reversed)
+   - รายงาน 4 ชนิดผ่าน `GET /reports?book=` endpoint เดียว
+   - organization เพิ่ม public API ให้ module อื่นใช้: `CompanyActive`, `FiscalPeriodAt` (lock งวด FOR SHARE), `MissingDimensions`
+8. **เริ่ม frontend** (`apps/frontend`)
+   - React 19 + Vite + Tailwind CSS v4 + React Router 7
+   - ข้อความทั้งหมดอยู่ที่ `src/config/locales/th.ts`, design token อยู่ที่ `src/styles/app.css`
+   - หน้า login + หน้าหลักชั่วคราว
+9. **seed ผู้ดูแลระบบ** จาก `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` ตอนเริ่มโปรแกรม (ถ้ายังไม่มี)
+10. **ทศนิยมกำหนดต่อบริษัท** (ตัดสินใจ 2026-11-12)
+    - `organization_companies.amount_decimals` / `quantity_decimals` (0–6, เพิ่มได้ ลดไม่ได้)
+    - ledger เปลี่ยนจากจำนวนเต็มสตางค์ (fix 2 ตำแหน่ง) เป็น decimal + `NUMERIC(24,6)`
+    - JSON ส่งตัวเลขตามค่าจริง (`"1200"` แทน `"1200.00"`)
+    - organization public API: `CompanyActive` → `CompanySettings` (สถานะ + ทศนิยม ใน query เดียว)
+11. **สร้าง module inventory** (ตัดสินใจ 2026-11-12)
+    - ต้นทุน FIFO, ห้ามสต็อกติดลบ, ไม่ลงบัญชีเอง (ซื้อ / ขายเป็นผู้ลง)
+    - หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, รายงาน stock-on-hand / stock-card
+12. **รายงานรวม** `platform/reports`: ledger และ inventory ลงทะเบียน book กับ `GET /reports?book=` เดียว
+13. **ระบบบัญชีสินค้า perpetual / periodic** (ตัดสินใจ 2026-11-21)
+    - ตั้งต่อปีบัญชี; บัญชีซื้อ / สินค้าคงเหลือตามสินค้า → หมวด → ค่าเริ่มต้น
+    - periodic: ปรับปรุงสินค้าคงเหลือสิ้นงวดผ่าน ledger (เทียบมูลค่า FIFO กับยอดในบัญชี)
+14. **สร้าง module purchasing** (ตัดสินใจ 2026-11-21)
+    - VAT ผูกกับผู้ขาย เก็บในใบสั่งซื้อตอนสร้าง (เอกสารที่ตามมายึดใบสั่งซื้อ); อัตรา VAT ตั้งได้ (เริ่มต้น 7%)
+    - ใบสั่งซื้อ (อนุมัติ), ใบรับสินค้า (inventory + ledger ใน transaction เดียว), ใบแจ้งหนี้ (GR/IR, ภาษีซื้อ, ผลต่างราคา)
+    - รายงาน `outstanding-purchase-orders`, `ap-aging`
+    - `platform/integration`: สัญญากลางของการเรียกข้าม module; ledger / inventory มี public API สำหรับลงบัญชี / ออกใบรับเข้า
+15. **เลขที่เอกสารตั้งค่าได้** (ตัดสินใจ 2026-11-21)
+    - `platform/numbering` + `organization_document_numberings`; module ลงทะเบียนชนิดเอกสาร; ledger ตั้งรูปแบบที่สมุดรายวัน
+    - ลำดับเลขเปลี่ยนจาก "ต่อปีบัญชี" เป็น "ต่อคีย์ช่วงนับ" — ข้อมูลเดิมย้ายเป็นคีย์ `F<ปีบัญชี>` (เลขเดิมไม่เปลี่ยน)
+16. **สร้าง module cashbank** และ **ใบจ่ายชำระ + ภาษีหัก ณ ที่จ่าย** ใน purchasing (ตัดสินใจ 2026-11-21)
+    - ผู้ขายมี tax_type (ภ.ง.ด.3 / 53); ประเภทภาษีหัก ณ ที่จ่าย; จ่ายหลายใบแจ้งหนี้ / หลายช่องทาง ลงบัญชีรายการเดียว (1 ผังบัญชี = 1 บรรทัด)
+    - รายงาน `withholding-tax`; `ap-aging` หักยอดจ่ายแล้ว
+17. **สร้าง module sales** (ตัดสินใจ 2026-11-21)
+    - ลูกค้า (วงเงินเครดิต: เตือนตอนอนุมัติ ไม่ห้าม), ใบเสนอราคา → ใบสั่งขาย, ส่งของ / ออกบิลแยกใบหรือรวมใบ, ใบเสร็จ (ถูกหัก ณ ที่จ่าย)
+    - inventory: `PostIssue` (ใบเบิก FIFO ให้ module อื่น), บัญชีรายได้ที่สินค้า / หมวด
+    - รายงาน `outstanding-sales-orders`, `ar-aging`, `output-vat`, `withholding-tax-received`
+18. **ย้าย frontend เป็น Next.js 16** (ตัดสินใจ 2026-11-21) — ดู [08-frontend.md](08-frontend.md)
+    - App Router + `output: 'standalone'` (รันด้วย Node — ไม่ใช่ static file อีกต่อไป)
+    - token เก็บใน HttpOnly cookie ผ่าน route handler `/api/session`; `/api/v1/*` ส่งต่อไป backend พร้อม Bearer
+    - `proxy.ts` กันหน้าที่ต้องเข้าสู่ระบบ; ยกเลิก Vite / React Router / localStorage
+19. **โครงหน้าระบบแบบหน้ารวมแอป** (ตัดสินใจ 2026-11-21) — ไม่ใช้ sidebar
+    - หน้ารวมแอปเป็นไอคอนกลางจอ, กดแล้วเปิดแอปในแท็บใหม่ที่มีเมนูของแอปด้านบน, ปุ่ม ✕ ปิดแท็บกลับหน้ารวมแอป
+    - URL มีบริษัท `/c/{companyId}/...`; เลือก / สร้างบริษัท, จำบริษัทล่าสุด
+    - แอป / เมนูซ่อนตามสิทธิ์จาก `/companies/{id}/access`
+    - หน้าแรกที่ทำจริง: สาขา (รายการ + ค้นหา + เรียง + แบ่งหน้าผ่าน URL, หน้าเพิ่ม / แก้ไข / ลบ) — แม่แบบของหน้าอื่น
+20. **แอปองค์กรครบทุกเมนู** (ตัดสินใจ 2026-11-21)
+    - หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ / ไซต์งาน, ปีบัญชี + ปิด / เปิดงวดทีละงวด, เลขที่เอกสาร (ตัวอย่างทันที), ข้อมูลบริษัท
+    - ช่องเลือกข้อมูลอ้างอิงแบบพิมพ์ค้นหา (`ReferenceSelect`); ลำดับชั้นแสดงเป็นตาราง + กรองตามแม่
+    - backend: `GET /me/companies/{companyID}` — ชื่อบริษัทสำหรับสมาชิกทุกคน (ไม่ต้องมีสิทธิ์อ่านบริษัท)
+21. **แอปผู้ใช้และสิทธิ์** (ตัดสินใจ 2026-11-21)
+    - สมาชิก (เพิ่ม / เปลี่ยนบทบาท / พักใช้งาน), บทบาทพร้อมตารางสิทธิ์จัดกลุ่มตามแอป
+    - backend: `platform/permissions` + `GET /permissions` (ทุก module ลงทะเบียนสิทธิ์ของตัวเอง)
+    - ผู้ดูแลสร้างบัญชีให้ได้ (รหัสผ่านชั่วคราว) — `must_change_password`, API ใต้บริษัทตอบ `password_change_required` จนกว่าจะเปลี่ยน; หน้า `/change-password`
+    - backend: `GET /members/{userID}`, `GET /roles/{roleID}`
+22. **แอปบัญชี** (ตัดสินใจ 2026-11-21)
+    - ผังบัญชีมาตรฐานจากโปรเจกต์ Accounting-Website (245 บัญชี 5 ระดับ, คงชื่อ / คำอธิบายตามต้นฉบับ) — `POST /accounts/defaults` พร้อมสมุด GEN / CRJ / CDJ; หน้าผังบัญชีแบบต้นไม้ตามโปรเจกต์ต้นแบบ
+    - หมวด 6 = ประเภทบัญชีใหม่ `suspense` (บัญชีพัก) — ไม่เข้างบกำไรขาดทุน, งบแสดงฐานะการเงินแสดงแยก
+    - บัญชีมี `description`; `GET /accounts/tree`
+    - รายการบัญชี: มิติวิเคราะห์ซ่อนในแต่ละบรรทัด; รายงานพิมพ์ได้ + ส่งออก CSV
+
+## 7.3 ข้อเบี่ยงเบนจากสเปก / การตัดสินใจที่ควรรู้
+
+| เรื่อง | สิ่งที่ทำ | เหตุผล |
+|---|---|---|
+| `domain/events`, `infrastructure/services` | มีโฟลเดอร์ที่ไม่อยู่ในผังของสเปก | event ของ identity และ adapter (bcrypt, JWT, identity) ไม่เข้ากับโฟลเดอร์อื่น |
+| ชื่อ package `domain/errors` | `domainerrors` (import เป็น `domain`) | กันชนกับ `errors` ของ standard library |
+| FK ข้าม module | `identity_roles` / `identity_memberships` เก็บ `company_id` โดยไม่มี FK ไป `organization_companies` | ให้ module แยก schema ได้; บริษัทกับ owner ถูกสร้างใน transaction เดียวกันเสมอ |
+| `GET /me/companies` ใช้ 2 คิวรี | identity คืน id → organization กรอง / แบ่งหน้า | JOIN ข้าม module ไม่ได้ (สเปก §13 อนุญาตเมื่อมีเหตุผล) |
+| บริษัท inactive | อ่านได้, เขียนข้อมูลของบริษัทไม่ได้ (422), แก้บริษัทเพื่อเปิดกลับได้; จัดการ role / สมาชิกยังได้ | **รอยืนยัน** — เดิมใน identity บริษัท inactive = ห้ามเข้าทุกอย่าง แต่ไม่มีทางเปิดกลับ |
+| ปีบัญชีซ้อนกัน | ตรวจใน application + UNIQUE `(company_id, year)` | ถ้าต้องการกันที่ DB 100% เพิ่ม exclusion constraint (`btree_gist`) ได้ |
+| ลบบริษัท / ลบปีบัญชี | ไม่มี endpoint | ปิดบริษัทด้วย status แทน; ข้อมูลบัญชีไม่ควรหาย |
+| Audit | ยังไม่ทำ | สเปกระบุ "ถ้าจำเป็น" — ledger มี created_by / posted_by / posted_at แต่ยังไม่มีประวัติการแก้ draft |
+| ledger: ปิดบัญชีสิ้นปี | ยังไม่มี — รายงานแยก "กำไรสะสมปีก่อนที่ยังไม่ปิดบัญชี" ให้งบสมดุลแทน | **รอยืนยัน** ว่าต้องการรายการปิดบัญชีจริงหรือไม่ |
+| ledger: สกุลเงิน | สกุลเดียว (สกุลเงินหลักของบริษัท) | ยังไม่รองรับรายการสกุลเงินต่างประเทศ / อัตราแลกเปลี่ยน |
+| ledger: รายงาน | endpoint เดียว `GET /reports?book=…` (ตัดสินใจ 2026-11-11) | หน้ารายงานของ frontend เป็นหน้าเดียว เลือกฟอร์มด้วย `book`; ทุกรายงานใช้ `start_date` / `end_date` ชุดเดียวกัน |
+| ledger: ผังบัญชีเริ่มต้น | ยังไม่มี template ผังบัญชีไทย / สมุดเริ่มต้น (ต้องสร้างเอง) | **รอยืนยัน** ว่าต้องการ template หรือไม่ |
+| ledger: ผ่านรายการ | ~8 query เล็กใน transaction เดียว (สิทธิ์, บริษัท, lock รายการ, สมุด, บัญชี, มิติ, งวด, เลขที่) | แต่ละ query ใช้ index / primary key — ไม่ขึ้นกับจำนวนบรรทัด |
+| ledger: มิติวิเคราะห์ใน response | ส่งเป็น id (ไม่มีชื่อ) | ชื่ออยู่ใน organization — JOIN ข้าม module ไม่ได้; frontend ใช้ master list ที่โหลดไว้ |
+| สิทธิ์ role อื่นนอกจาก owner | ต้องให้ admin กำหนด `organization.*` / `ledger.*` / `inventory.*` เอง | ยังไม่มี role template |
+| inventory: เลขที่เอกสาร | prefix คงที่ GR / GI / TR / AJ ตามชนิด | ยังไม่ได้ทำให้ตั้งค่าได้ (แบบสมุดรายวันของ ledger) |
+| inventory: ยกเลิกเอกสาร | กลับผลที่วันที่เดิมของเอกสาร (งวดต้องเปิด) | เอกสารในงวดที่ปิดแล้วให้ทำใบปรับปรุงแทน |
+| inventory: ยังไม่ทำ | lot / serial, วันหมดอายุ, ชั้นวาง (bin), หลายหน่วยนับต่อสินค้า, ใบตรวจนับ, รายงานจุดสั่งซื้อ | นอกขอบเขตรอบแรก |
+| inventory: สาขาที่คลังอ้างถึง | organization ลบสาขาได้แม้คลังยังอ้างถึง (ไม่รู้จักตารางของ inventory) | id เดิมยังอยู่; ตรวจตอนบันทึกคลังเท่านั้น |
+| inventory: บัญชีที่สินค้า / หมวดอ้างถึง | ตรวจกับ ledger ตอนบันทึก; ledger ปิดใช้บัญชีภายหลังได้ | ใบรับสินค้า / ปิดงวดจะถูก ledger ปฏิเสธ (422) จนกว่าจะแก้บัญชี |
+| inventory: ปิดงวด periodic | ต้องปิดเรียงงวด ยกเลิกย้อนจากงวดล่าสุด | ยอดบัญชีของงวดถัดไปอิงรายการปรับปรุงของงวดก่อน |
+| purchasing: รายการบัญชี | ลงทันทีตอนบันทึกใบรับ / ใบแจ้งหนี้ (ไม่มี draft) | ยกเลิกด้วยการกลับรายการ ณ วันที่เดิม |
+| purchasing: ระบบบัญชีของใบแจ้งหนี้ | ใช้ระบบของปีบัญชีตามวันที่ใบแจ้งหนี้ | กรณีรับปลายปี / แจ้งหนี้ต้นปีถัดไปที่เปลี่ยนระบบ ผลต่างราคาจะลงตามระบบใหม่ |
+| purchasing: ยังไม่ทำ | หนังสือรับรองการหักภาษี (50 ทวิ), ใบลดหนี้ / คืนสินค้า, จ่ายล่วงหน้า, ค่าธรรมเนียมธนาคาร, สกุลเงินต่างประเทศ, รายงานภาษีซื้อ | นอกขอบเขตรอบนี้ |
+| purchasing: ฐานภาษีหัก ณ ที่จ่ายเมื่อจ่ายบางส่วน | ปัดต่อใบจ่ายตามสัดส่วน (จ่ายครบในใบเดียว = ยอดก่อน VAT พอดี) | ผลรวมฐานของหลายใบจ่ายอาจต่างจากยอดก่อน VAT ไม่เกินหน่วยปัดต่อใบ |
+| cashbank: ลบทะเบียน | soft delete ได้แม้เคยใช้ในใบจ่าย (cashbank ไม่รู้จักตารางของ purchasing) | ใบจ่ายเก็บ gl_account_id ณ วันจ่ายไว้แล้ว; แนะนำปิดใช้งานแทน |
+| sales: วงเงินเครดิต | ตรวจเฉพาะตอนอนุมัติใบสั่งขาย (ยอดค้างตามสัดส่วนจำนวนที่ยังไม่ออกบิล); เกิน = `warnings` | ตามที่ตกลง (เตือน ไม่ห้าม); ไม่บันทึกคำเตือนไว้ในเอกสาร |
+| sales: ราคาในใบแจ้งหนี้ | ใช้ราคาตามใบสั่งขายเสมอ | แก้ราคาได้ที่ใบสั่งขายตอนเป็น draft เท่านั้น |
+| sales: ใบกำกับภาษี | แยกใบและรวมใบใช้เลขชุดเดียว (IV) | ใบกำกับภาษีควรเรียงเลขชุดเดียว |
+| sales: ยังไม่ทำ | ใบลดหนี้ / รับคืน, ราคาขายตามลูกค้า, ส่วนลดท้ายบิล, สกุลเงินต่างประเทศ, พิมพ์ฟอร์ม | นอกขอบเขตรอบนี้ |
+| เลขที่เอกสาร: ชนิดเอกสาร | organization รู้แค่ key / ชื่อ / prefix ที่ module ลงทะเบียน (ไม่เก็บลำดับเลข) | ลำดับเลขอยู่ใน transaction ของ module เจ้าของเอกสาร |
+
+## 7.4 งานถัดไป (แนะนำ)
+
+| ลำดับ | งาน |
+|---|---|
+| 1 | commit งานปัจจุบัน (แยก commit: refactor identity / platform / organization / ย้ายบริษัท / docs) |
+| 2 | ยืนยันกฎ "บริษัท inactive = อ่านอย่างเดียว" |
+| 3 | CI (vet + unit + integration กับ Postgres) และ Dockerfile |
+| 4 | Versioned migration แทน AutoMigrate |
+| 5 | Audit log ร่วม (platform) — ใช้ transaction เดียวกับการเขียน |
+| 6 | frontend ต่อ: แอปผู้ใช้และสิทธิ์, บัญชี (ผังบัญชี / รายการบัญชี / รายงาน `?book=`), แล้ว คลังสินค้า / จัดซื้อ / ขาย ตามแม่แบบเดียวกัน |
+| 7 | ledger ต่อ: template ผังบัญชีไทย, การปิดบัญชีสิ้นปี, ตารางยอดสะสมรายงวด (ถ้ารายงานช้าเมื่อข้อมูลโต) |
+| 8 | purchasing ต่อ: หนังสือรับรองการหักภาษี (50 ทวิ), ใบลดหนี้ / คืนสินค้า, รายงานภาษีซื้อ; cashbank: กระทบยอดธนาคาร |
+| 8.1 | sales ต่อ: ใบลดหนี้ / รับคืนสินค้า, ราคาขายตามลูกค้า, ส่วนลดท้ายบิล, พิมพ์ใบกำกับภาษี |
+| 9 | inventory ต่อ: ใบตรวจนับ, รายงานจุดสั่งซื้อ, lot / serial (ถ้าต้องการ) |

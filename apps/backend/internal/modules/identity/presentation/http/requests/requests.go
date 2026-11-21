@@ -1,57 +1,79 @@
-// Package requests คือรูปแบบ JSON ขาเข้า และการแปลงเป็น command ของ application
+// Package requests คือรูปแบบ JSON ขาเข้า / URL query และการแปลงเป็น input ของ use case
+//
+// presentation validation: ตรวจเฉพาะ field ที่ต้องมี, รูปแบบ (UUID, enum), และ query parameter
+// กฎธุรกิจ (ความยาวชื่อ, รูปแบบรหัส, policy รหัสผ่าน ฯลฯ) ตรวจใน domain
 package requests
 
 import (
-	"account/backend/internal/modules/identity/application/commands"
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+
+	"apexis/backend/internal/modules/identity/application/dto"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
+// ErrValidation ถูก wrap พร้อมรายละเอียดที่ปลอดภัยต่อการแสดงให้ client (HTTP 400)
+var ErrValidation = errors.New("validation failed")
+
+func required(fields map[string]string) error {
+	var missing []string
+	for name, val := range fields {
+		if strings.TrimSpace(val) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	slices.Sort(missing)
+	return fmt.Errorf("%w: %s is required", ErrValidation, strings.Join(missing, ", "))
+}
+
+// ---------- auth ----------
+
+// POST /api/v1/users
 type Register struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
 }
 
-func (r Register) ToCommand() commands.RegisterUser {
-	return commands.RegisterUser{Email: r.Email, Name: r.Name, Password: r.Password}
+func (r Register) ToInput() (dto.RegisterUserInput, error) {
+	if err := required(map[string]string{"email": r.Email, "name": r.Name, "password": r.Password}); err != nil {
+		return dto.RegisterUserInput{}, err
+	}
+	return dto.RegisterUserInput{Email: r.Email, Name: r.Name, Password: r.Password}, nil
 }
 
+// POST /api/v1/auth/tokens
 type Login struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-func (r Login) ToCommand() commands.Login {
-	return commands.Login{Email: r.Email, Password: r.Password}
+func (r Login) ToInput() (dto.LoginInput, error) {
+	if err := required(map[string]string{"email": r.Email, "password": r.Password}); err != nil {
+		return dto.LoginInput{}, err
+	}
+	return dto.LoginInput{Email: r.Email, Password: r.Password}, nil
 }
 
+// PUT /api/v1/me/password
 type ChangePassword struct {
 	OldPassword string `json:"old_password"`
 	NewPassword string `json:"new_password"`
 }
 
-func (r ChangePassword) ToCommand(actor vo.UserID) commands.ChangePassword {
-	return commands.ChangePassword{UserID: actor, OldPassword: r.OldPassword, NewPassword: r.NewPassword}
+func (r ChangePassword) ToInput(actor vo.UserID) (dto.ChangePasswordInput, error) {
+	if err := required(map[string]string{"old_password": r.OldPassword, "new_password": r.NewPassword}); err != nil {
+		return dto.ChangePasswordInput{}, err
+	}
+	return dto.ChangePasswordInput{UserID: actor, OldPassword: r.OldPassword, NewPassword: r.NewPassword}, nil
 }
 
-type CreateCompany struct {
-	Code  string `json:"code"`
-	Name  string `json:"name"`
-	TaxID string `json:"tax_id"`
-}
-
-func (r CreateCompany) ToCommand(actor vo.UserID) commands.CreateCompany {
-	return commands.CreateCompany{ActorID: actor, Code: r.Code, Name: r.Name, TaxID: r.TaxID}
-}
-
-type UpdateCompany struct {
-	Name  string `json:"name"`
-	TaxID string `json:"tax_id"`
-}
-
-func (r UpdateCompany) ToCommand(actor vo.UserID, company vo.CompanyID) commands.UpdateCompany {
-	return commands.UpdateCompany{ActorID: actor, CompanyID: company, Name: r.Name, TaxID: r.TaxID}
-}
+// ---------- role ----------
 
 type CreateRole struct {
 	Code        string   `json:"code"`
@@ -60,11 +82,14 @@ type CreateRole struct {
 	Permissions []string `json:"permissions"`
 }
 
-func (r CreateRole) ToCommand(actor vo.UserID, company vo.CompanyID) commands.CreateRole {
-	return commands.CreateRole{
+func (r CreateRole) ToInput(actor vo.UserID, company vo.CompanyID) (dto.CreateRoleInput, error) {
+	if err := required(map[string]string{"code": r.Code, "name": r.Name}); err != nil {
+		return dto.CreateRoleInput{}, err
+	}
+	return dto.CreateRoleInput{
 		ActorID: actor, CompanyID: company, Code: r.Code, Name: r.Name,
 		Description: r.Description, Permissions: r.Permissions,
-	}
+	}, nil
 }
 
 type UpdateRole struct {
@@ -73,34 +98,72 @@ type UpdateRole struct {
 	Permissions []string `json:"permissions"`
 }
 
-func (r UpdateRole) ToCommand(actor vo.UserID, company vo.CompanyID, role vo.RoleID) commands.UpdateRole {
-	return commands.UpdateRole{
+func (r UpdateRole) ToInput(actor vo.UserID, company vo.CompanyID, role vo.RoleID) (dto.UpdateRoleInput, error) {
+	if err := required(map[string]string{"name": r.Name}); err != nil {
+		return dto.UpdateRoleInput{}, err
+	}
+	return dto.UpdateRoleInput{
 		ActorID: actor, CompanyID: company, RoleID: role, Name: r.Name,
 		Description: r.Description, Permissions: r.Permissions,
-	}
+	}, nil
 }
 
+// ---------- member ----------
+
+// POST /companies/{companyID}/members {email, role_ids, new_user?: {name, password}}
+// new_user = ยังไม่มีบัญชี ให้สร้างบัญชีพร้อมรหัสผ่านชั่วคราว
 type AddMember struct {
 	Email   string   `json:"email"`
 	RoleIDs []string `json:"role_ids"`
+	NewUser *struct {
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	} `json:"new_user"`
 }
 
-func (r AddMember) ToCommand(actor vo.UserID, company vo.CompanyID) (commands.AddMember, error) {
+func (r AddMember) ToInput(actor vo.UserID, company vo.CompanyID) (dto.AddMemberInput, error) {
+	if err := required(map[string]string{"email": r.Email}); err != nil {
+		return dto.AddMemberInput{}, err
+	}
 	ids, err := vo.ParseRoleIDs(r.RoleIDs)
 	if err != nil {
-		return commands.AddMember{}, err
+		return dto.AddMemberInput{}, err
 	}
-	return commands.AddMember{ActorID: actor, CompanyID: company, Email: r.Email, RoleIDs: ids}, nil
+	in := dto.AddMemberInput{ActorID: actor, CompanyID: company, Email: r.Email, RoleIDs: ids}
+	if r.NewUser != nil {
+		if err := required(map[string]string{"new_user.name": r.NewUser.Name, "new_user.password": r.NewUser.Password}); err != nil {
+			return dto.AddMemberInput{}, err
+		}
+		in.NewUser = &dto.NewUserInput{Name: r.NewUser.Name, Password: r.NewUser.Password}
+	}
+	return in, nil
 }
 
+// PUT /api/v1/companies/{companyID}/members/{userID}/roles — แทนที่ role ทั้งชุด
 type AssignRoles struct {
 	RoleIDs []string `json:"role_ids"`
 }
 
-func (r AssignRoles) ToCommand(actor vo.UserID, company vo.CompanyID, user vo.UserID) (commands.AssignMemberRoles, error) {
+func (r AssignRoles) ToInput(actor vo.UserID, company vo.CompanyID, user vo.UserID) (dto.AssignMemberRolesInput, error) {
 	ids, err := vo.ParseRoleIDs(r.RoleIDs)
 	if err != nil {
-		return commands.AssignMemberRoles{}, err
+		return dto.AssignMemberRolesInput{}, err
 	}
-	return commands.AssignMemberRoles{ActorID: actor, CompanyID: company, UserID: user, RoleIDs: ids}, nil
+	return dto.AssignMemberRolesInput{ActorID: actor, CompanyID: company, UserID: user, RoleIDs: ids}, nil
+}
+
+// PATCH /api/v1/companies/{companyID}/members/{userID} — แก้บางส่วนของ member (ตอนนี้คือ status)
+type UpdateMember struct {
+	Status string `json:"status"`
+}
+
+func (r UpdateMember) ToInput(actor vo.UserID, company vo.CompanyID, user vo.UserID) (dto.ChangeMemberStatusInput, error) {
+	if err := required(map[string]string{"status": r.Status}); err != nil {
+		return dto.ChangeMemberStatusInput{}, err
+	}
+	status, err := vo.ParseMembershipStatus(r.Status)
+	if err != nil {
+		return dto.ChangeMemberStatusInput{}, err
+	}
+	return dto.ChangeMemberStatusInput{ActorID: actor, CompanyID: company, UserID: user, Status: status}, nil
 }

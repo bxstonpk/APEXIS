@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,9 +11,17 @@ import (
 	"syscall"
 	"time"
 
-	"account/backend/internal/modules/identity"
-	"account/backend/internal/platform/config"
-	"account/backend/internal/platform/database"
+	"apexis/backend/internal/modules/cashbank"
+	"apexis/backend/internal/modules/identity"
+	"apexis/backend/internal/modules/inventory"
+	"apexis/backend/internal/modules/ledger"
+	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/purchasing"
+	"apexis/backend/internal/modules/sales"
+	"apexis/backend/internal/platform/config"
+	"apexis/backend/internal/platform/database"
+	"apexis/backend/internal/platform/permissions"
+	"apexis/backend/internal/platform/reports"
 )
 
 func main() {
@@ -42,6 +51,24 @@ func run(logger *slog.Logger) error {
 	if err := identity.Migrate(db); err != nil {
 		return err
 	}
+	if err := organization.Migrate(db); err != nil {
+		return err
+	}
+	if err := ledger.Migrate(db); err != nil {
+		return err
+	}
+	if err := inventory.Migrate(db); err != nil {
+		return err
+	}
+	if err := cashbank.Migrate(db); err != nil {
+		return err
+	}
+	if err := purchasing.Migrate(db); err != nil {
+		return err
+	}
+	if err := sales.Migrate(db); err != nil {
+		return err
+	}
 
 	identityModule, err := identity.New(db, identity.Config{
 		JWTSecret: []byte(cfg.JWTSecret),
@@ -53,10 +80,43 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	if err := seedInitialAdmin(identityModule, cfg.InitialAdmin, logger); err != nil {
+		return err
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	identityModule.RegisterRoutes(mux)
-	// module อื่นของ ERP ลงทะเบียนตรงนี้ และใช้ identityModule.Middleware ตรวจสิทธิ์
+	// module อื่นของ ERP ลงทะเบียนตรงนี้ และพึ่งพา identity ผ่าน public API ของ identityModule
+	organizationModule := organization.New(db, identityModule)
+	organizationModule.RegisterRoutes(mux)
+	ledgerModule := ledger.New(db, identityModule, organizationModule)
+	ledgerModule.RegisterRoutes(mux)
+	inventoryModule := inventory.New(db, identityModule, organizationModule, ledgerModule)
+	inventoryModule.RegisterRoutes(mux)
+	cashbankModule := cashbank.New(db, identityModule, organizationModule, ledgerModule)
+	cashbankModule.RegisterRoutes(mux)
+	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule, cashbankModule)
+	purchasingModule.RegisterRoutes(mux)
+	salesModule := sales.New(db, identityModule, organizationModule, ledgerModule, inventoryModule, cashbankModule)
+	salesModule.RegisterRoutes(mux)
+
+	// รายงานทุก module ผ่าน endpoint เดียว: GET /reports?book=... (หน้ารายงานของ frontend เป็นหน้าเดียว)
+	reportBooks := reports.NewRegistry()
+	ledgerModule.RegisterReports(reportBooks)
+	inventoryModule.RegisterReports(reportBooks)
+	purchasingModule.RegisterReports(reportBooks)
+	salesModule.RegisterReports(reportBooks)
+	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
+
+	// รายการสิทธิ์ทั้งหมด (หน้ากำหนดบทบาทของ frontend) — แต่ละ module ลงทะเบียนของตัวเอง
+	permissionCatalog := permissions.NewCatalog()
+	for _, m := range []interface{ Permissions() []string }{
+		salesModule, purchasingModule, inventoryModule, ledgerModule, cashbankModule, organizationModule, identityModule,
+	} {
+		permissionCatalog.Register(m.Permissions()...)
+	}
+	mux.Handle("GET /api/v1/permissions", identityModule.Authenticate(permissionCatalog))
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -87,4 +147,27 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// initialAdminName คือชื่อที่แสดงของผู้ดูแลระบบที่ seed (แก้ได้ภายหลังในระบบ)
+const initialAdminName = "Administrator"
+
+// seedInitialAdmin สร้างผู้ดูแลระบบจาก INITIAL_ADMIN_* ถ้ายังไม่มี — ไม่ตั้งค่า = ข้าม
+// ผู้ใช้ที่ active สร้างบริษัทได้และเป็น owner (สิทธิ์ทุกอย่าง) ของบริษัทที่สร้าง
+func seedInitialAdmin(identityModule *identity.Module, admin config.InitialAdmin, logger *slog.Logger) error {
+	if admin.Email == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	created, err := identityModule.SeedUser(ctx, admin.Email, initialAdminName, admin.Password)
+	if err != nil {
+		return fmt.Errorf("seed initial admin (INITIAL_ADMIN_USERNAME must be an email, INITIAL_ADMIN_PASSWORD 8-72 characters): %w", err)
+	}
+	if created {
+		logger.Info("initial admin created", "email", admin.Email)
+	} else {
+		logger.Info("initial admin already exists", "email", admin.Email)
+	}
+	return nil
 }

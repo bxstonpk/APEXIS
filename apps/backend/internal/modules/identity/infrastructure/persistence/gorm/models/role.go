@@ -9,7 +9,6 @@ import (
 type RoleModel struct {
 	ID          uuid.UUID             `gorm:"type:uuid;primaryKey"`
 	CompanyID   uuid.UUID             `gorm:"type:uuid;not null;uniqueIndex:uq_identity_roles_company_code,priority:1"`
-	Company     *CompanyModel         `gorm:"foreignKey:CompanyID;constraint:OnDelete:RESTRICT"`
 	Code        string                `gorm:"size:50;not null;uniqueIndex:uq_identity_roles_company_code,priority:2"`
 	Name        string                `gorm:"size:100;not null"`
 	Description string                `gorm:"size:500;not null;default:''"`

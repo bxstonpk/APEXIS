@@ -73,17 +73,22 @@ func OpenPostgres(dsn string) (*gorm.DB, error) {
 }
 
 // ---------- Transaction ผ่าน context ----------
+//
+// transaction ถูกเปิดที่ use case เท่านั้น (ผ่าน TransactionManager ของแต่ละ module)
+// แล้วส่งต่อผ่าน ctx ให้ repository ทุกตัว — key อยู่ที่ platform เพื่อให้ repository
+// ของหลาย module เข้าร่วม transaction เดียวกันได้
 
 type txKey struct{}
 
-// TxManager implement application.TxManager ด้วย gorm
-type TxManager struct{ db *gorm.DB }
+// ErrNoTransaction: repository ที่เขียนหลายตารางถูกเรียกนอก transaction ของ use case
+var ErrNoTransaction = errors.New("database: operation requires a transaction from the use case")
 
-func NewTxManager(db *gorm.DB) *TxManager { return &TxManager{db: db} }
-
-// WithinTx เปิด transaction ใหม่ หรือใช้ของเดิมถ้า ctx มี transaction อยู่แล้ว (nested = join)
-func (m *TxManager) WithinTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return Transact(ctx, m.db, func(tx *gorm.DB) error {
+// WithinTransaction เปิด transaction ใหม่ หรือ join ของเดิมถ้า ctx มี transaction อยู่แล้ว
+func WithinTransaction(ctx context.Context, db *gorm.DB, fn func(ctx context.Context) error) error {
+	if _, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
+		return fn(ctx)
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return fn(context.WithValue(ctx, txKey{}, tx))
 	})
 }
@@ -97,13 +102,23 @@ func Conn(ctx context.Context, db *gorm.DB) *gorm.DB {
 	return db.WithContext(ctx)
 }
 
-// Transact รัน fn ใน transaction — ถ้า ctx มี transaction อยู่แล้วจะ join ของเดิม
-// ใช้ใน repository ที่ต้องเขียนหลายตาราง (aggregate + children) ให้ atomic
-func Transact(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
-	if tx, ok := ctx.Value(txKey{}).(*gorm.DB); ok {
-		return fn(tx.WithContext(ctx))
+// TxConn คืน transaction ใน ctx — ใช้กับการเขียนหลายตาราง (aggregate + children)
+// ที่ต้อง atomic: repository ห้ามเปิด transaction เอง จึงบังคับให้ use case เปิดไว้ก่อน
+func TxConn(ctx context.Context) (*gorm.DB, error) {
+	tx, ok := ctx.Value(txKey{}).(*gorm.DB)
+	if !ok {
+		return nil, ErrNoTransaction
 	}
-	return db.WithContext(ctx).Transaction(fn)
+	return tx.WithContext(ctx), nil
+}
+
+// ---------- Query helper ----------
+
+// LikeContains คืน pattern สำหรับ LOWER(col) LIKE ? แบบ "มีคำนี้อยู่"
+// escape % _ \ เพื่อให้ผู้ใช้ค้นหาตัวอักษรเหล่านี้ได้ตรงตัว (backslash เป็น escape เริ่มต้นของ PostgreSQL/MySQL)
+func LikeContains(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + strings.ToLower(r.Replace(s)) + "%"
 }
 
 // ---------- แปลง error ของ DB ----------

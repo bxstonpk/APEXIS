@@ -4,31 +4,30 @@ package responses
 import (
 	"time"
 
-	"account/backend/internal/modules/identity/application/dto"
+	"apexis/backend/internal/modules/identity/application/dto"
+	"apexis/backend/internal/platform/httpx"
+	"apexis/backend/internal/platform/listing"
 )
 
-type Data[T any] struct {
-	Data T `json:"data"`
-}
+// envelope กลางอยู่ที่ platform/httpx (ใช้ร่วมกันทุก module)
+type (
+	Data[T any] = httpx.Data[T]
+	List[T any] = httpx.List[T]
+	Meta        = httpx.Meta
+)
 
-type Error struct {
-	Error ErrorBody `json:"error"`
-}
-
-type ErrorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
+func ToList[D any, T any](r listing.Result[D], fn func(D) T) List[T] { return httpx.ToList(r, fn) }
 
 type User struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	Name               string `json:"name"`
+	Status             string `json:"status"`
+	MustChangePassword bool   `json:"must_change_password"`
 }
 
 func FromUser(u dto.User) User {
-	return User{ID: u.ID, Email: u.Email, Name: u.Name, Status: u.Status}
+	return User{ID: u.ID, Email: u.Email, Name: u.Name, Status: u.Status, MustChangePassword: u.MustChangePassword}
 }
 
 type Token struct {
@@ -40,31 +39,6 @@ type Token struct {
 
 func FromAuthToken(t dto.AuthToken) Token {
 	return Token{AccessToken: t.AccessToken, TokenType: "Bearer", ExpiresAt: t.ExpiresAt, User: FromUser(t.User)}
-}
-
-type Company struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	TaxID  string `json:"tax_id"`
-	Status string `json:"status"`
-}
-
-func FromCompany(c dto.Company) Company {
-	return Company{ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, Status: c.Status}
-}
-
-type MyCompany struct {
-	Company
-	RoleIDs []string `json:"role_ids"`
-}
-
-func FromMyCompanies(cs []dto.MyCompany) []MyCompany {
-	out := make([]MyCompany, len(cs))
-	for i, c := range cs {
-		out[i] = MyCompany{Company: FromCompany(c.Company), RoleIDs: c.RoleIDs}
-	}
-	return out
 }
 
 type Role struct {
@@ -83,26 +57,15 @@ func FromRole(r dto.Role) Role {
 	}
 }
 
-func FromRoles(rs []dto.Role) []Role {
-	out := make([]Role, len(rs))
-	for i, r := range rs {
-		out[i] = FromRole(r)
-	}
-	return out
-}
-
 type Member struct {
-	User    User     `json:"user"`
-	Status  string   `json:"status"`
-	RoleIDs []string `json:"role_ids"`
+	User     User      `json:"user"`
+	Status   string    `json:"status"`
+	RoleIDs  []string  `json:"role_ids"`
+	JoinedAt time.Time `json:"joined_at"`
 }
 
-func FromMembers(ms []dto.Member) []Member {
-	out := make([]Member, len(ms))
-	for i, m := range ms {
-		out[i] = Member{User: FromUser(m.User), Status: m.Status, RoleIDs: m.RoleIDs}
-	}
-	return out
+func FromMember(m dto.Member) Member {
+	return Member{User: FromUser(m.User), Status: m.Status, RoleIDs: m.RoleIDs, JoinedAt: m.JoinedAt}
 }
 
 type Membership struct {

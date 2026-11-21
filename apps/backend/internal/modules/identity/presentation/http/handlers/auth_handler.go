@@ -3,18 +3,23 @@ package handlers
 import (
 	"net/http"
 
-	"account/backend/internal/modules/identity/presentation/http/requests"
-	"account/backend/internal/modules/identity/presentation/http/responses"
+	"apexis/backend/internal/modules/identity/presentation/http/requests"
+	"apexis/backend/internal/modules/identity/presentation/http/responses"
 )
 
-// POST /api/v1/auth/register
+// POST /api/v1/users — สมัครสมาชิก (สร้าง user)
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req requests.Register
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}
-	user, err := h.commands.RegisterUser(r.Context(), req.ToCommand())
+	in, err := req.ToInput()
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	user, err := h.uc.Auth.Register(r.Context(), in)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -22,19 +27,24 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusCreated, responses.FromUser(user))
 }
 
-// POST /api/v1/auth/login
+// POST /api/v1/auth/tokens — ล็อกอิน (สร้าง access token)
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req requests.Login
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}
-	token, err := h.commands.Login(r.Context(), req.ToCommand())
+	in, err := req.ToInput()
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	writeData(w, http.StatusOK, responses.FromAuthToken(token))
+	token, err := h.uc.Auth.Login(r.Context(), in)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeData(w, http.StatusCreated, responses.FromAuthToken(token))
 }
 
 // GET /api/v1/me
@@ -44,7 +54,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	user, err := h.queries.GetMe(r.Context(), userID)
+	user, err := h.uc.Auth.GetMe(r.Context(), userID)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -64,7 +74,12 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if err := h.commands.ChangePassword(r.Context(), req.ToCommand(userID)); err != nil {
+	in, err := req.ToInput(userID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := h.uc.Auth.ChangePassword(r.Context(), in); err != nil {
 		writeError(w, r, err)
 		return
 	}

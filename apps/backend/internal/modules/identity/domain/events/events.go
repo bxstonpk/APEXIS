@@ -5,7 +5,7 @@ package events
 import (
 	"time"
 
-	vo "account/backend/internal/modules/identity/domain/valueobjects"
+	vo "apexis/backend/internal/modules/identity/domain/value_objects"
 )
 
 type Event interface {
@@ -21,15 +21,6 @@ type UserRegistered struct {
 
 func (e UserRegistered) EventName() string     { return "identity.user.registered" }
 func (e UserRegistered) OccurredAt() time.Time { return e.At }
-
-type CompanyCreated struct {
-	CompanyID vo.CompanyID
-	OwnerID   vo.UserID
-	At        time.Time
-}
-
-func (e CompanyCreated) EventName() string     { return "identity.company.created" }
-func (e CompanyCreated) OccurredAt() time.Time { return e.At }
 
 type MemberAdded struct {
 	CompanyID vo.CompanyID
