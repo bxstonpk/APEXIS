@@ -21,6 +21,10 @@ import (
 
 type AccountRepository interface {
 	Create(ctx context.Context, a *entities.Account) error
+	// CreateMany เขียนหลายบัญชี (เรียง parent ก่อน child) — ต้องอยู่ใน transaction
+	CreateMany(ctx context.Context, as []*entities.Account) error
+	// HasAny: บริษัทมีบัญชีอยู่แล้วหรือไม่
+	HasAny(ctx context.Context, companyID vo.CompanyID) (bool, error)
 	Update(ctx context.Context, a *entities.Account) error
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) error // soft delete
 	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) (*entities.Account, error)
@@ -32,6 +36,8 @@ type AccountRepository interface {
 	Ancestry(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) ([]vo.AccountID, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) (dto.Account, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.AccountFilter) (listing.Result[dto.Account], error)
+	// Tree คืนทุกบัญชีของบริษัทเรียงตามรหัส (หน้าผังบัญชีแบบต้นไม้)
+	Tree(ctx context.Context, companyID vo.CompanyID) ([]dto.Account, error)
 	// Chart คืนผังบัญชีทั้งหมดของบริษัท (ใช้สร้างรายงาน)
 	Chart(ctx context.Context, companyID vo.CompanyID) ([]services.AccountNode, error)
 }
@@ -42,6 +48,8 @@ type JournalRepository interface {
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) error // soft delete
 	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (*entities.Journal, error)
 	HasEntries(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
+	// ExistingCodes คืนรหัสสมุดที่มีอยู่แล้วจาก codes — query เดียว
+	ExistingCodes(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]bool, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (dto.Journal, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.JournalFilter) (listing.Result[dto.Journal], error)
 	// NextNumber คืนเลขลำดับถัดไปของสมุด + ปีบัญชี (เริ่ม 1) — ต้องอยู่ใน transaction

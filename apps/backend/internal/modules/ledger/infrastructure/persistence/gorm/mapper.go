@@ -45,6 +45,7 @@ func AccountToModel(a *entities.Account) models.AccountModel {
 	return models.AccountModel{
 		ID: uuid.UUID(a.ID()), CompanyID: uuid.UUID(a.CompanyID()), Code: d.Code, Name: d.Name, NameEN: d.NameEN,
 		Type: string(d.Type), ParentID: optUUID(d.ParentID), Postable: d.Postable, Status: string(d.Status),
+		Description: d.Description,
 	}
 }
 
@@ -52,6 +53,7 @@ func AccountToEntity(m models.AccountModel) *entities.Account {
 	return entities.RehydrateAccount(vo.AccountID(m.ID), vo.CompanyID(m.CompanyID), entities.AccountData{
 		Code: m.Code, Name: m.Name, NameEN: m.NameEN, Type: vo.AccountType(m.Type),
 		ParentID: optID[vo.AccountID](m.ParentID), Postable: m.Postable, Status: vo.Status(m.Status),
+		Description: m.Description,
 	})
 }
 

@@ -30,12 +30,14 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, mw *handlers.Mid
 	// role
 	mux.Handle("GET /api/v1/companies/{companyID}/roles", auth(h.ListRoles)) // ?q=&is_system=&sort=&page=&page_size=
 	mux.Handle("POST /api/v1/companies/{companyID}/roles", auth(h.CreateRole))
+	mux.Handle("GET /api/v1/companies/{companyID}/roles/{roleID}", auth(h.GetRole))
 	mux.Handle("PUT /api/v1/companies/{companyID}/roles/{roleID}", auth(h.UpdateRole))
 	mux.Handle("DELETE /api/v1/companies/{companyID}/roles/{roleID}", auth(h.DeleteRole))
 
 	// พนักงาน (member)
 	mux.Handle("GET /api/v1/companies/{companyID}/members", auth(h.ListMembers)) // ?q=&status=&role_id=&sort=&page=&page_size=
 	mux.Handle("POST /api/v1/companies/{companyID}/members", auth(h.AddMember))
+	mux.Handle("GET /api/v1/companies/{companyID}/members/{userID}", auth(h.GetMember))
 	mux.Handle("PATCH /api/v1/companies/{companyID}/members/{userID}", auth(h.UpdateMember)) // {"status": ...}
 	mux.Handle("PUT /api/v1/companies/{companyID}/members/{userID}/roles", auth(h.AssignMemberRoles))
 }

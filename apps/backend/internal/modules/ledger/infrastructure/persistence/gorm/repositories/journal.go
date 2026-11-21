@@ -33,6 +33,19 @@ func (r *JournalRepository) Update(ctx context.Context, j *entities.Journal) err
 	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "number_template", "status"}, domain.ErrCodeExists, domain.ErrJournalNotFound)
 }
 
+// ExistingCodes — 1 query: รหัสสมุด (ที่ยังไม่ถูกลบ) ในรายการ codes ที่มีอยู่แล้ว
+func (r *JournalRepository) ExistingCodes(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]bool, error) {
+	var found []string
+	err := database.Conn(ctx, r.db).Model(&models.JournalModel{}).
+		Where("company_id = ? AND code IN ?", uuidOf(companyID), codes).
+		Pluck("code", &found).Error
+	out := make(map[string]bool, len(found))
+	for _, c := range found {
+		out[c] = true
+	}
+	return out, err
+}
+
 func (r *JournalRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) error {
 	return softDelete[models.JournalModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrJournalNotFound)
 }

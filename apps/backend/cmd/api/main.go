@@ -20,6 +20,7 @@ import (
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/config"
 	"apexis/backend/internal/platform/database"
+	"apexis/backend/internal/platform/permissions"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -107,6 +108,15 @@ func run(logger *slog.Logger) error {
 	purchasingModule.RegisterReports(reportBooks)
 	salesModule.RegisterReports(reportBooks)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
+
+	// รายการสิทธิ์ทั้งหมด (หน้ากำหนดบทบาทของ frontend) — แต่ละ module ลงทะเบียนของตัวเอง
+	permissionCatalog := permissions.NewCatalog()
+	for _, m := range []interface{ Permissions() []string }{
+		salesModule, purchasingModule, inventoryModule, ledgerModule, cashbankModule, organizationModule, identityModule,
+	} {
+		permissionCatalog.Register(m.Permissions()...)
+	}
+	mux.Handle("GET /api/v1/permissions", identityModule.Authenticate(permissionCatalog))
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,

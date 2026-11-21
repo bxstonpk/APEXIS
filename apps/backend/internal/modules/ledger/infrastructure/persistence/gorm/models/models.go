@@ -17,19 +17,21 @@ import (
 )
 
 type AccountModel struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey"`
-	CompanyID uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:uq_ledger_accounts_code,priority:1,where:deleted_at IS NULL"`
-	Code      string         `gorm:"size:20;not null;uniqueIndex:uq_ledger_accounts_code,priority:2,where:deleted_at IS NULL"`
-	Name      string         `gorm:"size:200;not null"`
-	NameEN    string         `gorm:"column:name_en;size:200;not null;default:''"`
-	Type      string         `gorm:"size:20;not null;check:chk_ledger_accounts_type,type IN ('asset','liability','equity','revenue','expense')"`
-	ParentID  *uuid.UUID     `gorm:"type:uuid;index"`
-	Parent    *AccountModel  `gorm:"foreignKey:ParentID;constraint:OnDelete:RESTRICT"`
-	Postable  bool           `gorm:"not null"`
-	Status    string         `gorm:"size:20;not null;check:chk_ledger_accounts_status,status IN ('active','inactive')"`
-	CreatedAt time.Time      `gorm:"not null"`
-	UpdatedAt time.Time      `gorm:"not null"`
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID        uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	CompanyID uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:uq_ledger_accounts_code,priority:1,where:deleted_at IS NULL"`
+	Code      string        `gorm:"size:20;not null;uniqueIndex:uq_ledger_accounts_code,priority:2,where:deleted_at IS NULL"`
+	Name      string        `gorm:"size:200;not null"`
+	NameEN    string        `gorm:"column:name_en;size:200;not null;default:''"`
+	Type      string        `gorm:"size:20;not null;check:chk_ledger_accounts_type,type IN ('asset','liability','equity','revenue','expense','suspense')"`
+	ParentID  *uuid.UUID    `gorm:"type:uuid;index"`
+	Parent    *AccountModel `gorm:"foreignKey:ParentID;constraint:OnDelete:RESTRICT"`
+	Postable  bool          `gorm:"not null"`
+	Status    string        `gorm:"size:20;not null;check:chk_ledger_accounts_status,status IN ('active','inactive')"`
+	// Description คำอธิบายการใช้บัญชี
+	Description string         `gorm:"size:500;not null;default:''"`
+	CreatedAt   time.Time      `gorm:"not null"`
+	UpdatedAt   time.Time      `gorm:"not null"`
+	DeletedAt   gorm.DeletedAt `gorm:"index"`
 }
 
 func (AccountModel) TableName() string { return "ledger_accounts" }
@@ -110,6 +112,12 @@ func (SequenceModel) TableName() string { return "ledger_number_sequences" }
 // AutoMigrate สร้าง/อัปเดตตารางของ ledger (เรียงตาม dependency ของ FK)
 // สำหรับ production แนะนำเปลี่ยนเป็น versioned migration (เช่น goose / golang-migrate)
 func AutoMigrate(db *gorm.DB) error {
+	// CHECK ของประเภทบัญชีเพิ่ม 'suspense' — AutoMigrate ไม่แก้ constraint ที่มีชื่อเดิมอยู่แล้ว จึงลบให้สร้างใหม่
+	if m := db.Migrator(); m.HasTable(&AccountModel{}) && m.HasConstraint(&AccountModel{}, "chk_ledger_accounts_type") {
+		if err := m.DropConstraint(&AccountModel{}, "chk_ledger_accounts_type"); err != nil {
+			return err
+		}
+	}
 	if err := db.AutoMigrate(&AccountModel{}, &JournalModel{}, &EntryModel{}, &LineModel{}, &SequenceModel{}); err != nil {
 		return err
 	}

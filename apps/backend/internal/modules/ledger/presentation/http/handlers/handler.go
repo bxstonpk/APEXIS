@@ -56,6 +56,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	// 409
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
 	{Err: domain.ErrInUse, Status: http.StatusConflict},
+	{Err: domain.ErrChartExists, Status: http.StatusConflict},
 	// 422
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrHierarchyCycle, Status: http.StatusUnprocessableEntity},

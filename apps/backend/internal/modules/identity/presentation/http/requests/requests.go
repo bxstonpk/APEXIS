@@ -110,9 +110,15 @@ func (r UpdateRole) ToInput(actor vo.UserID, company vo.CompanyID, role vo.RoleI
 
 // ---------- member ----------
 
+// POST /companies/{companyID}/members {email, role_ids, new_user?: {name, password}}
+// new_user = ยังไม่มีบัญชี ให้สร้างบัญชีพร้อมรหัสผ่านชั่วคราว
 type AddMember struct {
 	Email   string   `json:"email"`
 	RoleIDs []string `json:"role_ids"`
+	NewUser *struct {
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	} `json:"new_user"`
 }
 
 func (r AddMember) ToInput(actor vo.UserID, company vo.CompanyID) (dto.AddMemberInput, error) {
@@ -123,7 +129,14 @@ func (r AddMember) ToInput(actor vo.UserID, company vo.CompanyID) (dto.AddMember
 	if err != nil {
 		return dto.AddMemberInput{}, err
 	}
-	return dto.AddMemberInput{ActorID: actor, CompanyID: company, Email: r.Email, RoleIDs: ids}, nil
+	in := dto.AddMemberInput{ActorID: actor, CompanyID: company, Email: r.Email, RoleIDs: ids}
+	if r.NewUser != nil {
+		if err := required(map[string]string{"new_user.name": r.NewUser.Name, "new_user.password": r.NewUser.Password}); err != nil {
+			return dto.AddMemberInput{}, err
+		}
+		in.NewUser = &dto.NewUserInput{Name: r.NewUser.Name, Password: r.NewUser.Password}
+	}
+	return in, nil
 }
 
 // PUT /api/v1/companies/{companyID}/members/{userID}/roles — แทนที่ role ทั้งชุด

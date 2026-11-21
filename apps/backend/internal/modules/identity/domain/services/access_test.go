@@ -131,3 +131,30 @@ func TestOwnerRoleIsImmutable(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// บัญชีที่ผู้ดูแลสร้างให้ (รหัสผ่านชั่วคราว) เข้าบริษัทไม่ได้จนกว่าจะเปลี่ยนรหัสผ่าน
+func TestResolveAccessRequiresPasswordChange(t *testing.T) {
+	_, company, sales, _ := fixture(t)
+	email, _ := vo.NewEmail("new@example.com")
+	user, err := entities.NewUserWithTemporaryPassword(email, "New", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := entities.NewMembership(user.ID(), company, []*entities.Role{sales})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := facts(user, company, m, []*entities.Role{sales})
+	f.MustChangePassword = user.MustChangePassword()
+	if _, err := ResolveAccess(f); !errors.Is(err, domain.ErrPasswordChangeRequired) {
+		t.Fatalf("ResolveAccess = %v, want ErrPasswordChangeRequired", err)
+	}
+
+	if err := user.ChangePasswordHash("new-hash"); err != nil || user.MustChangePassword() {
+		t.Fatalf("after change: must=%v err=%v", user.MustChangePassword(), err)
+	}
+	f.MustChangePassword = user.MustChangePassword()
+	if _, err := ResolveAccess(f); err != nil {
+		t.Fatalf("after change = %v", err)
+	}
+}

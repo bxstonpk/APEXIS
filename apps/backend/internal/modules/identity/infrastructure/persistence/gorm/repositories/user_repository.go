@@ -41,7 +41,7 @@ func (r *UserRepository) Create(ctx context.Context, u *entities.User) error {
 func (r *UserRepository) Update(ctx context.Context, u *entities.User) error {
 	m := gp.UserToModel(u)
 	res := database.Conn(ctx, r.db).Model(&m).
-		Select("email", "name", "password_hash", "status", "updated_at").
+		Select("email", "name", "password_hash", "status", "must_change_password", "updated_at").
 		Updates(&m)
 	if res.Error != nil {
 		if database.IsUniqueViolation(res.Error) {
@@ -66,7 +66,7 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email vo.Email) (*enti
 func (r *UserRepository) findOne(ctx context.Context, query string, args ...any) (*entities.User, error) {
 	var m models.UserModel
 	err := database.Conn(ctx, r.db).
-		Select("id", "email", "name", "password_hash", "status").
+		Select("id", "email", "name", "password_hash", "status", "must_change_password").
 		Where(query, args...).
 		Take(&m).Error
 	if err != nil {

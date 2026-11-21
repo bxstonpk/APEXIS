@@ -25,3 +25,24 @@ const (
 )
 
 func (p Permission) String() string { return string(p) }
+
+// AllPermissions คือสิทธิ์ทั้งหมดของ organization (ลงทะเบียนกับ platform/permissions ผ่าน Module.Permissions)
+var AllPermissions = []Permission{
+	PermCompanyRead,
+	PermCompanyManage,
+	PermBranchRead,
+	PermBranchManage,
+	PermBusinessUnitRead,
+	PermBusinessUnitMng,
+	PermDepartmentRead,
+	PermDepartmentManage,
+	PermCostCenterRead,
+	PermCostCenterManage,
+	PermProjectSiteRead,
+	PermProjectSiteManage,
+	PermFiscalPeriodRead,
+	PermFiscalPeriodMng,
+	PermFiscalPeriodClose,
+	PermNumberingRead,
+	PermNumberingManage,
+}

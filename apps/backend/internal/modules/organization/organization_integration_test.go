@@ -193,6 +193,11 @@ func TestOrganizationFlow(t *testing.T) {
 		t.Fatalf("outsider companies = %v", r.body)
 	}
 	a.expect(a.do("GET", "/api/v1/me/companies?sort=tax_id", owner, nil), 400, "bad company sort")
+	if got := a.expect(a.do("GET", "/api/v1/me/companies/"+compA, owner, nil), 200, "my company").data(); got["code"] != "ACME" || got["id"] != compA {
+		t.Fatalf("my company = %v", got)
+	}
+	a.expect(a.do("GET", "/api/v1/me/companies/"+compA, outsider, nil), 404, "outsider my company")
+	a.expect(a.do("GET", "/api/v1/me/companies/not-a-uuid", owner, nil), 400, "my company bad id")
 
 	// ---------- branches ----------
 	hq := a.expect(a.do("POST", base+"/branches", owner, map[string]any{"code": "hq", "name": "สำนักงานใหญ่", "tax_branch_no": "00000"}), 201, "create HQ")

@@ -138,12 +138,13 @@ func (r *MembershipRepository) List(ctx context.Context, companyID vo.CompanyID,
 		Email        string
 		Name         string
 		UserStatus   string
+		MustChange   bool
 		Status       string
 		JoinedAt     time.Time
 		Total        int64
 	}
 	rows, total, err := database.FetchPage(base,
-		"m.id AS membership_id, u.id AS user_id, u.email, u.name, u.status AS user_status, m.status, m.created_at AS joined_at",
+		memberColumns,
 		order, f.Page, func(r row) int64 { return r.Total })
 	if err != nil {
 		return listing.Result[dto.Member]{}, err
@@ -161,13 +162,53 @@ func (r *MembershipRepository) List(ctx context.Context, companyID vo.CompanyID,
 	items := make([]dto.Member, len(rows))
 	for i, row := range rows {
 		items[i] = dto.Member{
-			User:     dto.User{ID: row.UserID.String(), Email: row.Email, Name: row.Name, Status: row.UserStatus},
+			User:     dto.User{ID: row.UserID.String(), Email: row.Email, Name: row.Name, Status: row.UserStatus, MustChangePassword: row.MustChange},
 			Status:   row.Status,
 			RoleIDs:  orEmpty(roles[row.MembershipID]),
 			JoinedAt: row.JoinedAt.UTC(),
 		}
 	}
 	return listing.Result[dto.Member]{Items: items, Total: total, Page: f.Page}, nil
+}
+
+const memberColumns = "m.id AS membership_id, u.id AS user_id, u.email, u.name, u.status AS user_status, " +
+	"u.must_change_password AS must_change, m.status, m.created_at AS joined_at"
+
+// Get: 2 query — สมาชิก JOIN ผู้ใช้ (1 แถว) + role ids ของสมาชิก (ใช้ helper เดียวกับ List)
+func (r *MembershipRepository) Get(ctx context.Context, companyID vo.CompanyID, userID vo.UserID) (dto.Member, error) {
+	var row struct {
+		MembershipID uuid.UUID
+		UserID       uuid.UUID
+		Email        string
+		Name         string
+		UserStatus   string
+		MustChange   bool
+		Status       string
+		JoinedAt     time.Time
+	}
+	res := database.Conn(ctx, r.db).
+		Table("identity_memberships AS m").
+		Joins("JOIN identity_users AS u ON u.id = m.user_id").
+		Select(memberColumns).
+		Where("m.company_id = ? AND m.user_id = ?", uuid.UUID(companyID), uuid.UUID(userID)).
+		Limit(1).
+		Scan(&row)
+	if res.Error != nil {
+		return dto.Member{}, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return dto.Member{}, domain.ErrMembershipNotFound
+	}
+	roles, err := membershipRoleIDs(ctx, r.db, []uuid.UUID{row.MembershipID})
+	if err != nil {
+		return dto.Member{}, err
+	}
+	return dto.Member{
+		User:     dto.User{ID: row.UserID.String(), Email: row.Email, Name: row.Name, Status: row.UserStatus, MustChangePassword: row.MustChange},
+		Status:   row.Status,
+		RoleIDs:  orEmpty(roles[row.MembershipID]),
+		JoinedAt: row.JoinedAt.UTC(),
+	}, nil
 }
 
 func insertMembershipRoles(tx *gorm.DB, roles []models.MembershipRoleModel) error {

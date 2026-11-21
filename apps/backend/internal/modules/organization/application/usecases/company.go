@@ -2,10 +2,12 @@ package usecases
 
 import (
 	"context"
+	"slices"
 
 	"apexis/backend/internal/modules/organization/application/dto"
 	"apexis/backend/internal/modules/organization/application/ports"
 	"apexis/backend/internal/modules/organization/domain/entities"
+	domain "apexis/backend/internal/modules/organization/domain/errors"
 	vo "apexis/backend/internal/modules/organization/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
 )
@@ -84,6 +86,28 @@ func (uc *CompanyUseCases) ListMine(ctx context.Context, in dto.ListMyCompaniesI
 		return listing.Result[dto.CompanySummary]{}, err
 	}
 	return uc.companies.ListByIDs(ctx, ids, in.Filter)
+}
+
+// GetMine คืนข้อมูลสรุปของบริษัทที่ผู้ใช้เป็นสมาชิก (ไม่ต้องมีสิทธิ์ organization.company:read)
+// ใช้แสดงชื่อบริษัทในหน้าระบบ — ไม่ใช่สมาชิก = ErrCompanyNotFound (ไม่บอกว่าบริษัทมีอยู่จริง)
+func (uc *CompanyUseCases) GetMine(ctx context.Context, userID vo.UserID, companyID vo.CompanyID) (dto.CompanySummary, error) {
+	ids, err := uc.members.CompanyIDsOf(ctx, userID)
+	if err != nil {
+		return dto.CompanySummary{}, err
+	}
+	if !slices.Contains(ids, companyID) {
+		return dto.CompanySummary{}, domain.ErrCompanyNotFound
+	}
+	res, err := uc.companies.ListByIDs(ctx, []vo.CompanyID{companyID}, dto.CompanyFilter{
+		Sort: dto.DefaultCompanySort, Page: listing.Page{Number: 1, Size: 1},
+	})
+	if err != nil {
+		return dto.CompanySummary{}, err
+	}
+	if len(res.Items) == 0 {
+		return dto.CompanySummary{}, domain.ErrCompanyNotFound
+	}
+	return res.Items[0], nil
 }
 
 func companyDTO(c *entities.Company) dto.Company {

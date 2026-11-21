@@ -91,7 +91,7 @@ func (m *Module) Authorize(ctx context.Context, userID, companyID uuid.UUID, per
 	case err == nil:
 		return true, nil
 	case errors.Is(err, domain.ErrForbidden), errors.Is(err, domain.ErrUserInactive),
-		errors.Is(err, domain.ErrMembershipInactive),
+		errors.Is(err, domain.ErrMembershipInactive), errors.Is(err, domain.ErrPasswordChangeRequired),
 		errors.Is(err, domain.ErrRoleCompanyMismatch):
 		return false, nil
 	default:
@@ -138,3 +138,12 @@ func (m *Module) SeedUser(ctx context.Context, email, name, password string) (bo
 
 // Migrate สร้างตารางของ identity
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+
+// Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
+func (m *Module) Permissions() []string {
+	out := make([]string, len(vo.AllPermissions))
+	for i, p := range vo.AllPermissions {
+		out[i] = string(p)
+	}
+	return out
+}

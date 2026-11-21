@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"apexis/backend/internal/modules/ledger/application/dto"
 	ports "apexis/backend/internal/modules/ledger/application/ports/repositories"
@@ -32,8 +33,36 @@ func (r *AccountRepository) Create(ctx context.Context, a *entities.Account) err
 func (r *AccountRepository) Update(ctx context.Context, a *entities.Account) error {
 	m := gp.AccountToModel(a)
 	return update(ctx, r.db, &m, m.CompanyID,
-		[]string{"code", "name", "name_en", "type", "parent_id", "postable", "status"},
+		[]string{"code", "name", "name_en", "type", "parent_id", "postable", "status", "description"},
 		domain.ErrCodeExists, domain.ErrAccountNotFound)
+}
+
+// CreateMany — INSERT แบบ batch (ผังบัญชีมาตรฐาน 245 บัญชี = 3 คำสั่ง) ใน transaction ของ use case
+// เรียงบัญชีคุมก่อนบัญชีย่อย FK ของ parent จึงผ่านในทุก batch
+func (r *AccountRepository) CreateMany(ctx context.Context, as []*entities.Account) error {
+	if len(as) == 0 {
+		return nil
+	}
+	ms := make([]models.AccountModel, len(as))
+	for i, a := range as {
+		ms[i] = gp.AccountToModel(a)
+	}
+	if err := database.Conn(ctx, r.db).Omit(clause.Associations).CreateInBatches(&ms, 100).Error; err != nil {
+		if database.IsUniqueViolation(err) {
+			return domain.ErrCodeExists
+		}
+		return err
+	}
+	return nil
+}
+
+// HasAny — 1 query: บริษัทมีบัญชี (ที่ยังไม่ถูกลบ) อยู่แล้วหรือไม่
+func (r *AccountRepository) HasAny(ctx context.Context, companyID vo.CompanyID) (bool, error) {
+	var ok bool
+	err := database.Conn(ctx, r.db).Raw(
+		`SELECT EXISTS (SELECT 1 FROM ledger_accounts WHERE company_id = ? AND deleted_at IS NULL)`,
+		uuidOf(companyID)).Scan(&ok).Error
+	return ok, err
 }
 
 func (r *AccountRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) error {
@@ -113,12 +142,14 @@ type accountRow struct {
 	ParentName *string
 	Postable   bool
 	Status     string
+	Desc       string `gorm:"column:description"`
 	Total      int64
 }
 
 func (r accountRow) dto() dto.Account {
 	out := dto.Account{
 		ID: r.ID.String(), Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: r.Type, Postable: r.Postable, Status: r.Status,
+		Description: r.Desc,
 	}
 	if r.ParentID != nil && r.ParentCode != nil {
 		out.Parent = &dto.Ref{ID: r.ParentID.String(), Code: *r.ParentCode, Name: *r.ParentName}
@@ -126,7 +157,7 @@ func (r accountRow) dto() dto.Account {
 	return out
 }
 
-const accountColumns = "a.id, a.code, a.name, a.name_en, a.type, a.parent_id, p.code AS parent_code, p.name AS parent_name, a.postable, a.status"
+const accountColumns = "a.id, a.code, a.name, a.name_en, a.type, a.parent_id, p.code AS parent_code, p.name AS parent_name, a.postable, a.status, a.description"
 
 func (r *AccountRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
 	return database.Conn(ctx, r.db).
@@ -173,6 +204,20 @@ func (r *AccountRepository) List(ctx context.Context, companyID vo.CompanyID, f 
 	}
 	rows, total, err := database.FetchPage(base, accountColumns, order, f.Page, func(r accountRow) int64 { return r.Total })
 	return toResult(rows, total, f.Page, accountRow.dto), err
+}
+
+// Tree — 1 query: ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส — หน้าผังบัญชีสร้างต้นไม้จาก parent
+// ผังบัญชีมีขนาดจำกัด (หลักร้อย) จึงส่งทั้งชุดแทนการแบ่งหน้า — ใช้ index uq_ledger_accounts_code (company_id, code)
+func (r *AccountRepository) Tree(ctx context.Context, companyID vo.CompanyID) ([]dto.Account, error) {
+	var rows []accountRow
+	if err := r.base(ctx, companyID).Select(accountColumns).Order("a.code").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]dto.Account, len(rows))
+	for i, row := range rows {
+		out[i] = row.dto()
+	}
+	return out, nil
 }
 
 // Chart — 1 query: ผังบัญชีทั้งหมดของบริษัท (ไม่รวมที่ถูกลบ — บัญชีที่ถูกใช้แล้วลบไม่ได้)

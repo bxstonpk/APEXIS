@@ -17,18 +17,19 @@ import (
 
 func UserToModel(u *entities.User) models.UserModel {
 	return models.UserModel{
-		ID:           uuid.UUID(u.ID()),
-		Email:        u.Email().String(),
-		Name:         u.Name(),
-		PasswordHash: u.PasswordHash(),
-		Status:       string(u.Status()),
+		ID:                 uuid.UUID(u.ID()),
+		Email:              u.Email().String(),
+		Name:               u.Name(),
+		PasswordHash:       u.PasswordHash(),
+		Status:             string(u.Status()),
+		MustChangePassword: u.MustChangePassword(),
 	}
 }
 
 func UserToEntity(m models.UserModel) *entities.User {
 	return entities.RehydrateUser(
 		vo.UserID(m.ID), vo.Email(m.Email), m.Name, m.PasswordHash,
-		vo.UserStatus(m.Status),
+		vo.UserStatus(m.Status), m.MustChangePassword,
 	)
 }
 

@@ -6,6 +6,7 @@ import (
 	"apexis/backend/internal/modules/ledger/application/dto"
 	"apexis/backend/internal/modules/ledger/application/ports/repositories"
 	"apexis/backend/internal/modules/ledger/domain/entities"
+	domain "apexis/backend/internal/modules/ledger/domain/errors"
 	"apexis/backend/internal/modules/ledger/domain/services"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
@@ -15,6 +16,63 @@ import (
 type AccountUseCases struct {
 	base
 	accounts repositories.AccountRepository
+	journals repositories.JournalRepository
+}
+
+// Tree ผังบัญชีทั้งชุด (ทุกสถานะ) เรียงตามรหัส — 1 query
+func (uc *AccountUseCases) Tree(ctx context.Context, in dto.Actor) ([]dto.Account, error) {
+	return read(ctx, uc.base, in, vo.PermAccountRead, func() ([]dto.Account, error) {
+		return uc.accounts.Tree(ctx, in.CompanyID)
+	})
+}
+
+// CreateDefaults สร้างผังบัญชีมาตรฐาน + สมุดรายวันมาตรฐาน (GEN / CRJ / CDJ) ใน transaction เดียว
+//
+// ทำได้เฉพาะบริษัทที่ยังไม่มีบัญชี (กันผังซ้อนกับผังที่ตั้งเอง) — สมุดที่มีรหัสอยู่แล้วจะข้าม
+// query: ตรวจบัญชี 1 + INSERT บัญชีแบบ batch 3 + ตรวจรหัสสมุด 1 + INSERT สมุด (ไม่เกิน 3)
+func (uc *AccountUseCases) CreateDefaults(ctx context.Context, in dto.Actor) (dto.DefaultChartResult, error) {
+	var out dto.DefaultChartResult
+	err := uc.write(ctx, in, vo.PermAccountManage, func(ctx context.Context) error {
+		has, err := uc.accounts.HasAny(ctx, in.CompanyID)
+		if err != nil {
+			return err
+		}
+		if has {
+			return domain.ErrChartExists
+		}
+		chart, err := entities.NewDefaultChart(in.CompanyID)
+		if err != nil {
+			return err
+		}
+		if err := uc.accounts.CreateMany(ctx, chart); err != nil {
+			return err
+		}
+		out.Accounts = len(chart)
+
+		codes := make([]string, len(entities.DefaultJournals))
+		for i, j := range entities.DefaultJournals {
+			codes[i] = j.Code
+		}
+		existing, err := uc.journals.ExistingCodes(ctx, in.CompanyID, codes)
+		if err != nil {
+			return err
+		}
+		for _, d := range entities.DefaultJournals {
+			if existing[d.Code] {
+				continue
+			}
+			j, err := entities.NewJournal(in.CompanyID, entities.JournalData{Code: d.Code, Name: d.Name, Status: vo.StatusActive})
+			if err != nil {
+				return err
+			}
+			if err := uc.journals.Create(ctx, j); err != nil {
+				return err
+			}
+			out.Journals++
+		}
+		return nil
+	})
+	return out, err
 }
 
 func (uc *AccountUseCases) Get(ctx context.Context, in dto.ByID[vo.AccountID]) (dto.Account, error) {

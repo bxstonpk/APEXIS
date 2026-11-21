@@ -102,3 +102,18 @@ func (h *Handler) AssignMemberRoles(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, http.StatusOK, responses.FromMembership(m))
 }
+
+// GET /api/v1/companies/{companyID}/members/{userID} — สมาชิกหนึ่งคน (หน้าแก้ไขสมาชิก)
+func (h *Handler) GetMember(w http.ResponseWriter, r *http.Request) {
+	actorID, companyID, target, err := actorCompanyAndMember(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	m, err := h.uc.Members.Get(r.Context(), actorID, companyID, target)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeData(w, http.StatusOK, responses.FromMember(m))
+}

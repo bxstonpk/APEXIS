@@ -19,14 +19,15 @@ type (
 func ToList[D any, T any](r listing.Result[D], fn func(D) T) List[T] { return httpx.ToList(r, fn) }
 
 type User struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	ID                 string `json:"id"`
+	Email              string `json:"email"`
+	Name               string `json:"name"`
+	Status             string `json:"status"`
+	MustChangePassword bool   `json:"must_change_password"`
 }
 
 func FromUser(u dto.User) User {
-	return User{ID: u.ID, Email: u.Email, Name: u.Name, Status: u.Status}
+	return User{ID: u.ID, Email: u.Email, Name: u.Name, Status: u.Status, MustChangePassword: u.MustChangePassword}
 }
 
 type Token struct {

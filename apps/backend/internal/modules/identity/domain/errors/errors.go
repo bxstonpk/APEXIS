@@ -17,6 +17,8 @@ var (
 	ErrUserInactive       = errors.New("user is inactive")
 	ErrInvalidCredentials = errors.New("invalid email or password")
 	ErrUnauthenticated    = errors.New("unauthenticated")
+	// ErrPasswordChangeRequired: บัญชีที่ผู้ดูแลสร้างให้ (รหัสผ่านชั่วคราว) ต้องเปลี่ยนรหัสผ่านก่อนใช้งานบริษัทใด
+	ErrPasswordChangeRequired = errors.New("password change required")
 )
 
 // Company (tenant) — ข้อมูลบริษัทอยู่ที่ organization module, identity รู้จักแค่ company id

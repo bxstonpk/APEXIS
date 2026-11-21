@@ -122,7 +122,7 @@ func (uc *ReportUseCases) AccountLedger(ctx context.Context, in dto.AccountLedge
 	return out, nil
 }
 
-// BalanceSheet งบแสดงฐานะการเงิน ณ วันที่ — สินทรัพย์ = หนี้สิน + ส่วนของเจ้าของ (+ กำไรสะสมที่ยังไม่ปิดบัญชี)
+// BalanceSheet งบแสดงฐานะการเงิน ณ วันที่ — สินทรัพย์ + บัญชีพัก = หนี้สิน + ส่วนของเจ้าของ (+ กำไรสะสมที่ยังไม่ปิดบัญชี)
 func (uc *ReportUseCases) BalanceSheet(ctx context.Context, in dto.AsOf) (dto.BalanceSheet, error) {
 	if err := uc.authorize(ctx, in.Actor, vo.PermReportRead); err != nil {
 		return dto.BalanceSheet{}, err
@@ -163,6 +163,7 @@ func (uc *ReportUseCases) BalanceSheet(ctx context.Context, in dto.AsOf) (dto.Ba
 	out.Equity, equity = services.BuildSection(chart, net, vo.AccountEquity)
 	out.TotalEquity = equity.Add(out.RetainedEarningsPrior).Add(out.CurrentYearEarnings)
 	out.TotalLiabilitiesAndEquity = out.TotalLiabilities.Add(out.TotalEquity)
+	out.Suspense, out.TotalSuspense = services.BuildSection(chart, net, vo.AccountSuspense)
 	return out, nil
 }
 

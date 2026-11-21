@@ -34,6 +34,7 @@ var (
 	ErrCodeExists  = errors.New("code already exists")
 	ErrEntryNoUsed = errors.New("entry number is already used (check the journal number format)")
 	ErrInUse       = errors.New("record is referenced by other records")
+	ErrChartExists = errors.New("chart of accounts already has accounts")
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -76,6 +77,7 @@ var all = []error{
 	ErrDimensionNotFound,
 	ErrCodeExists,
 	ErrInUse,
+	ErrChartExists,
 	ErrCompanyInactive,
 	ErrHierarchyCycle,
 	ErrParentNotHeader,

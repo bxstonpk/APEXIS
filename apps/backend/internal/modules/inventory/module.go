@@ -205,3 +205,12 @@ func (m *Module) SalesItems(ctx context.Context, companyID uuid.UUID, itemIDs []
 func (m *Module) SalesContext(ctx context.Context, companyID uuid.UUID, date time.Time, itemIDs []uuid.UUID) (integration.PurchaseContext, error) {
 	return m.PurchaseContext(ctx, companyID, date, itemIDs)
 }
+
+// Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
+func (m *Module) Permissions() []string {
+	out := make([]string, len(vo.AllPermissions))
+	for i, p := range vo.AllPermissions {
+		out[i] = string(p)
+	}
+	return out
+}

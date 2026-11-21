@@ -71,7 +71,11 @@ func ParseStatus(raw string) (Status, error) {
 	return parseEnum(raw, Statuses, domain.ErrInvalidStatus)
 }
 
-// AccountType คือหมวดบัญชี 5 หมวด
+// AccountType คือหมวดบัญชี 5 หมวด + บัญชีพัก
+//
+// บัญชีพัก (suspense) ใช้พักรายการที่ยังระบุไม่ได้ เช่น เงินเข้าบัญชีธนาคารแต่ยังไม่รู้ว่าเป็นของใคร
+// (พักรับ) — เมื่อตรวจสอบได้จึงโอนออกไปบัญชีที่ถูกต้อง ยอดจึงควรกลับเป็นศูนย์
+// ยอดสะสมต่อเนื่องแบบบัญชีงบฐานะการเงิน และไม่เข้างบกำไรขาดทุน
 type AccountType string
 
 const (
@@ -80,20 +84,24 @@ const (
 	AccountEquity    AccountType = "equity"
 	AccountRevenue   AccountType = "revenue"
 	AccountExpense   AccountType = "expense"
+	AccountSuspense  AccountType = "suspense"
 )
 
-var AccountTypes = []AccountType{AccountAsset, AccountLiability, AccountEquity, AccountRevenue, AccountExpense}
+var AccountTypes = []AccountType{AccountAsset, AccountLiability, AccountEquity, AccountRevenue, AccountExpense, AccountSuspense}
 
 func ParseAccountType(raw string) (AccountType, error) {
 	return parseEnum(raw, AccountTypes, domain.ErrInvalidAccountType)
 }
 
 // DebitNormal: สินทรัพย์ / ค่าใช้จ่าย มียอดคงเหลือปกติด้านเดบิต, ที่เหลือด้านเครดิต
-func (t AccountType) DebitNormal() bool { return t == AccountAsset || t == AccountExpense }
+// บัญชีพักแสดงยอดแบบเดบิตเป็นบวก (พักจ่ายค้าง = บวก, พักรับค้าง = ลบ)
+func (t AccountType) DebitNormal() bool {
+	return t == AccountAsset || t == AccountExpense || t == AccountSuspense
+}
 
 // IsBalanceSheet: บัญชีงบแสดงฐานะการเงิน (ยอดสะสมตลอด) — รายได้ / ค่าใช้จ่ายเริ่มนับใหม่ทุกปีบัญชี
 func (t AccountType) IsBalanceSheet() bool {
-	return t == AccountAsset || t == AccountLiability || t == AccountEquity
+	return t == AccountAsset || t == AccountLiability || t == AccountEquity || t == AccountSuspense
 }
 
 // EntryStatus ของรายการบัญชี: draft -> posted -> reversed (ถูกกลับรายการแล้ว)

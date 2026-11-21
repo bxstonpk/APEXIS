@@ -19,6 +19,8 @@ type User struct {
 	name         string
 	passwordHash string
 	status       vo.UserStatus
+	// mustChangePassword: ผู้ดูแลสร้างบัญชีให้พร้อมรหัสผ่านชั่วคราว — ต้องเปลี่ยนก่อนเข้าใช้งานบริษัท
+	mustChangePassword bool
 }
 
 func NewUser(email vo.Email, name, passwordHash string) (*User, error) {
@@ -41,17 +43,28 @@ func NewUser(email vo.Email, name, passwordHash string) (*User, error) {
 	}, nil
 }
 
-// RehydrateUser ใช้โดย repository เพื่อสร้าง entity กลับจาก DB (ไม่ validate ซ้ำ)
-func RehydrateUser(id vo.UserID, email vo.Email, name, passwordHash string, status vo.UserStatus) *User {
-	return &User{id: id, email: email, name: name, passwordHash: passwordHash, status: status}
+// NewUserWithTemporaryPassword: บัญชีที่ผู้ดูแลบริษัทสร้างให้ — รหัสผ่านเป็นแบบชั่วคราว ต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก
+func NewUserWithTemporaryPassword(email vo.Email, name, passwordHash string) (*User, error) {
+	u, err := NewUser(email, name, passwordHash)
+	if err != nil {
+		return nil, err
+	}
+	u.mustChangePassword = true
+	return u, nil
 }
 
-func (u *User) ID() vo.UserID         { return u.id }
-func (u *User) Email() vo.Email       { return u.email }
-func (u *User) Name() string          { return u.name }
-func (u *User) PasswordHash() string  { return u.passwordHash }
-func (u *User) Status() vo.UserStatus { return u.status }
-func (u *User) IsActive() bool        { return u.status == vo.UserStatusActive }
+// RehydrateUser ใช้โดย repository เพื่อสร้าง entity กลับจาก DB (ไม่ validate ซ้ำ)
+func RehydrateUser(id vo.UserID, email vo.Email, name, passwordHash string, status vo.UserStatus, mustChangePassword bool) *User {
+	return &User{id: id, email: email, name: name, passwordHash: passwordHash, status: status, mustChangePassword: mustChangePassword}
+}
+
+func (u *User) ID() vo.UserID            { return u.id }
+func (u *User) Email() vo.Email          { return u.email }
+func (u *User) Name() string             { return u.name }
+func (u *User) PasswordHash() string     { return u.passwordHash }
+func (u *User) Status() vo.UserStatus    { return u.status }
+func (u *User) IsActive() bool           { return u.status == vo.UserStatusActive }
+func (u *User) MustChangePassword() bool { return u.mustChangePassword }
 
 func (u *User) Rename(name string) error {
 	n, err := normalizeUserName(name)
@@ -67,6 +80,7 @@ func (u *User) ChangePasswordHash(hash string) error {
 		return domain.ErrInvalidPassword
 	}
 	u.passwordHash = hash
+	u.mustChangePassword = false // ตั้งรหัสผ่านเองแล้ว
 	return nil
 }
 

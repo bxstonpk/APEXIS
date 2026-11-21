@@ -21,3 +21,21 @@ const (
 )
 
 func (p Permission) String() string { return string(p) }
+
+// AllPermissions คือสิทธิ์ทั้งหมดของ purchasing (ลงทะเบียนกับ platform/permissions ผ่าน Module.Permissions)
+var AllPermissions = []Permission{
+	PermSettingsRead,
+	PermSettingsManage,
+	PermSupplierRead,
+	PermSupplierManage,
+	PermOrderRead,
+	PermOrderManage,
+	PermOrderApprove,
+	PermReceiptRead,
+	PermReceiptPost,
+	PermInvoiceRead,
+	PermInvoicePost,
+	PermPaymentRead,
+	PermPaymentPost,
+	PermReportRead,
+}

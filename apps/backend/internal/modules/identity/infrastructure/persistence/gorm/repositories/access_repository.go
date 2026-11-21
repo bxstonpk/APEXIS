@@ -32,6 +32,7 @@ func (r *AccessRepository) FindAccessFacts(ctx context.Context, userID vo.UserID
 		MembershipID     uuid.UUID
 		MembershipStatus string
 		UserStatus       string
+		MustChange       bool
 		RoleID           *uuid.UUID
 		RoleCompanyID    *uuid.UUID
 		RoleCode         *string
@@ -43,7 +44,7 @@ func (r *AccessRepository) FindAccessFacts(ctx context.Context, userID vo.UserID
 	err := database.Conn(ctx, r.db).
 		Table("identity_memberships AS m").
 		Select(`m.id AS membership_id, m.status AS membership_status,
-			u.status AS user_status,
+			u.status AS user_status, u.must_change_password AS must_change,
 			ro.id AS role_id, ro.company_id AS role_company_id, ro.code AS role_code,
 			ro.name AS role_name, ro.description AS role_description, ro.is_system AS role_is_system,
 			rp.permission`).
@@ -94,9 +95,10 @@ func (r *AccessRepository) FindAccessFacts(ctx context.Context, userID vo.UserID
 
 	first := rows[0]
 	return services.AccessFacts{
-		UserID:     userID,
-		UserStatus: vo.UserStatus(first.UserStatus),
-		CompanyID:  companyID,
+		UserID:             userID,
+		UserStatus:         vo.UserStatus(first.UserStatus),
+		MustChangePassword: first.MustChange,
+		CompanyID:          companyID,
 		Membership: entities.RehydrateMembership(
 			vo.MembershipID(first.MembershipID), userID, companyID, roleIDs,
 			vo.MembershipStatus(first.MembershipStatus),

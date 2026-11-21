@@ -119,6 +119,8 @@ type Account struct {
 	ParentID *string `json:"parent_id"`
 	Postable *bool   `json:"postable"`
 	Status   string  `json:"status"`
+	// Description คำอธิบายการใช้บัญชี (ไม่บังคับ, ไม่เกิน 500 ตัวอักษร)
+	Description string `json:"description"`
 }
 
 func (r Account) ToData(isCreate bool) (entities.AccountData, error) {
@@ -127,7 +129,7 @@ func (r Account) ToData(isCreate bool) (entities.AccountData, error) {
 	}
 	t, err := vo.ParseAccountType(r.Type)
 	if err != nil {
-		return entities.AccountData{}, invalid("type must be one of asset, liability, equity, revenue, expense")
+		return entities.AccountData{}, invalid("type must be one of asset, liability, equity, revenue, expense, suspense")
 	}
 	parent, err := optionalID[vo.AccountID]("parent_id", r.ParentID)
 	if err != nil {
@@ -146,6 +148,7 @@ func (r Account) ToData(isCreate bool) (entities.AccountData, error) {
 	}
 	return entities.AccountData{
 		Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: t, ParentID: parent, Postable: postable, Status: st,
+		Description: r.Description,
 	}, nil
 }
 

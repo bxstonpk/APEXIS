@@ -42,7 +42,7 @@ func New(d Deps) *UseCases {
 	}
 	b := base{tx: d.Tx, auth: d.Auth, org: d.Org, now: d.Clock}
 	return &UseCases{
-		Accounts: &AccountUseCases{base: b, accounts: d.Accounts},
+		Accounts: &AccountUseCases{base: b, accounts: d.Accounts, journals: d.Journals},
 		Journals: &JournalUseCases{base: b, journals: d.Journals},
 		Entries:  &EntryUseCases{base: b, entries: d.Entries, accounts: d.Accounts, journals: d.Journals},
 		Reports:  &ReportUseCases{base: b, accounts: d.Accounts, reports: d.Reports},

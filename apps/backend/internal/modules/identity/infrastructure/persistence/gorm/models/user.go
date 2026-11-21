@@ -17,8 +17,10 @@ type UserModel struct {
 	Name         string    `gorm:"size:200;not null"`
 	PasswordHash string    `gorm:"size:255;not null"`
 	Status       string    `gorm:"size:20;not null"`
-	CreatedAt    time.Time `gorm:"not null"`
-	UpdatedAt    time.Time `gorm:"not null"`
+	// รหัสผ่านชั่วคราว (ผู้ดูแลสร้างบัญชีให้) — ต้องเปลี่ยนก่อนใช้งาน
+	MustChangePassword bool      `gorm:"not null;default:false"`
+	CreatedAt          time.Time `gorm:"not null"`
+	UpdatedAt          time.Time `gorm:"not null"`
 }
 
 func (UserModel) TableName() string { return "identity_users" }

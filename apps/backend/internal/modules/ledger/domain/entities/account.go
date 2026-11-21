@@ -17,6 +17,8 @@ type AccountData struct {
 	ParentID *vo.AccountID
 	Postable bool // true = บัญชีย่อยที่ลงรายการได้, false = บัญชีคุม (header) ใช้รวมยอด
 	Status   vo.Status
+	// Description คำอธิบายการใช้บัญชี (ไม่บังคับ)
+	Description string
 }
 
 // AccountUsage คือข้อเท็จจริงจาก repository ที่ต้องใช้ตัดสินการแก้ / ลบบัญชี
@@ -107,6 +109,9 @@ func checkParent(d AccountData, parent *Account) error {
 func normalizeAccount(d AccountData) (AccountData, error) {
 	var err error
 	out := AccountData{ParentID: d.ParentID, Postable: d.Postable}
+	if out.Description, err = vo.OptionalText(d.Description, 500); err != nil {
+		return AccountData{}, err
+	}
 	if out.Code, err = vo.NewAccountCode(d.Code); err != nil {
 		return AccountData{}, err
 	}

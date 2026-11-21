@@ -148,3 +148,11 @@ func (s PermissionSet) Clone() PermissionSet {
 	out.Merge(s)
 	return out
 }
+
+// AllPermissions คือสิทธิ์ทั้งหมดของ identity (ลงทะเบียนกับ platform/permissions ผ่าน Module.Permissions)
+var AllPermissions = []Permission{
+	PermMemberRead,
+	PermMemberManage,
+	PermRoleRead,
+	PermRoleManage,
+}

@@ -113,3 +113,9 @@ const (
 )
 
 func (p Permission) String() string { return string(p) }
+
+// AllPermissions คือสิทธิ์ทั้งหมดของ cashbank (ลงทะเบียนกับ platform/permissions ผ่าน Module.Permissions)
+var AllPermissions = []Permission{
+	PermAccountRead,
+	PermAccountManage,
+}

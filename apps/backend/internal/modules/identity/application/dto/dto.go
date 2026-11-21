@@ -14,10 +14,11 @@ import (
 // ---------- Output ----------
 
 type User struct {
-	ID     string
-	Email  string
-	Name   string
-	Status string
+	ID                 string
+	Email              string
+	Name               string
+	Status             string
+	MustChangePassword bool
 }
 
 type AuthToken struct {
@@ -110,8 +111,16 @@ type DeleteRoleInput struct {
 type AddMemberInput struct {
 	ActorID   vo.UserID
 	CompanyID vo.CompanyID
-	Email     string // user ต้องลงทะเบียนไว้ก่อนแล้ว
+	Email     string
 	RoleIDs   []vo.RoleID
+	// NewUser: ยังไม่มีบัญชี — สร้างบัญชีพร้อมรหัสผ่านชั่วคราวให้ (ต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก)
+	// nil = เพิ่มเฉพาะผู้ที่มีบัญชีแล้ว (ไม่พบ = ErrUserNotFound)
+	NewUser *NewUserInput
+}
+
+type NewUserInput struct {
+	Name     string
+	Password string
 }
 
 type AssignMemberRolesInput struct {
@@ -175,7 +184,7 @@ type ListRolesInput struct {
 // ---------- mapping ----------
 
 func FromUser(u *entities.User) User {
-	return User{ID: u.ID().String(), Email: u.Email().String(), Name: u.Name(), Status: string(u.Status())}
+	return User{ID: u.ID().String(), Email: u.Email().String(), Name: u.Name(), Status: string(u.Status()), MustChangePassword: u.MustChangePassword()}
 }
 
 func FromRole(r *entities.Role) Role {

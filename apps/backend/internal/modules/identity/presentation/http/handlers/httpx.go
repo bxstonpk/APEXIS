@@ -39,6 +39,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	// 403
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
 	{Err: domain.ErrUserInactive, Status: http.StatusForbidden},
+	{Err: domain.ErrPasswordChangeRequired, Status: http.StatusForbidden},
 	{Err: domain.ErrMembershipInactive, Status: http.StatusForbidden},
 	// 404
 	{Err: domain.ErrUserNotFound, Status: http.StatusNotFound},

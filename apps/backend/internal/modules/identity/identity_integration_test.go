@@ -349,3 +349,57 @@ func TestSeedUser(t *testing.T) {
 		t.Fatal("short password must be rejected")
 	}
 }
+
+// ผู้ดูแลบริษัทสร้างบัญชีให้พนักงานที่ยังไม่มีบัญชี (รหัสผ่านชั่วคราว) แล้วพนักงานต้องเปลี่ยนรหัสผ่านก่อนใช้งานบริษัท
+func TestAddMemberWithNewAccount(t *testing.T) {
+	a := setup(t)
+	a.register("owner@example.com", "Owner")
+	a.register("existing@example.com", "Existing")
+	owner := a.login("owner@example.com")
+	base := "/api/v1/companies/" + a.createCompany(owner)
+	role := a.expect(a.do("POST", base+"/roles", owner, map[string]any{
+		"code": "viewer", "name": "Viewer", "permissions": []string{"identity.member:read"},
+	}), 201, "create role").data()["id"].(string)
+
+	// ไม่พบบัญชี และไม่ได้ขอสร้าง = 404 (frontend แสดงช่องสร้างบัญชี)
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "new@example.com", "role_ids": []string{role}}), 404, "unknown email")
+
+	newUser := map[string]any{"name": "New Staff", "password": "temp-pass-123"}
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "new@example.com", "role_ids": []string{role}, "new_user": map[string]any{"name": "x", "password": "short"}}), 400, "weak temp password")
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "New@Example.com", "role_ids": []string{role}, "new_user": newUser}), 201, "add with new account")
+	// มีบัญชีอยู่แล้ว = ไม่ตั้งรหัสผ่านทับ
+	a.expect(a.do("POST", base+"/members", owner, map[string]any{"email": "existing@example.com", "role_ids": []string{role}, "new_user": newUser}), 409, "new_user for existing email")
+
+	login := a.expect(a.do("POST", "/api/v1/auth/tokens", "", map[string]any{"email": "new@example.com", "password": "temp-pass-123"}), 201, "login with temp password")
+	if u := login.data()["user"].(map[string]any); u["must_change_password"] != true || u["name"] != "New Staff" {
+		t.Fatalf("new user = %v", u)
+	}
+	staff := login.data()["access_token"].(string)
+	newID := login.data()["user"].(map[string]any)["id"].(string)
+
+	// ผู้ดูแลเห็นสมาชิกใหม่ว่า "รอเปลี่ยนรหัสผ่าน" และเปิดหน้าสมาชิก / บทบาทรายตัวได้
+	if m := a.expect(a.do("GET", base+"/members/"+newID, owner, nil), 200, "get member").data(); m["user"].(map[string]any)["must_change_password"] != true || len(m["role_ids"].([]any)) != 1 {
+		t.Fatalf("member = %v", m)
+	}
+	a.expect(a.do("GET", base+"/members/"+uuid.NewString(), owner, nil), 404, "get non-member")
+	if r := a.expect(a.do("GET", base+"/roles/"+role, owner, nil), 200, "get role").data(); r["code"] != "viewer" {
+		t.Fatalf("role = %v", r)
+	}
+	a.expect(a.do("GET", base+"/roles/"+uuid.NewString(), owner, nil), 404, "get unknown role")
+
+	// ยังไม่เปลี่ยนรหัสผ่าน: เข้าข้อมูลบริษัทไม่ได้ แต่ดู / เปลี่ยนข้อมูลตัวเองได้
+	if r := a.expect(a.do("GET", base+"/members", staff, nil), 403, "before password change"); r.body["error"].(map[string]any)["code"] != "password_change_required" {
+		t.Fatalf("error = %v", r.body)
+	}
+	ok, err := a.mod.Authorize(context.Background(), uuid.MustParse(login.data()["user"].(map[string]any)["id"].(string)), uuid.MustParse(base[len("/api/v1/companies/"):]), "identity.member:read")
+	if err != nil || ok {
+		t.Fatalf("facade authorize before change = %v %v", ok, err)
+	}
+	a.expect(a.do("GET", "/api/v1/me", staff, nil), 200, "me before change")
+	a.expect(a.do("PUT", "/api/v1/me/password", staff, map[string]any{"old_password": "temp-pass-123", "new_password": "my-own-pass-1"}), 204, "change password")
+
+	if me := a.expect(a.do("GET", "/api/v1/me", staff, nil), 200, "me after change").data(); me["must_change_password"] != false {
+		t.Fatalf("me = %v", me)
+	}
+	a.expect(a.do("GET", base+"/members", staff, nil), 200, "after password change")
+}

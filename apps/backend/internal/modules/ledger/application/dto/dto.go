@@ -141,6 +141,14 @@ type Account struct {
 	Parent   *Ref
 	Postable bool
 	Status   string
+	// Description คำอธิบายการใช้บัญชี
+	Description string
+}
+
+// DefaultChartResult ผลการสร้างผังบัญชีมาตรฐาน
+type DefaultChartResult struct {
+	Accounts int // จำนวนบัญชีที่สร้าง
+	Journals int // จำนวนสมุดรายวันที่สร้าง (ข้ามรหัสที่มีอยู่แล้ว)
 }
 
 type Journal struct {
@@ -243,6 +251,8 @@ type BalanceSheet struct {
 	CurrentYearEarnings       vo.Money // กำไร (ขาดทุน) ปีปัจจุบันถึง AsOf
 	TotalEquity               vo.Money
 	TotalLiabilitiesAndEquity vo.Money
+	Suspense                  []services.StatementLine // บัญชีพักที่ยังมียอดค้าง (ควรเป็นศูนย์)
+	TotalSuspense             vo.Money                 // เดบิตเป็นบวก: สินทรัพย์ + บัญชีพัก = หนี้สิน + ส่วนของเจ้าของ
 }
 
 type IncomeStatement struct {

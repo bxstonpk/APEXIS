@@ -25,6 +25,29 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/v1/companies/{companyID}/accounts/tree — ทุกบัญชีเรียงตามรหัส (หน้าผังบัญชีแบบต้นไม้)
+func (h *Handler) AccountTree(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		res, err := h.uc.Accounts.Tree(r.Context(), a)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]responses.Account, len(res))
+		for i, acc := range res {
+			out[i] = responses.FromAccount(acc)
+		}
+		return one(out, nil)
+	})
+}
+
+// POST /api/v1/companies/{companyID}/accounts/defaults — สร้างผังบัญชีมาตรฐาน (บริษัทที่ยังไม่มีบัญชี)
+func (h *Handler) CreateDefaultAccounts(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusCreated, func(a dto.Actor) (any, error) {
+		res, err := h.uc.Accounts.CreateDefaults(r.Context(), a)
+		return one(responses.DefaultChart{Accounts: res.Accounts, Journals: res.Journals}, err)
+	})
+}
+
 func (h *Handler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
 		id, err := pathID[vo.AccountID](r, "accountID")

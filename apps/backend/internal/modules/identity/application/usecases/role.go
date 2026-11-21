@@ -19,6 +19,18 @@ func (uc *RoleUseCases) List(ctx context.Context, in dto.ListRolesInput) (listin
 	return uc.deps.Roles.List(ctx, in.CompanyID, in.Filter)
 }
 
+// Get role หนึ่งรายการของบริษัท (ต้องมีสิทธิ์ identity.role:read)
+func (uc *RoleUseCases) Get(ctx context.Context, actor vo.UserID, company vo.CompanyID, id vo.RoleID) (dto.Role, error) {
+	if _, err := uc.access.Authorize(ctx, actor, company, vo.PermRoleRead); err != nil {
+		return dto.Role{}, err
+	}
+	r, err := uc.deps.Roles.FindByID(ctx, company, id)
+	if err != nil {
+		return dto.Role{}, err
+	}
+	return dto.FromRole(r), nil
+}
+
 func (uc *RoleUseCases) Create(ctx context.Context, in dto.CreateRoleInput) (dto.Role, error) {
 	perms, err := vo.ParsePermissionSet(in.Permissions)
 	if err != nil {

@@ -16,6 +16,7 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	// บริษัท (tenant) — สร้างแล้วผู้สร้างเป็น owner, สิทธิ์ / สมาชิกจัดการที่ identity
 	handle("POST /api/v1/companies", h.CreateCompany)
 	handle("GET /api/v1/me/companies", h.ListMyCompanies)
+	handle("GET /api/v1/me/companies/{companyID}", h.GetMyCompany)
 	handle("GET "+base, h.GetCompany)
 	handle("PUT "+base, h.UpdateCompany)
 

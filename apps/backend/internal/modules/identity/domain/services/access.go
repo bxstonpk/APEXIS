@@ -47,9 +47,11 @@ func (a AccessContext) RequireAll(perms vo.PermissionSet) error {
 type AccessFacts struct {
 	UserID     vo.UserID
 	UserStatus vo.UserStatus
-	CompanyID  vo.CompanyID
-	Membership *entities.Membership
-	Roles      []*entities.Role // role ที่ membership ถืออยู่
+	// MustChangePassword: ยังใช้รหัสผ่านชั่วคราว — เข้าบริษัทไม่ได้จนกว่าจะเปลี่ยน
+	MustChangePassword bool
+	CompanyID          vo.CompanyID
+	Membership         *entities.Membership
+	Roles              []*entities.Role // role ที่ membership ถืออยู่
 }
 
 // ResolveAccess รวมกฎว่า user จะเข้าบริษัทได้เมื่อใด และรวม permission จากทุก role
@@ -61,6 +63,8 @@ func ResolveAccess(f AccessFacts) (AccessContext, error) {
 		return AccessContext{}, domain.ErrMembershipNotFound
 	case f.UserStatus != vo.UserStatusActive:
 		return AccessContext{}, domain.ErrUserInactive
+	case f.MustChangePassword:
+		return AccessContext{}, domain.ErrPasswordChangeRequired
 	case !m.IsActive():
 		return AccessContext{}, domain.ErrMembershipInactive
 	}

@@ -144,3 +144,12 @@ func (m *Module) RegisterDocumentTypes(types ...integration.DocumentType) {
 func (m *Module) DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error) {
 	return m.UseCases.Numbering.Format(ctx, vo.CompanyID(companyID), docType)
 }
+
+// Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
+func (m *Module) Permissions() []string {
+	out := make([]string, len(vo.AllPermissions))
+	for i, p := range vo.AllPermissions {
+		out[i] = string(p)
+	}
+	return out
+}

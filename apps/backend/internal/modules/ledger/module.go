@@ -146,3 +146,12 @@ func (m *Module) JournalUsable(ctx context.Context, companyID, journalID uuid.UU
 
 // Migrate สร้างตารางของ ledger
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+
+// Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
+func (m *Module) Permissions() []string {
+	out := make([]string, len(vo.AllPermissions))
+	for i, p := range vo.AllPermissions {
+		out[i] = string(p)
+	}
+	return out
+}

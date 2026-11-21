@@ -18,6 +18,8 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	// ผังบัญชี
 	handle("GET "+base+"/accounts", h.ListAccounts)
 	handle("POST "+base+"/accounts", h.CreateAccount)
+	handle("GET "+base+"/accounts/tree", h.AccountTree)
+	handle("POST "+base+"/accounts/defaults", h.CreateDefaultAccounts)
 	handle("GET "+base+"/accounts/{accountID}", h.GetAccount)
 	handle("PUT "+base+"/accounts/{accountID}", h.UpdateAccount)
 	handle("DELETE "+base+"/accounts/{accountID}", h.DeleteAccount)

@@ -36,10 +36,21 @@ type Account struct {
 	Parent   *Ref   `json:"parent"`
 	Postable bool   `json:"postable"`
 	Status   string `json:"status"`
+	// Description คำอธิบายการใช้บัญชี
+	Description string `json:"description"`
+}
+
+// DefaultChart ผลของ POST /accounts/defaults
+type DefaultChart struct {
+	Accounts int `json:"accounts"`
+	Journals int `json:"journals"`
 }
 
 func FromAccount(a dto.Account) Account {
-	out := Account{ID: a.ID, Code: a.Code, Name: a.Name, NameEN: a.NameEN, Type: a.Type, Postable: a.Postable, Status: a.Status}
+	out := Account{
+		ID: a.ID, Code: a.Code, Name: a.Name, NameEN: a.NameEN, Type: a.Type, Postable: a.Postable, Status: a.Status,
+		Description: a.Description,
+	}
 	if a.Parent != nil {
 		p := ref(*a.Parent)
 		out.Parent = &p
@@ -241,6 +252,8 @@ type BalanceSheet struct {
 	CurrentYearEarnings       string          `json:"current_year_earnings"`
 	TotalEquity               string          `json:"total_equity"`
 	TotalLiabilitiesAndEquity string          `json:"total_liabilities_and_equity"`
+	Suspense                  []StatementLine `json:"suspense"`
+	TotalSuspense             string          `json:"total_suspense"`
 }
 
 func FromBalanceSheet(b dto.BalanceSheet) BalanceSheet {
@@ -250,6 +263,7 @@ func FromBalanceSheet(b dto.BalanceSheet) BalanceSheet {
 		Equity: lines(b.Equity), RetainedEarningsPrior: b.RetainedEarningsPrior.String(),
 		CurrentYearEarnings: b.CurrentYearEarnings.String(), TotalEquity: b.TotalEquity.String(),
 		TotalLiabilitiesAndEquity: b.TotalLiabilitiesAndEquity.String(),
+		Suspense:                  lines(b.Suspense), TotalSuspense: b.TotalSuspense.String(),
 	}
 }
 

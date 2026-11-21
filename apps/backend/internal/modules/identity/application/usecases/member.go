@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 
 	"apexis/backend/internal/modules/identity/application/dto"
 	"apexis/backend/internal/modules/identity/domain/entities"
@@ -21,11 +22,34 @@ func (uc *MemberUseCases) List(ctx context.Context, in dto.ListMembersInput) (li
 	return uc.deps.Memberships.List(ctx, in.CompanyID, in.Filter)
 }
 
+// Get สมาชิกหนึ่งคน (ต้องมีสิทธิ์ identity.member:read)
+func (uc *MemberUseCases) Get(ctx context.Context, actor vo.UserID, company vo.CompanyID, user vo.UserID) (dto.Member, error) {
+	if _, err := uc.access.Authorize(ctx, actor, company, vo.PermMemberRead); err != nil {
+		return dto.Member{}, err
+	}
+	return uc.deps.Memberships.Get(ctx, company, user)
+}
+
 func (uc *MemberUseCases) Add(ctx context.Context, in dto.AddMemberInput) (dto.Membership, error) {
 	email, err := vo.NewEmail(in.Email)
 	if err != nil {
 		return dto.Membership{}, err
 	}
+	// บัญชีใหม่: ตรวจ / hash รหัสผ่านก่อนเปิด transaction (bcrypt ใช้ CPU นาน — ให้ transaction สั้นที่สุด)
+	var newUser *entities.User
+	if in.NewUser != nil {
+		if err := vo.ValidatePassword(in.NewUser.Password); err != nil {
+			return dto.Membership{}, err
+		}
+		hash, err := uc.deps.Hasher.Hash(in.NewUser.Password)
+		if err != nil {
+			return dto.Membership{}, err
+		}
+		if newUser, err = entities.NewUserWithTemporaryPassword(email, in.NewUser.Name, hash); err != nil {
+			return dto.Membership{}, err
+		}
+	}
+
 	var membership *entities.Membership
 	err = uc.deps.Tx.WithinTransaction(ctx, func(ctx context.Context) error {
 		access, err := uc.access.Authorize(ctx, in.ActorID, in.CompanyID, vo.PermMemberManage)
@@ -33,7 +57,17 @@ func (uc *MemberUseCases) Add(ctx context.Context, in dto.AddMemberInput) (dto.M
 			return err
 		}
 		user, err := uc.deps.Users.FindByEmail(ctx, email)
-		if err != nil {
+		switch {
+		case err == nil && newUser != nil:
+			// มีบัญชีอยู่แล้ว — ไม่ตั้งรหัสผ่านทับของเจ้าของบัญชี
+			return domain.ErrEmailAlreadyExists
+		case errors.Is(err, domain.ErrUserNotFound) && newUser != nil:
+			// สร้างบัญชีใน transaction เดียวกับสมาชิก (unique email ใน DB กันการสร้างซ้ำพร้อมกัน)
+			if err := uc.deps.Users.Create(ctx, newUser); err != nil {
+				return err
+			}
+			user = newUser
+		case err != nil:
 			return err
 		}
 		roles, err := uc.loadRoles(ctx, in.CompanyID, in.RoleIDs)
@@ -52,6 +86,9 @@ func (uc *MemberUseCases) Add(ctx context.Context, in dto.AddMemberInput) (dto.M
 	})
 	if err != nil {
 		return dto.Membership{}, err
+	}
+	if newUser != nil {
+		uc.publish(ctx, events.UserRegistered{UserID: newUser.ID(), Email: newUser.Email(), At: uc.now()})
 	}
 	uc.publish(ctx, events.MemberAdded{
 		CompanyID: in.CompanyID, UserID: membership.UserID(), RoleIDs: membership.RoleIDs(),

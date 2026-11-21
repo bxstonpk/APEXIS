@@ -102,3 +102,23 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// GET /api/v1/companies/{companyID}/roles/{roleID} — role หนึ่งรายการ (หน้าแก้ไขบทบาท)
+func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
+	userID, companyID, err := actorAndCompany(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	roleID, err := pathRoleID(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	role, err := h.uc.Roles.Get(r.Context(), userID, companyID, roleID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeData(w, http.StatusOK, responses.FromRole(role))
+}

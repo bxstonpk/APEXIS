@@ -42,6 +42,8 @@ type MembershipRepository interface {
 	Update(ctx context.Context, m *entities.Membership) error
 	Find(ctx context.Context, companyID vo.CompanyID, userID vo.UserID) (*entities.Membership, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.MemberFilter) (listing.Result[dto.Member], error)
+	// Get คืนสมาชิกหนึ่งคนพร้อมข้อมูลผู้ใช้ (read DTO) — ไม่ใช่สมาชิก = ErrMembershipNotFound
+	Get(ctx context.Context, companyID vo.CompanyID, userID vo.UserID) (dto.Member, error)
 	// CompanyIDsOf คืน id ของบริษัทที่ user มี membership ที่ active
 	CompanyIDsOf(ctx context.Context, userID vo.UserID) ([]vo.CompanyID, error)
 }

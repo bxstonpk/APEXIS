@@ -23,3 +23,23 @@ const (
 )
 
 func (p Permission) String() string { return string(p) }
+
+// AllPermissions คือสิทธิ์ทั้งหมดของ inventory (ลงทะเบียนกับ platform/permissions ผ่าน Module.Permissions)
+var AllPermissions = []Permission{
+	PermUomRead,
+	PermUomManage,
+	PermCategoryRead,
+	PermCategoryManage,
+	PermItemRead,
+	PermItemManage,
+	PermWarehouseRead,
+	PermWarehouseManage,
+	PermDocumentRead,
+	PermDocumentManage,
+	PermDocumentPost,
+	PermReportRead,
+	PermSettingsRead,
+	PermSettingsManage,
+	PermClosingRead,
+	PermClosingPost,
+}
