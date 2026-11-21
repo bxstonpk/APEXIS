@@ -37,6 +37,7 @@ type CategoryModel struct {
 	Name               string         `gorm:"size:200;not null"`
 	PurchaseAccountID  *uuid.UUID     `gorm:"type:uuid"` // บัญชีของ ledger (ไม่มี FK ข้าม module — ตรวจผ่าน ledger)
 	InventoryAccountID *uuid.UUID     `gorm:"type:uuid"`
+	RevenueAccountID   *uuid.UUID     `gorm:"type:uuid"`
 	Status             string         `gorm:"size:20;not null;check:chk_inv_categories_status,status IN ('active','inactive')"`
 	CreatedAt          time.Time      `gorm:"not null"`
 	UpdatedAt          time.Time      `gorm:"not null"`
@@ -73,6 +74,7 @@ type ItemModel struct {
 	ReorderPoint       *decimal.Decimal `gorm:"type:numeric(24,6);check:chk_inv_items_reorder,reorder_point IS NULL OR reorder_point >= 0"`
 	PurchaseAccountID  *uuid.UUID       `gorm:"type:uuid"`
 	InventoryAccountID *uuid.UUID       `gorm:"type:uuid"`
+	RevenueAccountID   *uuid.UUID       `gorm:"type:uuid"`
 	Status             string           `gorm:"size:20;not null;check:chk_inv_items_status,status IN ('active','inactive')"`
 	CreatedAt          time.Time        `gorm:"not null"`
 	UpdatedAt          time.Time        `gorm:"not null"`

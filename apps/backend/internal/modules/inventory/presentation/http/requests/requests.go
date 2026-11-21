@@ -124,6 +124,7 @@ func (r Master) ToData(isCreate bool) (entities.MasterData, error) {
 type Accounts struct {
 	PurchaseAccountID  *string `json:"purchase_account_id"`
 	InventoryAccountID *string `json:"inventory_account_id"`
+	RevenueAccountID   *string `json:"revenue_account_id"`
 }
 
 func (r Accounts) toGL(prefix string) (vo.GLAccounts, error) {
@@ -135,7 +136,11 @@ func (r Accounts) toGL(prefix string) (vo.GLAccounts, error) {
 	if err != nil {
 		return vo.GLAccounts{}, err
 	}
-	return vo.GLAccounts{Purchase: purchase, Inventory: inventory}, nil
+	revenue, err := optionalID[vo.AccountID](prefix+"revenue_account_id", r.RevenueAccountID)
+	if err != nil {
+		return vo.GLAccounts{}, err
+	}
+	return vo.GLAccounts{Purchase: purchase, Inventory: inventory, Revenue: revenue}, nil
 }
 
 // Category: POST / PUT /item-categories — บัญชีของสินค้าในหมวด

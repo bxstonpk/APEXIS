@@ -62,18 +62,21 @@ func CategoryToModel(c *entities.Category) models.CategoryModel {
 	return models.CategoryModel{
 		ID: uuid.UUID(c.ID()), CompanyID: uuid.UUID(c.CompanyID()), Code: d.Code, Name: d.Name, Status: string(d.Status),
 		PurchaseAccountID: optUUID(d.Accounts.Purchase), InventoryAccountID: optUUID(d.Accounts.Inventory),
+		RevenueAccountID: optUUID(d.Accounts.Revenue),
 	}
 }
 
 func CategoryToEntity(m models.CategoryModel) *entities.Category {
 	return entities.RehydrateCategory(vo.CategoryID(m.ID), vo.CompanyID(m.CompanyID), entities.MasterData{
-		Code: m.Code, Name: m.Name, Status: vo.Status(m.Status), Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID),
+		Code: m.Code, Name: m.Name, Status: vo.Status(m.Status), Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID, m.RevenueAccountID),
 	})
 }
 
 // GLAccounts แปลงคอลัมน์บัญชี (nullable) เป็น value object
-func GLAccounts(purchase, inventory *uuid.UUID) vo.GLAccounts {
-	return vo.GLAccounts{Purchase: optID[vo.AccountID](purchase), Inventory: optID[vo.AccountID](inventory)}
+func GLAccounts(purchase, inventory, revenue *uuid.UUID) vo.GLAccounts {
+	return vo.GLAccounts{
+		Purchase: optID[vo.AccountID](purchase), Inventory: optID[vo.AccountID](inventory), Revenue: optID[vo.AccountID](revenue),
+	}
 }
 
 func WarehouseToModel(w *entities.Warehouse) models.WarehouseModel {
@@ -97,6 +100,7 @@ func ItemToModel(i *entities.Item) models.ItemModel {
 		Type: string(d.Type), UomID: uuid.UUID(d.UomID), CategoryID: optUUID(d.CategoryID),
 		ReorderPoint: optDecimal(d.ReorderPoint), Status: string(d.Status),
 		PurchaseAccountID: optUUID(d.Accounts.Purchase), InventoryAccountID: optUUID(d.Accounts.Inventory),
+		RevenueAccountID: optUUID(d.Accounts.Revenue),
 	}
 }
 
@@ -104,7 +108,7 @@ func ItemToEntity(m models.ItemModel) *entities.Item {
 	return entities.RehydrateItem(vo.ItemID(m.ID), vo.CompanyID(m.CompanyID), entities.ItemData{
 		Code: m.Code, Name: m.Name, NameEN: m.NameEN, Type: vo.ItemType(m.Type), UomID: vo.UomID(m.UomID),
 		CategoryID: optID[vo.CategoryID](m.CategoryID), ReorderPoint: optDecimal(m.ReorderPoint), Status: vo.Status(m.Status),
-		Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID),
+		Accounts: GLAccounts(m.PurchaseAccountID, m.InventoryAccountID, m.RevenueAccountID),
 	})
 }
 
@@ -178,7 +182,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 
 func SettingsToEntity(m models.SettingsModel) entities.Settings {
 	return entities.Settings{
-		Defaults:      GLAccounts(m.DefaultPurchaseAccountID, m.DefaultInventoryAccountID),
+		Defaults:      GLAccounts(m.DefaultPurchaseAccountID, m.DefaultInventoryAccountID, nil),
 		CogsAccountID: optID[vo.AccountID](m.CogsAccountID), JournalID: optID[vo.JournalID](m.JournalID),
 	}
 }

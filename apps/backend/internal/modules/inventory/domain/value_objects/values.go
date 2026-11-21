@@ -113,12 +113,13 @@ func ParseAccountingSystem(raw string) (AccountingSystem, error) {
 type GLAccounts struct {
 	Purchase  *AccountID // บัญชีซื้อ (periodic, สินค้าไม่นับสต็อก / บริการ)
 	Inventory *AccountID // บัญชีสินค้าคงเหลือ (perpetual)
+	Revenue   *AccountID // บัญชีรายได้จากการขาย (ไม่ตั้ง = ค่าเริ่มต้นในค่าตั้งขาย)
 }
 
 // IDs คืน id ที่ตั้งไว้ (ไม่ซ้ำ)
 func (g GLAccounts) IDs() []AccountID {
 	var out []AccountID
-	for _, p := range []*AccountID{g.Purchase, g.Inventory} {
+	for _, p := range []*AccountID{g.Purchase, g.Inventory, g.Revenue} {
 		if p != nil && !slices.Contains(out, *p) {
 			out = append(out, *p)
 		}
@@ -134,6 +135,9 @@ func (g GLAccounts) Or(fallback GLAccounts) GLAccounts {
 	}
 	if out.Inventory == nil {
 		out.Inventory = fallback.Inventory
+	}
+	if out.Revenue == nil {
+		out.Revenue = fallback.Revenue
 	}
 	return out
 }

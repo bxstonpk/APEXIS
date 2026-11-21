@@ -91,7 +91,7 @@ func settingsDTO(s entities.Settings, systems []entities.SystemChange) dto.Setti
 }
 
 func accountsDTO(g vo.GLAccounts) dto.Accounts {
-	return dto.Accounts{PurchaseAccountID: optString(g.Purchase), InventoryAccountID: optString(g.Inventory)}
+	return dto.Accounts{PurchaseAccountID: optString(g.Purchase), InventoryAccountID: optString(g.Inventory), RevenueAccountID: optString(g.Revenue)}
 }
 
 func optString[T interface{ String() string }](v *T) *string {

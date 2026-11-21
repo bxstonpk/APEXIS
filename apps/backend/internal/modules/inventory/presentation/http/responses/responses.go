@@ -53,10 +53,11 @@ func FromMaster(m dto.Master) Master {
 type Accounts struct {
 	PurchaseAccountID  *string `json:"purchase_account_id"`
 	InventoryAccountID *string `json:"inventory_account_id"`
+	RevenueAccountID   *string `json:"revenue_account_id"`
 }
 
 func accounts(a dto.Accounts) Accounts {
-	return Accounts{PurchaseAccountID: a.PurchaseAccountID, InventoryAccountID: a.InventoryAccountID}
+	return Accounts{PurchaseAccountID: a.PurchaseAccountID, InventoryAccountID: a.InventoryAccountID, RevenueAccountID: a.RevenueAccountID}
 }
 
 type Category struct {

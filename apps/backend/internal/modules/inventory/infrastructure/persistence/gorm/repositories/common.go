@@ -145,6 +145,7 @@ type masterRow struct {
 	BranchID           *uuid.UUID
 	PurchaseAccountID  *uuid.UUID
 	InventoryAccountID *uuid.UUID
+	RevenueAccountID   *uuid.UUID
 	Status             string
 	Total              int64
 }
@@ -152,12 +153,12 @@ type masterRow struct {
 func (r masterRow) dto() dto.Master {
 	return dto.Master{
 		ID: r.ID.String(), Code: r.Code, Name: r.Name, BranchID: optString(r.BranchID), Status: r.Status,
-		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID),
+		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID, r.RevenueAccountID),
 	}
 }
 
-func accountsDTO(purchase, inventory *uuid.UUID) dto.Accounts {
-	return dto.Accounts{PurchaseAccountID: optString(purchase), InventoryAccountID: optString(inventory)}
+func accountsDTO(purchase, inventory, revenue *uuid.UUID) dto.Accounts {
+	return dto.Accounts{PurchaseAccountID: optString(purchase), InventoryAccountID: optString(inventory), RevenueAccountID: optString(revenue)}
 }
 
 func (t masterTable) columns() string {
@@ -166,7 +167,7 @@ func (t masterTable) columns() string {
 		c += ", x.branch_id"
 	}
 	if t.hasAccounts {
-		c += ", x.purchase_account_id, x.inventory_account_id"
+		c += ", x.purchase_account_id, x.inventory_account_id, x.revenue_account_id"
 	}
 	return c
 }

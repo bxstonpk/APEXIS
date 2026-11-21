@@ -59,6 +59,7 @@ type Item struct {
 	Active             bool
 	PurchaseAccountID  uuid.UUID
 	InventoryAccountID uuid.UUID
+	RevenueAccountID   uuid.UUID // uuid.Nil = ไม่ได้ตั้งที่สินค้า / หมวด (ใช้ค่าเริ่มต้นของค่าตั้งขาย)
 }
 
 // PurchaseContext คือข้อมูลที่จัดซื้อต้องใช้ ณ วันที่เอกสาร
@@ -74,7 +75,14 @@ type ReceiptLine struct {
 	UnitCost decimal.Decimal // ราคาก่อน VAT ต่อหน่วย
 }
 
-// Receipt คือผลของการออกใบรับเข้า — LineValues คือมูลค่าที่ inventory บันทึกจริง (เรียงตามบรรทัด)
+// IssueLine คือบรรทัดใบเบิก (ตัดสต็อก FIFO) ที่ module ขายส่งให้ inventory
+type IssueLine struct {
+	ItemID   uuid.UUID
+	Quantity decimal.Decimal
+}
+
+// Receipt คือผลของการออกเอกสารสต็อก (ใบรับเข้า / ใบเบิก) — LineValues คือมูลค่าที่ inventory บันทึกจริง
+// (ใบเบิก = ต้นทุน FIFO ของแต่ละบรรทัด)
 type Receipt struct {
 	DocumentID uuid.UUID
 	DocumentNo string

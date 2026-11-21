@@ -80,7 +80,7 @@ func (r *CategoryRepository) Create(ctx context.Context, c *entities.Category) e
 
 func (r *CategoryRepository) Update(ctx context.Context, c *entities.Category) error {
 	m := gp.CategoryToModel(c)
-	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "status", "purchase_account_id", "inventory_account_id"},
+	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "status", "purchase_account_id", "inventory_account_id", "revenue_account_id"},
 		domain.ErrCodeExists, domain.ErrCategoryNotFound)
 }
 
@@ -180,7 +180,8 @@ func (r *ItemRepository) Create(ctx context.Context, i *entities.Item) error {
 func (r *ItemRepository) Update(ctx context.Context, i *entities.Item) error {
 	m := gp.ItemToModel(i)
 	return update(ctx, r.db, &m, m.CompanyID,
-		[]string{"code", "name", "name_en", "type", "uom_id", "category_id", "reorder_point", "status", "purchase_account_id", "inventory_account_id"},
+		[]string{"code", "name", "name_en", "type", "uom_id", "category_id", "reorder_point", "status", "purchase_account_id", "inventory_account_id",
+			"revenue_account_id"},
 		domain.ErrCodeExists, domain.ErrItemNotFound)
 }
 
@@ -230,6 +231,7 @@ type itemRow struct {
 	ReorderPoint       *decimal.Decimal
 	PurchaseAccountID  *uuid.UUID
 	InventoryAccountID *uuid.UUID
+	RevenueAccountID   *uuid.UUID
 	Status             string
 	Total              int64
 }
@@ -238,7 +240,7 @@ func (r itemRow) dto() dto.Item {
 	out := dto.Item{
 		ID: r.ID.String(), Code: r.Code, Name: r.Name, NameEN: r.NameEN, Type: r.Type,
 		Uom: dto.Ref{ID: r.UomID.String(), Code: r.UomCode, Name: r.UomName}, ReorderPoint: r.ReorderPoint, Status: r.Status,
-		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID),
+		Accounts: accountsDTO(r.PurchaseAccountID, r.InventoryAccountID, r.RevenueAccountID),
 	}
 	if r.CategoryID != nil && r.CategoryCode != nil {
 		out.Category = &dto.Ref{ID: r.CategoryID.String(), Code: *r.CategoryCode, Name: *r.CategoryName}
@@ -248,7 +250,7 @@ func (r itemRow) dto() dto.Item {
 
 const itemColumns = `i.id, i.code, i.name, i.name_en, i.type, i.uom_id, u.code AS uom_code, u.name AS uom_name,
 	i.category_id, c.code AS category_code, c.name AS category_name, i.reorder_point,
-	i.purchase_account_id, i.inventory_account_id, i.status`
+	i.purchase_account_id, i.inventory_account_id, i.revenue_account_id, i.status`
 
 // base: items JOIN หน่วยนับ LEFT JOIN หมวด — 1 query ได้ชื่อของ record ที่อ้างถึง
 func (r *ItemRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
@@ -303,20 +305,23 @@ type ItemAccountsRow struct {
 	Status                     string
 	PurchaseAccountID          *uuid.UUID
 	InventoryAccountID         *uuid.UUID
+	RevenueAccountID           *uuid.UUID
 	CategoryPurchaseAccountID  *uuid.UUID
 	CategoryInventoryAccountID *uuid.UUID
+	CategoryRevenueAccountID   *uuid.UUID
 }
 
 func (r ItemAccountsRow) dto() dto.ItemAccounts {
 	return dto.ItemAccounts{
 		ID: vo.ItemID(r.ID), Code: r.Code, Name: r.Name, Type: vo.ItemType(r.Type), Status: vo.Status(r.Status),
-		Item:     gp.GLAccounts(r.PurchaseAccountID, r.InventoryAccountID),
-		Category: gp.GLAccounts(r.CategoryPurchaseAccountID, r.CategoryInventoryAccountID),
+		Item:     gp.GLAccounts(r.PurchaseAccountID, r.InventoryAccountID, r.RevenueAccountID),
+		Category: gp.GLAccounts(r.CategoryPurchaseAccountID, r.CategoryInventoryAccountID, r.CategoryRevenueAccountID),
 	}
 }
 
 const itemAccountColumns = `i.id, i.code, i.name, i.type, i.status, i.purchase_account_id, i.inventory_account_id,
-	c.purchase_account_id AS category_purchase_account_id, c.inventory_account_id AS category_inventory_account_id`
+	i.revenue_account_id, c.purchase_account_id AS category_purchase_account_id,
+	c.inventory_account_id AS category_inventory_account_id, c.revenue_account_id AS category_revenue_account_id`
 
 // AccountsOf: items LEFT JOIN หมวด — query เดียว
 func (r *ItemRepository) AccountsOf(ctx context.Context, companyID vo.CompanyID, ids []vo.ItemID) ([]dto.ItemAccounts, error) {

@@ -144,6 +144,7 @@ type Ref struct {
 type Accounts struct {
 	PurchaseAccountID  *string
 	InventoryAccountID *string
+	RevenueAccountID   *string
 }
 
 type Master struct {

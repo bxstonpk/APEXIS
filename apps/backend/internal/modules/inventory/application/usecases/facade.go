@@ -70,6 +70,16 @@ func (uc *FacadeUseCases) PurchaseContext(ctx context.Context, companyID vo.Comp
 // PostReceipt สร้างใบรับสินค้า (receipt) แล้วผ่านทันที — ต้นทุน FIFO เข้าชั้นตามราคาที่ส่งมา
 func (uc *FacadeUseCases) PostReceipt(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, data entities.DocumentData) (dto.StockReceipt, error) {
 	data.Type = vo.DocReceipt
+	return uc.postDocument(ctx, companyID, userID, data)
+}
+
+// PostIssue สร้างใบเบิก (issue) แล้วผ่านทันที — ตัดชั้นต้นทุน FIFO, ห้ามสต็อกติดลบ; LineValues = ต้นทุนที่ตัด
+func (uc *FacadeUseCases) PostIssue(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, data entities.DocumentData) (dto.StockReceipt, error) {
+	data.Type = vo.DocIssue
+	return uc.postDocument(ctx, companyID, userID, data)
+}
+
+func (uc *FacadeUseCases) postDocument(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, data entities.DocumentData) (dto.StockReceipt, error) {
 	var out dto.StockReceipt
 	err := uc.systemWrite(ctx, companyID, func(ctx context.Context, s ports.CompanySettings) error {
 		d, err := entities.NewDocument(companyID, userID, data, s.QuantityDecimals)

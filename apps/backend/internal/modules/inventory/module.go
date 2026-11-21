@@ -133,6 +133,7 @@ func itemMap(items []dto.PurchaseItem) map[uuid.UUID]integration.Item {
 		out[uuid.UUID(i.ID)] = integration.Item{
 			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
 			PurchaseAccountID: accountUUID(i.Accounts.Purchase), InventoryAccountID: accountUUID(i.Accounts.Inventory),
+			RevenueAccountID: accountUUID(i.Accounts.Revenue),
 		}
 	}
 	return out
@@ -162,6 +163,22 @@ func (m *Module) PostReceipt(ctx context.Context, companyID, userID, warehouseID
 	return integration.Receipt{DocumentID: uuid.UUID(r.DocumentID), DocumentNo: r.DocumentNo, LineValues: r.LineValues}, nil
 }
 
+// PostIssue ออกใบเบิก (issue) แล้วผ่านทันที — ตัดสต็อก FIFO ห้ามติดลบ; LineValues = ต้นทุน FIFO ต่อบรรทัด
+func (m *Module) PostIssue(ctx context.Context, companyID, userID, warehouseID uuid.UUID, date time.Time, reference, description string, lines []integration.IssueLine) (integration.Receipt, error) {
+	data := entities.DocumentData{
+		Date: date, WarehouseID: vo.WarehouseID(warehouseID), Reference: reference, Description: description,
+		Lines: make([]entities.LineData, len(lines)),
+	}
+	for i, l := range lines {
+		data.Lines[i] = entities.LineData{ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity}
+	}
+	r, err := m.UseCases.Facade.PostIssue(ctx, vo.CompanyID(companyID), vo.UserID(userID), data)
+	if err != nil {
+		return integration.Receipt{}, reject(err)
+	}
+	return integration.Receipt{DocumentID: uuid.UUID(r.DocumentID), DocumentNo: r.DocumentNo, LineValues: r.LineValues}, nil
+}
+
 // CancelDocument ยกเลิกเอกสารสต็อกที่ผ่านแล้ว (คืนต้นทุน FIFO) — ของที่รับเข้าถูกใช้ไปแล้วยกเลิกไม่ได้
 func (m *Module) CancelDocument(ctx context.Context, companyID, userID, documentID uuid.UUID) error {
 	return reject(m.UseCases.Facade.CancelDocument(ctx, vo.CompanyID(companyID), vo.UserID(userID), vo.DocumentID(documentID)))
@@ -178,3 +195,13 @@ func DocumentTypes() []integration.DocumentType {
 
 // Migrate สร้างตารางของ inventory
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+
+// SalesItems / SalesContext คือ PurchaseItems / PurchaseContext สำหรับ module ขาย
+// (ข้อมูลเดียวกัน: สินค้า + บัญชีที่ใช้จริง และระบบบัญชีของปีบัญชี)
+func (m *Module) SalesItems(ctx context.Context, companyID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]integration.Item, error) {
+	return m.PurchaseItems(ctx, companyID, itemIDs)
+}
+
+func (m *Module) SalesContext(ctx context.Context, companyID uuid.UUID, date time.Time, itemIDs []uuid.UUID) (integration.PurchaseContext, error) {
+	return m.PurchaseContext(ctx, companyID, date, itemIDs)
+}
