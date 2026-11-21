@@ -9,6 +9,8 @@ export type User = {
   email: string
   name: string
   status: string
+  /** บัญชีที่ผู้ดูแลสร้างให้ (รหัสผ่านชั่วคราว) — ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน */
+  must_change_password?: boolean
 }
 
 export type Session = {

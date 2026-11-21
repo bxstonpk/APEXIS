@@ -39,6 +39,19 @@ describe('proxy', () => {
     expect(proxy(req('/c/not-a-uuid', valid)).headers.get('set-cookie')).toBeNull()
   })
 
+  it('บัญชีรหัสผ่านชั่วคราว -> ไปหน้าเปลี่ยนรหัสผ่านก่อน (ยกเว้นหน้าเปลี่ยนรหัสผ่านเอง)', () => {
+    const temp = encodeSession({
+      token: 'tok',
+      expiresAt: '2099-01-01T00:00:00Z',
+      user: { id: 'u2', email: 'new@example.com', name: 'New', status: 'active', must_change_password: true },
+    })
+    const res = proxy(req('/c/x?q=1', temp))
+    const loc = new URL(res.headers.get('location')!)
+    expect(loc.pathname).toBe('/change-password')
+    expect(loc.searchParams.get('redirect')).toBe('/c/x?q=1')
+    expect(proxy(req('/change-password', temp)).headers.get('x-middleware-next')).toBe('1')
+  })
+
   it('เข้าสู่ระบบแล้ว / หน้า login -> ผ่าน', () => {
     expect(proxy(req('/', valid)).headers.get('x-middleware-next')).toBe('1')
     expect(proxy(req('/login')).headers.get('x-middleware-next')).toBe('1')

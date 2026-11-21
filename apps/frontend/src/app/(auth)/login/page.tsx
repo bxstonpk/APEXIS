@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { Card } from '@/components'
 import { appConfig, texts } from '@/config'
 import { LoginPanel } from '@/features/auth'
 import { AuthLayout } from '@/layouts/AuthLayout'
@@ -20,9 +19,9 @@ export default async function LoginPage({ searchParams }: Props) {
   const t = texts.auth.login
   return (
     <AuthLayout>
-      <Card title={t.heading} description={t.description}>
-        <LoginPanel redirectTo={target} />
-      </Card>
+      <h1 className="text-2xl font-semibold tracking-tight">{t.heading}</h1>
+      <p className="mt-1.5 mb-8 text-sm text-ink-muted">{t.description}</p>
+      <LoginPanel redirectTo={target} />
     </AuthLayout>
   )
 }

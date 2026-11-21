@@ -25,6 +25,8 @@ export type DataTableProps<T> = {
   emptyText: string
   /** คำอธิบายทิศทางการเรียงสำหรับ screen reader (จาก config) */
   sortLabels: { ascending: string; descending: string }
+  /** ไม่มีกรอบ (อยู่ในกรอบของผู้ใช้ component แล้ว) */
+  bare?: boolean
 }
 
 const alignClass = { left: 'text-left', right: 'text-right', center: 'text-center' } as const
@@ -33,14 +35,14 @@ const alignClass = { left: 'text-left', right: 'text-right', center: 'text-cente
  * ตารางข้อมูล — การเรียงเป็นลิงก์ (?sort=) จึงกด Back / คัดลอกลิงก์ได้ และ render ฝั่ง server ได้
  * กดหัวคอลัมน์: ยังไม่เรียง / เรียงลง → เรียงขึ้น, เรียงขึ้น → เรียงลง ("-key")
  */
-export function DataTable<T>({ columns, rows, rowKey, sort = '', sortHref, emptyText, sortLabels }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, rowKey, sort = '', sortHref, emptyText, sortLabels, bare = false }: DataTableProps<T>) {
   const desc = sort.startsWith('-')
   const sortedBy = desc ? sort.slice(1) : sort
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-      <table className="w-full border-collapse text-sm">
-        <thead className="bg-canvas text-ink-muted">
+    <div className={cx('overflow-x-auto bg-surface', !bare && 'rounded-(--radius-panel) border border-line shadow-card')}>
+      <table className="w-full border-collapse text-sm tabular-nums">
+        <thead className="bg-subtle text-[13px] text-ink-muted">
           <tr>
             {columns.map((col) => {
               const active = col.sortKey !== undefined && col.sortKey === sortedBy
@@ -52,7 +54,7 @@ export function DataTable<T>({ columns, rows, rowKey, sort = '', sortHref, empty
                   scope="col"
                   aria-sort={ariaSort}
                   className={cx(
-                    'border-b border-line px-4 py-3 font-semibold whitespace-nowrap',
+                    'h-10 border-b border-line px-4 font-medium whitespace-nowrap',
                     alignClass[col.align ?? 'left'],
                     col.hideOnMobile && 'hidden md:table-cell',
                   )}
@@ -61,10 +63,10 @@ export function DataTable<T>({ columns, rows, rowKey, sort = '', sortHref, empty
                     <Link
                       href={sortHref(active && !desc ? `-${col.sortKey}` : col.sortKey)}
                       scroll={false}
-                      className={cx('inline-flex items-center gap-1 hover:text-ink', active && 'text-ink')}
+                      className={cx('group inline-flex items-center gap-1 hover:text-ink', active && 'text-ink')}
                     >
                       {col.header}
-                      <Icon aria-hidden className={cx('size-3.5', !active && 'opacity-40')} />
+                      <Icon aria-hidden className={cx('size-3.5', !active && 'opacity-0 transition-opacity group-hover:opacity-60')} />
                       {active && <span className="sr-only">{desc ? sortLabels.descending : sortLabels.ascending}</span>}
                     </Link>
                   ) : (
@@ -78,17 +80,17 @@ export function DataTable<T>({ columns, rows, rowKey, sort = '', sortHref, empty
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-10 text-center text-ink-muted">
+              <td colSpan={columns.length} className="px-4 py-14 text-center text-ink-muted">
                 {emptyText}
               </td>
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={rowKey(row)} className="border-b border-line last:border-b-0 hover:bg-canvas/60">
+              <tr key={rowKey(row)} className="border-b border-line last:border-b-0 hover:bg-subtle">
                 {columns.map((col) => (
                   <td
                     key={col.key}
-                    className={cx('px-4 py-3 align-middle', alignClass[col.align ?? 'left'], col.hideOnMobile && 'hidden md:table-cell')}
+                    className={cx('h-12 px-4 align-middle', alignClass[col.align ?? 'left'], col.hideOnMobile && 'hidden md:table-cell')}
                   >
                     {col.render(row)}
                   </td>

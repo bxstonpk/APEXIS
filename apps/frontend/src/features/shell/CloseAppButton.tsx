@@ -37,9 +37,9 @@ export function CloseAppButton({ launcherHref, label }: CloseAppButtonProps) {
       onClick={handleClick}
       title={label}
       aria-label={label}
-      className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink-muted outline-none hover:bg-canvas hover:text-ink focus-visible:ring-3 focus-visible:ring-primary/35"
+      className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-white/70 outline-none hover:bg-nav-hover hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
     >
-      <X aria-hidden className="size-5" />
+      <X aria-hidden className="size-[18px]" />
     </button>
   )
 }

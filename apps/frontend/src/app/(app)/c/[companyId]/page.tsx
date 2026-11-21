@@ -30,26 +30,29 @@ export default async function LauncherPage({ params }: { params: Promise<{ compa
   }
 
   const available = visibleApps(ctx.permissions)
+  const today = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full' }).format(new Date())
   return (
-    <div className="flex min-h-full flex-col">
+    <div className="flex min-h-full flex-col bg-[radial-gradient(70rem_28rem_at_50%_-6rem,var(--color-primary-soft),transparent)]">
       <TopBar userName={user.name} companyName={ctx.company.name || ctx.company.code} />
-      <main className="flex flex-1 items-center justify-center px-4 py-10">
+      <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-4 pt-16 pb-16 sm:pt-24">
+        <p className="text-[13px] text-ink-muted">{today}</p>
+        <h1 className="mt-1 text-center text-2xl font-semibold tracking-tight">{format(texts.launcher.greeting, { name: user.name })}</h1>
         {available.length === 0 ? (
-          <p className="max-w-md text-center text-ink-muted">{texts.launcher.empty}</p>
+          <p className="mt-10 max-w-md text-center text-ink-muted">{texts.launcher.empty}</p>
         ) : (
-          <ul className="grid grid-cols-3 gap-x-4 gap-y-8 sm:grid-cols-4 sm:gap-x-10">
+          <ul className="mt-12 grid grid-cols-3 gap-x-2 gap-y-6 sm:grid-cols-4 sm:gap-x-6 sm:gap-y-8">
             {available.map((app) => {
               const name = appTexts(app.key).name
               const Icon = app.icon
               return (
-                <li key={app.key}>
+                <li key={app.key} className="flex justify-center">
                   <AppTile
                     href={companyPath(companyId, app.key, app.menu[0]!.path)}
                     windowName={appWindowName(companyId, app.key)}
                     label={name}
                     title={format(texts.launcher.openHint, { name })}
                     tone={app.tone}
-                    icon={<Icon aria-hidden className="size-8 sm:size-10" strokeWidth={1.75} />}
+                    icon={<Icon aria-hidden className="size-8 sm:size-9" strokeWidth={1.6} />}
                   />
                 </li>
               )

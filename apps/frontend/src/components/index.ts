@@ -8,6 +8,7 @@ export { DataTable, type Column, type DataTableProps } from './DataTable/DataTab
 export { PageHeader, type PageHeaderProps } from './PageHeader/PageHeader'
 export { Pagination, type PaginationProps } from './Pagination/Pagination'
 export { PasswordField, type PasswordFieldProps } from './PasswordField/PasswordField'
+export { ReferenceSelect, refLabel, type RefOption, type ReferenceSelectProps } from './ReferenceSelect/ReferenceSelect'
 export { SelectField, type SelectFieldProps, type SelectOption } from './SelectField/SelectField'
 export { Spinner } from './Spinner/Spinner'
 export { TextField, type TextFieldProps } from './TextField/TextField'

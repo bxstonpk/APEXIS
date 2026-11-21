@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { texts } from '@/config'
@@ -46,6 +46,10 @@ describe('BranchForm', () => {
     expect(screen.getByText(texts.validation.taxBranchNo)).toBeInTheDocument()
     expect(screen.getByText(texts.validation.postalCode)).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
+    // โฟกัสย้ายไปช่องแรกที่ผิด และช่องบังคับบอก screen reader ด้วย aria-required
+    await waitFor(() => expect(screen.getByLabelText(t.code)).toHaveFocus())
+    expect(screen.getByLabelText(t.code)).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText(t.phone)).not.toHaveAttribute('aria-required')
   })
 
   it('สร้างสาขา: รหัสเป็นตัวพิมพ์ใหญ่, POST แล้วกลับหน้ารายการเดิม', async () => {

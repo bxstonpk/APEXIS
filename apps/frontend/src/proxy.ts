@@ -23,6 +23,15 @@ export function proxy(request: NextRequest) {
     return res
   }
 
+  // รหัสผ่านชั่วคราว: ต้องตั้งรหัสผ่านใหม่ก่อนเข้าหน้าอื่น (backend ก็ปฏิเสธข้อมูลบริษัทจนกว่าจะเปลี่ยน)
+  const changePassword = appConfig.routes.changePassword
+  if (session?.user.must_change_password && pathname !== changePassword && !isLogin) {
+    const url = request.nextUrl.clone()
+    url.pathname = changePassword
+    url.search = new URLSearchParams({ [appConfig.redirectParam]: pathname + search }).toString()
+    return NextResponse.redirect(url)
+  }
+
   const res = NextResponse.next()
   // จำบริษัทที่เปิดล่าสุด (/c/{companyId}/...) — หน้า / ใช้พาเข้าบริษัทนี้ทันทีในครั้งถัดไป
   const companyId = COMPANY_PATH.exec(pathname)?.[1]

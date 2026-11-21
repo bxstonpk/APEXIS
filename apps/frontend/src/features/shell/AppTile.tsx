@@ -36,18 +36,19 @@ export function AppTile({ href, windowName, label, title, icon, tone }: AppTileP
       title={title}
       aria-label={title}
       onClick={handleClick}
-      className="group flex flex-col items-center gap-2 rounded-2xl p-2 outline-none focus-visible:ring-3 focus-visible:ring-primary/35"
+      className="group flex w-24 flex-col items-center gap-2.5 rounded-xl p-2 outline-none focus-visible:ring-3 focus-visible:ring-primary/25 sm:w-28"
     >
       <span
         className={cx(
-          'flex size-16 items-center justify-center rounded-2xl text-white shadow-card transition-transform sm:size-20',
-          'group-hover:-translate-y-0.5 group-hover:shadow-lg',
+          'relative flex size-16 items-center justify-center overflow-hidden rounded-[18px] text-white shadow-tile transition-transform duration-150 sm:size-[72px]',
+          'group-hover:-translate-y-0.5 group-active:translate-y-0',
           tone,
         )}
       >
-        {icon}
+        <span aria-hidden className="absolute inset-0 bg-linear-to-b from-white/20 to-transparent" />
+        <span className="relative">{icon}</span>
       </span>
-      <span className="text-center text-sm font-medium text-ink">{label}</span>
+      <span className="text-center text-[13.5px] leading-tight font-medium text-ink">{label}</span>
     </a>
   )
 }

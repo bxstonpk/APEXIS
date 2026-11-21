@@ -12,15 +12,15 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const variants = {
-  primary: 'bg-primary text-on-primary hover:enabled:bg-primary-hover [a]:hover:bg-primary-hover',
-  secondary: 'border-line-strong bg-surface text-ink hover:enabled:border-primary [a]:hover:border-primary',
-  ghost: 'bg-transparent text-primary hover:enabled:underline [a]:hover:underline',
-  danger: 'border-danger-line bg-surface text-danger hover:enabled:bg-danger-soft',
+  primary: 'border-primary bg-primary text-on-primary shadow-card hover:border-primary-hover hover:bg-primary-hover',
+  secondary: 'border-line-strong bg-surface text-ink shadow-card hover:border-ink-subtle hover:bg-subtle',
+  ghost: 'border-transparent text-ink-muted hover:bg-neutral-soft hover:text-ink',
+  danger: 'border-transparent text-danger hover:bg-danger-soft',
 } as const
 
 const sizes = {
-  md: 'min-h-11 px-6',
-  sm: 'min-h-9 px-4 text-sm',
+  md: 'h-10 px-4 text-sm',
+  sm: 'h-8 px-3 text-[13px]',
 } as const
 
 export type ButtonVariant = keyof typeof variants
@@ -29,8 +29,9 @@ export type ButtonSize = keyof typeof sizes
 /** class ของปุ่ม — ใช้ร่วมกับ ButtonLink (ลิงก์ที่หน้าตาเป็นปุ่ม) */
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', fullWidth = false): string {
   return cx(
-    'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-transparent font-semibold whitespace-nowrap transition-colors',
-    'outline-none focus-visible:ring-3 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-70',
+    'inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-(--radius-control) border font-medium whitespace-nowrap transition-colors',
+    'outline-none focus-visible:ring-3 focus-visible:ring-primary/25 disabled:pointer-events-none disabled:opacity-55',
+    '[&_svg]:size-4 [&_svg]:shrink-0',
     sizes[size],
     variants[variant],
     fullWidth && 'w-full',
@@ -59,7 +60,7 @@ export function Button({
       className={cx(buttonClass(variant, size, fullWidth), className)}
     >
       {loading && <Spinner />}
-      <span>{loading && loadingText ? loadingText : children}</span>
+      {loading && loadingText ? loadingText : children}
     </button>
   )
 }

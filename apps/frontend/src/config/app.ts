@@ -8,9 +8,12 @@ export const appConfig = {
     baseUrl: '/api/v1',
     /** route handler ของ Next สำหรับเข้า / ออกจากระบบ (ตั้ง / ลบ cookie) */
     session: '/api/session',
+    /** เปลี่ยนรหัสผ่านของตัวเอง (ผ่าน Next — อัปเดต session ใน cookie ด้วย) */
+    sessionPassword: '/api/session/password',
     /** path บน backend (Go) — ใช้ฝั่ง server ของ Next เท่านั้น */
     backend: {
       login: '/api/v1/auth/tokens',
+      password: '/api/v1/me/password',
     },
   },
 
@@ -18,6 +21,8 @@ export const appConfig = {
   routes: {
     home: '/',
     login: '/login',
+    /** บังคับเปลี่ยนรหัสผ่าน (บัญชีที่ผู้ดูแลสร้างให้) */
+    changePassword: '/change-password',
     /** route handler ที่ลบ cookie แล้วพาไปหน้า login (ใช้เมื่อ backend ตอบ 401 ระหว่าง render ฝั่ง server) */
     sessionExpired: '/api/session/expired',
     companies: '/companies',

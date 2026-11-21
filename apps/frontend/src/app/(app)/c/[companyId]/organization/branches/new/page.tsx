@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
-import { PageHeader } from '@/components'
 import { texts } from '@/config'
-import { companyPath } from '@/config/apps'
 import { BranchForm } from '@/features/branches/BranchForm'
-import { MessagePanel } from '@/features/shell'
+import { FormPage, NoPermission } from '@/features/organization/pages'
+import { orgResources } from '@/features/organization/resources'
 import { can } from '@/lib/permissions'
 import { getCompanyContext } from '@/lib/server/company'
 
@@ -13,12 +12,12 @@ export default async function NewBranchPage({ params }: { params: Promise<{ comp
   const { companyId } = await params
   const ctx = await getCompanyContext(companyId)
   if (!ctx) return null
-  if (!can(ctx.permissions, 'organization.branch:manage')) return <MessagePanel title={texts.common.noPermission} />
+  const r = orgResources.branches
+  if (!can(ctx.permissions, r.manage)) return <NoPermission />
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader title={texts.branches.newTitle} />
-      <BranchForm companyId={companyId} canManage listHref={companyPath(companyId, 'organization', 'branches')} />
-    </div>
+    <FormPage crumb={{ label: texts.branches.heading, href: r.page(companyId) }} title={texts.branches.newTitle}>
+      <BranchForm companyId={companyId} canManage listHref={r.page(companyId)} />
+    </FormPage>
   )
 }

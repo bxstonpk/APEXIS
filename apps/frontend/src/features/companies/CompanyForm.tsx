@@ -6,7 +6,7 @@ import { Alert, Button, ButtonLink, TextField } from '@/components'
 import { appConfig, texts } from '@/config'
 import { companyPath } from '@/config/apps'
 import { apiRequest, errorMessage } from '@/lib/http'
-import { normalizeCode, patterns, requiredMessage, type FieldErrors } from '@/lib/validation'
+import { focusFirstInvalid, normalizeCode, patterns, requiredMessage, type FieldErrors } from '@/lib/validation'
 
 type Field = 'code' | 'name' | 'taxId'
 
@@ -32,7 +32,7 @@ export function CompanyForm() {
     const e = validate()
     setErrors(e)
     setFormError(null)
-    if (Object.keys(e).length > 0) return
+    if (Object.keys(e).length > 0) return focusFirstInvalid(event.currentTarget)
     setBusy(true)
     try {
       const company = await apiRequest<{ id: string }>('/companies', {
@@ -52,6 +52,7 @@ export function CompanyForm() {
       {formError && <Alert tone="error">{formError}</Alert>}
       <TextField
         label={t.code}
+        required
         hint={t.codeHint}
         value={values.code}
         maxLength={20}
@@ -61,6 +62,7 @@ export function CompanyForm() {
       />
       <TextField
         label={t.name}
+        required
         value={values.name}
         maxLength={200}
         error={errors.name}

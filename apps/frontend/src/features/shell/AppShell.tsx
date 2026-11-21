@@ -30,6 +30,7 @@ export async function AppShell({ companyId, appKey, children }: { companyId: str
   if (!def || !app) {
     return (
       <MessagePanel
+        icon={def ? 'forbidden' : 'info'}
         title={def ? texts.common.noPermission : texts.common.notFound}
         action={<ButtonLink href={launcher}>{texts.launcher.pageTitle}</ButtonLink>}
       />
@@ -42,20 +43,23 @@ export async function AppShell({ companyId, appKey, children }: { companyId: str
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center gap-3 px-4">
+      <header className="sticky top-0 z-20 bg-nav text-white print:hidden">
+        <div className="mx-auto flex h-12 max-w-7xl items-center gap-1 px-2 sm:px-4">
           <CloseAppButton launcherHref={launcher} label={texts.shell.close} />
-          <div className="flex shrink-0 items-center gap-2 py-3 pr-2">
-            <span className={`flex size-8 items-center justify-center rounded-lg text-white ${app.tone}`}>
-              <Icon aria-hidden className="size-5" />
+          <span aria-hidden className="mx-1.5 h-5 w-px bg-white/15" />
+          <div className="flex shrink-0 items-center gap-2 pr-3">
+            <span className={`flex size-6 items-center justify-center rounded-[5px] ${app.tone}`}>
+              <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
             </span>
-            <span className="font-semibold">{t.name}</span>
+            <span className="text-[15px] font-semibold">{t.name}</span>
           </div>
           <AppNav items={items} label={texts.shell.menu} />
-          <span className="ml-auto hidden shrink-0 truncate pl-3 text-sm text-ink-muted lg:inline">{ctx.company.name}</span>
+          <span className="ml-auto hidden max-w-60 shrink-0 truncate pl-4 text-[13px] text-white/60 lg:inline">{ctx.company.name}</span>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 outline-none sm:py-8 print:max-w-none print:p-0">
+        {children}
+      </main>
     </div>
   )
 }

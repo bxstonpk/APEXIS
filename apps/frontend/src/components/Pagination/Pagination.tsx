@@ -23,7 +23,7 @@ export function Pagination({ page, pageSize, total, href, labels }: PaginationPr
     .replace('{total}', total.toLocaleString('th-TH'))
 
   return (
-    <nav aria-label={labels.label} className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-ink-muted">
+    <nav aria-label={labels.label} className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-ink-muted">
       <p>{summary}</p>
       <div className="flex gap-2">
         <PageLink href={page > 1 ? href(page - 1) : undefined} label={labels.previous} icon="prev" />
@@ -34,7 +34,7 @@ export function Pagination({ page, pageSize, total, href, labels }: PaginationPr
 }
 
 function PageLink({ href, label, icon }: { href?: string; label: string; icon: 'prev' | 'next' }) {
-  const cls = 'inline-flex min-h-9 items-center gap-1 rounded-lg border border-line-strong bg-surface px-3 font-semibold'
+  const cls = 'inline-flex h-8 items-center gap-1 rounded-(--radius-control) border border-line-strong bg-surface px-2.5 font-medium shadow-card'
   const content = (
     <>
       {icon === 'prev' && <ChevronLeft aria-hidden className="size-4" />}
@@ -44,13 +44,13 @@ function PageLink({ href, label, icon }: { href?: string; label: string; icon: '
   )
   if (!href) {
     return (
-      <span aria-disabled="true" className={cx(cls, 'cursor-not-allowed opacity-50')}>
+      <span aria-disabled="true" className={cx(cls, 'cursor-not-allowed text-ink-subtle opacity-60')}>
         {content}
       </span>
     )
   }
   return (
-    <Link href={href} className={cx(cls, 'text-ink hover:border-primary')}>
+    <Link href={href} className={cx(cls, 'text-ink hover:bg-subtle')}>
       {content}
     </Link>
   )
