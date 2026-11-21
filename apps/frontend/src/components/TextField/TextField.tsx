@@ -1,3 +1,5 @@
+'use client'
+
 import { useId, type InputHTMLAttributes, type ReactNode, type Ref } from 'react'
 import { cx } from '@/lib/cx'
 

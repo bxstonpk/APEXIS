@@ -21,26 +21,27 @@ export const NETWORK_ERROR = 'network_error'
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
-  token?: string
   signal?: AbortSignal
+  /** ค่าเริ่มต้น appConfig.api.baseUrl (/api/v1) — ส่ง '' เมื่อ path เป็น path เต็ม เช่น /api/session */
+  baseUrl?: string
 }
 
 /**
- * เรียก API แล้วคืน `data` จาก envelope {"data": ...}
+ * เรียก API (ผ่าน Next ซึ่งเติม token จาก HttpOnly cookie ให้) แล้วคืน `data` จาก envelope {"data": ...}
  * error ทุกชนิดถูกแปลงเป็น ApiError (ใช้ errorMessage() เพื่อได้ข้อความจาก config)
  */
-export async function apiRequest<T>(path: string, { method = 'GET', body, token, signal }: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(path: string, { method = 'GET', body, signal, baseUrl = appConfig.api.baseUrl }: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (token) headers.Authorization = `Bearer ${token}`
 
   let res: Response
   try {
-    res = await fetch(appConfig.api.baseUrl + path, {
+    res = await fetch(baseUrl + path, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
+      credentials: 'same-origin',
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err

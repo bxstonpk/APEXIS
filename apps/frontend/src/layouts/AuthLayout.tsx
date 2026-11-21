@@ -6,6 +6,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-8 px-4 py-12">
       <header className="flex flex-col items-center text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element -- โลโก้เป็น WebP ที่ย่อไว้แล้ว ไม่ต้องผ่าน image optimizer */}
         <img
           src={brand.logo.src}
           width={brand.logo.width}

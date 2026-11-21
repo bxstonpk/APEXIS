@@ -8,26 +8,24 @@ export type User = {
   status: string
 }
 
-/** ข้อมูลการเข้าสู่ระบบที่แอปเก็บไว้ */
-export type Session = {
-  accessToken: string
+/** ผลการเข้าสู่ระบบที่ browser ได้รับ — token อยู่ใน HttpOnly cookie ไม่ออกมาที่นี่ */
+export type SignedIn = {
+  user: User
   expiresAt: string // ISO 8601
-  user: User
 }
 
-type TokenResponse = {
-  access_token: string
-  token_type: string
-  expires_at: string
-  user: User
-}
-
-/** POST /auth/tokens — ล็อกอินแล้วได้ access token */
-export async function login(email: string, password: string, signal?: AbortSignal): Promise<Session> {
-  const t = await apiRequest<TokenResponse>(appConfig.api.endpoints.login, {
+/** POST /api/session — เข้าสู่ระบบ (Next ส่งต่อไป backend แล้วตั้ง cookie) */
+export async function login(email: string, password: string, signal?: AbortSignal): Promise<SignedIn> {
+  const r = await apiRequest<{ user: User; expires_at: string }>(appConfig.api.session, {
     method: 'POST',
     body: { email, password },
     signal,
+    baseUrl: '',
   })
-  return { accessToken: t.access_token, expiresAt: t.expires_at, user: t.user }
+  return { user: r.user, expiresAt: r.expires_at }
+}
+
+/** DELETE /api/session — ออกจากระบบ (ลบ cookie) */
+export async function logout(): Promise<void> {
+  await apiRequest<void>(appConfig.api.session, { method: 'DELETE', baseUrl: '' })
 }

@@ -1,20 +1,22 @@
+'use client'
+
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Alert, Button, PasswordField, TextField } from '@/components'
 import { texts as appTexts, type Texts } from '@/config'
 import { errorMessage } from '@/lib/http'
-import { login, type Session } from './api'
+import { login, type SignedIn } from './api'
 import { validateLogin, type LoginErrors } from './validation'
 
 export type LoginFormProps = {
-  /** เรียกเมื่อเข้าสู่ระบบสำเร็จ — ผู้ใช้ component ตัดสินใจเองว่าจะเก็บ session / เปลี่ยนหน้าอย่างไร */
-  onSuccess: (session: Session) => void
+  /** เรียกเมื่อเข้าสู่ระบบสำเร็จ (cookie ถูกตั้งแล้ว) — ผู้ใช้ component ตัดสินใจเองว่าจะเปลี่ยนหน้าอย่างไร */
+  onSuccess: (result: SignedIn) => void
   /** ข้อความของฟอร์ม — ค่าเริ่มต้นมาจาก config; ส่งมาแทนได้เมื่อ embed ในที่อื่นที่ต้องการข้อความต่างไป */
   texts?: Texts['auth']['login']
   defaultEmail?: string
 }
 
 /**
- * ฟอร์มเข้าสู่ระบบ (อีเมล + รหัสผ่าน) — เป็น component อิสระ ไม่ผูกกับ router หรือ layout
+ * ฟอร์มเข้าสู่ระบบ (อีเมล + รหัสผ่าน) — เป็น component อิสระ ไม่ผูกกับ router หรือ layout (client component)
  * จึง embed ได้ทั้งในหน้า login, modal, หรือหน้าอื่นที่ต้องให้เข้าสู่ระบบใหม่
  */
 export function LoginForm({ onSuccess, texts: t = appTexts.auth.login, defaultEmail = '' }: LoginFormProps) {
@@ -42,8 +44,8 @@ export function LoginForm({ onSuccess, texts: t = appTexts.auth.login, defaultEm
     setSubmitting(true)
     abortRef.current = new AbortController()
     try {
-      const session = await login(email.trim(), password, abortRef.current.signal)
-      onSuccess(session)
+      const result = await login(email.trim(), password, abortRef.current.signal)
+      onSuccess(result)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       setServerError(errorMessage(err))

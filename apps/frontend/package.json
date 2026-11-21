@@ -1,23 +1,23 @@
 {
   "name": "apexis-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "npm run typecheck && vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "dev": "next dev --port 5173",
+    "build": "npm run typecheck && next build",
+    "start": "next start --port 5173",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "next": "16.4.5",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "react-router": "7.18.5"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "4.3.5",
+    "@tailwindcss/postcss": "4.3.5",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.3",
@@ -29,7 +29,6 @@
     "jsdom": "26.1.0",
     "tailwindcss": "4.3.5",
     "typescript": "5.9.3",
-    "vite": "7.3.8",
     "vitest": "3.2.7"
   }
 }

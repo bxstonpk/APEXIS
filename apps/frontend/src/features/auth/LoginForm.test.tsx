@@ -10,9 +10,8 @@ function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-const token = {
-  access_token: 'tok',
-  token_type: 'Bearer',
+// /api/session ตอบเฉพาะข้อมูลผู้ใช้ — token อยู่ใน HttpOnly cookie ไม่ถึง browser
+const signedIn = {
   expires_at: '2099-01-01T00:00:00Z',
   user: { id: 'u1', email: 'owner@example.com', name: 'Owner', status: 'active' },
 }
@@ -53,16 +52,16 @@ describe('LoginForm', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('เข้าสู่ระบบสำเร็จ -> onSuccess ได้ session', async () => {
-    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(201, { data: token }))
+  it('เข้าสู่ระบบสำเร็จ -> เรียก /api/session และ onSuccess ได้ผู้ใช้', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(201, { data: signedIn }))
     const onSuccess = vi.fn()
     render(<LoginForm onSuccess={onSuccess} />)
     await fill('  owner@example.com ', 'secret-pass-1')
 
-    expect(fetch).toHaveBeenCalledWith('/api/v1/auth/tokens', expect.objectContaining({ method: 'POST' }))
+    expect(fetch).toHaveBeenCalledWith('/api/session', expect.objectContaining({ method: 'POST', credentials: 'same-origin' }))
     const body = JSON.parse(fetch.mock.calls[0]![1]!.body as string)
     expect(body).toEqual({ email: 'owner@example.com', password: 'secret-pass-1' })
-    expect(onSuccess).toHaveBeenCalledWith({ accessToken: 'tok', expiresAt: token.expires_at, user: token.user })
+    expect(onSuccess).toHaveBeenCalledWith({ expiresAt: signedIn.expires_at, user: signedIn.user })
   })
 
   it('รหัสผ่านผิด -> แสดงข้อความจาก config ตาม error.code และล้างรหัสผ่าน', async () => {

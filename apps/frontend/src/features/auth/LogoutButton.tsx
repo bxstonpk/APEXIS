@@ -1,0 +1,31 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { Button } from '@/components'
+import { appConfig, texts } from '@/config'
+import { logout } from './api'
+
+/** ปุ่มออกจากระบบ — ลบ cookie ที่ Next แล้วไปหน้า login (ลบไม่สำเร็จก็ยังพาไปหน้า login) */
+export function LogoutButton({ label = texts.auth.logout }: { label?: string }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+
+  async function handleClick() {
+    setBusy(true)
+    try {
+      await logout()
+    } catch {
+      // ไม่มี session แล้วก็ถือว่าออกจากระบบ
+    } finally {
+      router.replace(appConfig.routes.login)
+      router.refresh()
+    }
+  }
+
+  return (
+    <Button variant="secondary" fullWidth loading={busy} onClick={handleClick}>
+      {label}
+    </Button>
+  )
+}
