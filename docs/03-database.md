@@ -73,7 +73,7 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 
 | ตาราง | คอลัมน์หลัก | Constraint / Index |
 |---|---|---|
-| `ledger_accounts` | id, company_id, code, name, name_en, type, parent_id, postable, status, deleted_at | partial UNIQUE `(company_id, code)`; FK parent (self) RESTRICT; CHECK type 5 หมวด, CHECK status |
+| `ledger_accounts` | id, company_id, code, name, name_en, type, parent_id, postable, status, description, deleted_at | partial UNIQUE `(company_id, code)`; FK parent (self) RESTRICT; CHECK type 5 หมวด + `suspense` (บัญชีพัก), CHECK status — migration ลบ CHECK type เดิมแล้วให้ AutoMigrate สร้างใหม่ |
 | `ledger_journals` | id, company_id, code, name, number_template, status, deleted_at | partial UNIQUE `(company_id, code)`; CHECK status |
 | `ledger_journal_entries` | id, company_id, journal_id, entry_no, entry_date, fiscal_period_id, description, reference, status, total_debit, total_credit, reversal_of_id, reversed_by_id, posted_at, posted_by, created_by | UNIQUE `(company_id, entry_no) WHERE entry_no IS NOT NULL`; index `(company_id, entry_date)`; FK journal / reversal (self) RESTRICT; CHECK status; **CHECK ไม่ใช่ draft ⇒ มี entry_no / งวด / ผู้ผ่าน**; **CHECK ไม่ใช่ draft ⇒ total_debit = total_credit > 0** |
 | `ledger_journal_lines` | entry_id, line_no, account_id, description, debit, credit, branch_id, department_id, cost_center_id, project_site_id | PK `(entry_id, line_no)`; FK entry CASCADE, FK account RESTRICT; index account_id; **CHECK debit ≥ 0, credit ≥ 0 และมีด้านเดียวที่ > 0** |

@@ -68,17 +68,33 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 |---|---|---|---|
 | POST | `/users` | public | `{email, name, password}` |
 | POST | `/auth/tokens` | public | `{email, password}` → token |
-| GET | `/me` | login | |
+| GET | `/me` | login | ผู้ใช้มี `must_change_password` (true = บัญชีที่ผู้ดูแลสร้างให้ ยังใช้รหัสผ่านชั่วคราว) |
 | PUT | `/me/password` | login | `{old_password, new_password}` |
 | GET | `/companies/{companyID}/access` | สมาชิก | role + permission ของตัวเอง (frontend ใช้ซ่อน/แสดงเมนู) |
 | GET | `/companies/{companyID}/roles` | `identity.role:read` | `?q=&is_system=&sort=code\|name\|is_system` |
+| GET | `/companies/{companyID}/roles/{roleID}` | `identity.role:read` | บทบาทหนึ่งรายการ (หน้าแก้ไขบทบาท) |
 | POST | `/companies/{companyID}/roles` | `identity.role:manage` | `{code, name, description, permissions[]}` |
 | PUT | `/companies/{companyID}/roles/{roleID}` | `identity.role:manage` | `{name, description, permissions[]}` |
 | DELETE | `/companies/{companyID}/roles/{roleID}` | `identity.role:manage` | |
 | GET | `/companies/{companyID}/members` | `identity.member:read` | `?q=&status=active,suspended&role_id=&sort=name\|email\|status\|joined_at` |
-| POST | `/companies/{companyID}/members` | `identity.member:manage` | `{email, role_ids[]}` |
+| POST | `/companies/{companyID}/members` | `identity.member:manage` | `{email, role_ids[], new_user?: {name, password}}` — ไม่มี `new_user` + ไม่พบบัญชี = 404 `user_not_found`; มี `new_user` = สร้างบัญชี (รหัสผ่านชั่วคราว, `must_change_password`) และสมาชิกใน transaction เดียว, อีเมลมีบัญชีแล้ว = 409 |
+| GET | `/companies/{companyID}/members/{userID}` | `identity.member:read` | สมาชิกหนึ่งคน (หน้าจัดการสมาชิก) |
 | PATCH | `/companies/{companyID}/members/{userID}` | `identity.member:manage` | `{status: "active"\|"suspended"}` |
 | PUT | `/companies/{companyID}/members/{userID}/roles` | `identity.member:manage` | `{role_ids[]}` แทนที่ทั้งชุด |
+
+### รหัสผ่านชั่วคราว
+
+บัญชีที่ผู้ดูแลสร้างให้ (`new_user`) มี `must_change_password = true` จนกว่าจะเรียก `PUT /me/password`
+- ระหว่างนั้นทุก API ใต้บริษัทตอบ 403 `password_change_required` (ตรวจใน access resolution เดียวกับสิทธิ์ — ไม่มีคิวรีเพิ่ม)
+- `/me`, `/me/password`, `/me/companies` ยังใช้ได้
+
+### รายการสิทธิ์ (`platform/permissions`)
+
+| Method | Path | Permission | หมายเหตุ |
+|---|---|---|---|
+| GET | `/permissions` | login | สิทธิ์ทั้งระบบ `[{code, module, resource, action}]` ตามลำดับที่ module ลงทะเบียน — หน้ากำหนดบทบาทสร้างตารางสิทธิ์จากรายการนี้ |
+
+แต่ละ module ประกาศ `AllPermissions` ใน `domain/value_objects` และ `Module.Permissions()`; `main.go` ลงทะเบียนทุก module (รหัสผิดรูปแบบ / ซ้ำ = panic ตอนเริ่มโปรแกรม)
 
 ## 4.5 Endpoint — organization
 
@@ -88,6 +104,7 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 |---|---|---|---|
 | POST | `/companies` | login | ผู้สร้างเป็น owner — 201 |
 | GET | `/me/companies` | login | บริษัทที่ตัวเองเป็นสมาชิก `?q=&status=&sort=name\|code&page=&page_size=` |
+| GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, status}` — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
 | GET | `/companies/{companyID}` | `organization.company:read` | |
 | PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
 
@@ -154,7 +171,14 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 | Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
 |---|---|---|---|---|
-| Account | `GET`, `POST /accounts`; `GET`, `PUT`, `DELETE /accounts/{accountID}` | `type` (asset,liability,…), `status`, `postable=true\|false`, `parent_id` | `code, name, type` | `ledger.account:read\|manage` |
+| Account | `GET`, `POST /accounts`; `GET`, `PUT`, `DELETE /accounts/{accountID}` | `type` (asset,liability,equity,revenue,expense,suspense), `status`, `postable=true\|false`, `parent_id` | `code, name, type` | `ledger.account:read\|manage` |
+| Method | Path | Permission | หมายเหตุ |
+|---|---|---|---|
+| GET | `/accounts/tree` | `ledger.account:read` | ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส ไม่แบ่งหน้า — 1 คิวรี; หน้าผังบัญชีสร้างต้นไม้จาก `parent` (ผังบัญชีมีหลักร้อยบัญชี จึงส่งทั้งชุด) |
+| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐาน 245 บัญชี + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
+
+| Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
+|---|---|---|---|---|
 | Journal | `GET`, `POST /journals`; `GET`, `PUT`, `DELETE /journals/{journalID}` | `status` | `code, name` | `ledger.journal:read\|manage` |
 
 ### รายการบัญชี
@@ -183,18 +207,24 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `book` | parameter ที่ใช้ | ผลลัพธ์ |
 |---|---|---|
 | `trial-balance` | `start_date`, `end_date` (บังคับ, ปีบัญชีเดียวกัน) | งบทดลอง — ยอดเดบิตเป็นบวก; `prior_years_earnings` + ผลรวม `closing_balance` = 0 |
-| `balance-sheet` | `end_date` (บังคับ = ณ วันที่; `start_date` ไม่ใช้) | งบแสดงฐานะการเงิน — ยอดตามด้านปกติของหมวด, บรรทัดมี `level`, `is_header` |
+| `balance-sheet` | `end_date` (บังคับ = ณ วันที่; `start_date` ไม่ใช้) | งบแสดงฐานะการเงิน — ยอดตามด้านปกติของหมวด, บรรทัดมี `level`, `is_header`; `suspense` / `total_suspense` = บัญชีพักที่ยังมียอด (เดบิตเป็นบวก): `total_assets + total_suspense = total_liabilities_and_equity` |
 | `income-statement` | `start_date`, `end_date` (บังคับ) | งบกำไรขาดทุน |
 | `general-ledger` | `account_id`, `start_date`, `end_date` (บังคับ), `page`, `page_size` | บัญชีแยกประเภทของบัญชีเดียว — มี `meta` สำหรับแบ่งหน้าบรรทัด; `balance` คือยอดสะสมรวมยอดยกมา |
 
 - response ทุกรายงานมี `data.book` บอกชนิดรายงาน — frontend ใช้เลือกรูปแบบการแสดงผล
 - `book` ไม่มี / ไม่รู้จัก, หรือขาด parameter ที่บังคับ → `400 invalid_query_parameter` (ข้อความบอกค่าที่ใช้ได้)
 
+### บัญชีพัก (`type: suspense`)
+
+หมวดที่ 6 ของผังมาตรฐาน — พักรายการที่ยังระบุไม่ได้ เช่น เงินเข้าบัญชีธนาคารแต่ยังไม่รู้ว่าเป็นของใคร (พักรับ) แล้วโอนไปบัญชีที่ถูกต้องเมื่อตรวจสอบได้ ให้ยอดตามสมุดเงินฝากตรงกับสมุดบัญชี
+- ยอดสะสมต่อเนื่องแบบบัญชีงบฐานะการเงิน (ไม่เริ่มใหม่ทุกปีบัญชี) และ**ไม่เข้างบกำไรขาดทุน**
+- งบแสดงฐานะการเงินแสดงแยกเป็นส่วน "บัญชีพักรอตรวจสอบ" — ควรเป็นศูนย์; หน้ารายงานเตือนเมื่อยังมียอด
+
 ### Request body (ledger)
 
 ```jsonc
 // POST/PUT /accounts   (postable: ค่าเริ่มต้น true ตอน POST, บังคับส่งตอน PUT)
-{ "code": "1101", "name": "เงินสด", "name_en": "Cash", "type": "asset", "parent_id": "<id บัญชีคุม>", "postable": true, "status": "active" }
+{ "code": "1101", "name": "เงินสด", "name_en": "Cash", "type": "asset", "parent_id": "<id บัญชีคุม>", "postable": true, "status": "active", "description": "เงินสดในมือ" }
 
 // POST/PUT /journals — number_template ไม่ส่ง = "{prefix}{fy}-{seq:6}" (prefix = code)
 { "code": "JV", "name": "สมุดรายวันทั่วไป", "number_template": "{prefix}{bb}{mm}-{seq:4}", "status": "active" }

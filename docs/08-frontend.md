@@ -11,6 +11,9 @@
 | **ข้อความทั้งหมดอยู่ใน config** | ปุ่ม, label, placeholder, คำอธิบาย, ข้อความ error, ชื่อแท็บ — อยู่ที่ `src/config/locales/th.ts` ที่เดียว ห้ามเขียนข้อความที่ผู้ใช้เห็นลงใน component |
 | **CSS ใช้ Tailwind เท่านั้น** | component ใช้ utility class; ไม่มีไฟล์ CSS ของ component |
 | **สี / ฟอนต์ / เงา เป็น token** | อยู่ใน `@theme` ของ `src/styles/app.css` ที่เดียว — Tailwind สร้าง class ให้ เช่น `bg-primary`, `text-ink-muted`, `shadow-card` |
+| **แนวทางหน้าตา** | สีจากโลโก้ (กรมท่า `primary` + ส้ม `accent`), พื้นเรียบ เส้นบาง เงาน้อย, ขนาดกระชับแบบโปรแกรมทำงาน (ช่องกรอก / ปุ่มสูง 40px, แถวตาราง 48px), มุมโค้ง `--radius-control` 6px / `--radius-panel` 10px; แท็บของแอปใช้แถบบนสีเข้ม `nav` |
+| **การเข้าถึง (a11y)** | ช่องบังคับมี `*` (อยู่นอก `<label>` — ชื่อช่องไม่เปลี่ยน) + `aria-required`; ส่งฟอร์มไม่ผ่านโฟกัสช่องแรกที่ผิด (`focusFirstInvalid`); ลิงก์ "ข้ามไปเนื้อหาหลัก" ไป `#main`; ข้อความทุกสี contrast ≥ 4.5:1; รองรับ `prefers-reduced-motion`; ช่องกรอก 16px บนมือถือ (iOS ไม่ซูม); `scroll-padding` กันแถบ sticky บังช่องที่โฟกัส |
+| **ฟอนต์** | IBM Plex Sans Thai (ไทย + ละติน) self-hosted ผ่าน `@fontsource` — โหลดใน `app/layout.tsx` เฉพาะน้ำหนัก 400 / 500 / 600 |
 | **ค่าตั้งของแอป** | path ของ API / หน้า, ชื่อ query parameter, ชื่อ cookie อยู่ที่ `src/config/app.ts`; ที่อยู่ backend อยู่ใน env `APEXIS_API_URL` (ฝั่ง server เท่านั้น) |
 | **โลโก้ / ภาพแบรนด์** | `src/config/brand.ts` ที่เดียว (alt text อยู่ใน `texts.app.logoAlt`) |
 | **การค้นหาใช้ URL query** | หน้าใดที่มีการค้นหาเก็บเงื่อนไขไว้ใน URL แล้วส่งต่อให้ API ตรงๆ (ดู [04-api.md §4.2](04-api.md)) — login พากลับหน้าเดิมพร้อม query ผ่าน `?redirect=` |
@@ -37,7 +40,11 @@ apps/frontend/
     │   │       ├── [app]/                  # แอปที่ยังไม่มีหน้าจริง: layout (AppShell), หน้า "กำลังพัฒนา"
     │   │       └── organization/           # ★ แอปที่มีหน้าจริงแล้วมีโฟลเดอร์ของตัวเอง (Next เลือกก่อน [app])
     │   │           ├── layout.tsx          #   AppShell appKey="organization"
-    │   │           ├── branches/           #   รายการ / new / [branchId] — แม่แบบของหน้ารายการ
+    │   │           ├── branches/  business-units/  departments/  cost-centers/  project-sites/
+    │   │           │                       #   ข้อมูลหลัก: รายการ / new / [itemId]
+    │   │           ├── fiscal-years/       #   ปีบัญชี: รายการ / new / [itemId] (12 งวด + ปิด / เปิดงวด)
+    │   │           ├── numbering/          #   เลขที่เอกสาร (แก้ทีละแถว + ตัวอย่างทันที)
+    │   │           ├── company/            #   ข้อมูลบริษัท
     │   │           └── [...rest]/          #   เมนูที่ยังไม่ทำ = "กำลังพัฒนา"
     │   └── api/
     │       ├── session/route.ts       # ★ POST เข้าสู่ระบบ / GET ผู้ใช้ปัจจุบัน / DELETE ออกจากระบบ
@@ -52,11 +59,15 @@ apps/frontend/
     ├── styles/app.css          # ★ Tailwind + design tokens (@theme)
     ├── components/             # UI พื้นฐาน ไม่มีข้อความในตัว (รับผ่าน props)
     │   ├── Button  ButtonLink  TextField  PasswordField  SelectField  Alert  Badge  Card  Spinner
-    │   └── PageHeader  DataTable (เรียงด้วยลิงก์ ?sort=)  Pagination (ลิงก์ ?page=)
+    │   ├── PageHeader  DataTable (เรียงด้วยลิงก์ ?sort=)  Pagination (ลิงก์ ?page=)
+    │   └── ReferenceSelect     # ช่องเลือกข้อมูลอ้างอิงแบบพิมพ์ค้นหา (combobox)
     ├── features/
     │   ├── auth/               # login / logout API, LoginForm, LoginPanel, LogoutButton (client)
     │   ├── shell/              # TopBar, AppTile, AppShell, AppNav, CloseAppButton, MessagePanel
-    │   ├── companies/          # CompanyForm
+    │   ├── lists/ListParts.tsx # ListHeader, ListToolbar, ListView, StatusBadge, RefText, rowHref
+    │   ├── forms/              # FormSection, FormActions, AddressFields, StatusSelect, useResourceForm
+    │   ├── organization/       # resources (path / สิทธิ์ / query keys), ฟอร์มข้อมูลหลัก, ปีบัญชี, เลขที่เอกสาร, บริษัท
+    │   ├── companies/          # CompanyForm (สร้างบริษัท)
     │   └── branches/           # types, BranchForm
     ├── layouts/AuthLayout.tsx  # โครงหน้าก่อนเข้าสู่ระบบ
     └── lib/
@@ -64,11 +75,14 @@ apps/frontend/
         ├── permissions.ts      # can / covers — กติกาเดียวกับ backend
         ├── url.ts              # param, pickQuery, withQuery (เงื่อนไขค้นหาใน URL)
         ├── validation.ts       # รูปแบบ code / เลขที่สาขา / รหัสไปรษณีย์ ... (ตรงกับ backend)
+        ├── numbering.ts        # ตรวจ / แสดงตัวอย่างเลขที่เอกสาร (กติกาเดียวกับ backend platform/numbering)
+        ├── format.ts           # formatDate (วันที่แบบไทย พ.ศ.)
         ├── cx.ts
         └── server/
             ├── session.ts      # ★ อ่าน / เขียน cookie, backendUrl, safeRedirect, ตรวจ origin
             ├── backend.ts      # ★ backendGet — server component อ่านข้อมูลจาก backend พร้อม token
-            └── company.ts      # ★ getCompanyContext — บริษัท + สิทธิ์ (cache ต่อ request)
+            ├── company.ts      # ★ getCompanyContext — บริษัท + สิทธิ์ (cache ต่อ request)
+            └── list.ts         # ★ loadList, loadRef, listHrefFromBack — หน้ารายการ
 ```
 
 ## 8.3 แก้ข้อความ / สี
@@ -83,7 +97,7 @@ errors: { invalid_email_or_password: 'อีเมลหรือรหัสผ
 
 ```css
 /* src/styles/app.css — เปลี่ยนสีหลักของทั้งแอป */
-@theme { --color-primary: #1f4fd1; }
+@theme { --color-primary: #1d3f8f; }
 ```
 
 ใช้ component ซ้ำในที่อื่นด้วยข้อความต่างไป (ยังมาจาก config):
@@ -138,21 +152,77 @@ browser --(cookie apexis_session)--> Next server --(Authorization: Bearer <token
   - เมนูแสดงเมื่อมีสิทธิ์ `permission` ของเมนู (ตรวจแบบเดียวกับ backend: `*`, `sales.*:read`, `sales.order:*`)
   - แอปแสดงเมื่อเหลืออย่างน้อยหนึ่งเมนู; หน้าแรกของแอป = เมนูแรกที่มีสิทธิ์
   - ซ่อนเมนูเพื่อความสะดวกเท่านั้น — backend ตรวจสิทธิ์ทุกคำขอเสมอ
-- บริษัท + สิทธิ์โหลดด้วย `getCompanyContext(companyId)`: 2 คำขอพร้อมกัน (`/companies/{id}/access`, `/companies/{id}`) ครั้งเดียวต่อ request (React `cache`) แม้ layout / page เรียกซ้ำ
-  - สมาชิกที่ไม่มีสิทธิ์ `organization.company:read` เข้าได้แต่ไม่เห็นชื่อบริษัท (ถ้าต้องการ ควรให้ `/access` ส่งชื่อบริษัทมาด้วย)
+- บริษัท + สิทธิ์โหลดด้วย `getCompanyContext(companyId)`: 2 คำขอพร้อมกัน ครั้งเดียวต่อ request (React `cache`) แม้ layout / page เรียกซ้ำ
+  - `/me/companies/{id}` (organization) ชื่อบริษัท — สมาชิกทุกคนอ่านได้ ไม่ต้องมีสิทธิ์อ่านบริษัท
+  - `/companies/{id}/access` (identity) สิทธิ์ของผู้ใช้
+  - แยก 2 คำขอเพราะข้อมูลอยู่คนละ module (JOIN ข้าม module ไม่ได้ และ identity ไม่พึ่ง organization) — เรียกพร้อมกันจึงไม่เพิ่มเวลารอ
 - เมนูที่ยังไม่มีหน้าจริงแสดง "หน้านี้กำลังพัฒนา"
 
-### หน้ารายการ (แม่แบบ: สาขา `organization/branches`)
+### หน้ารายการ (แม่แบบ: `organization/branches`, `departments` ...)
 
 | ส่วน | ทำอย่างไร |
 |---|---|
-| อ่านข้อมูล | server component: `pickQuery(searchParams, KEYS)` → `backendGet(path, query)` — ส่งเงื่อนไขจาก URL ให้ API ตรงๆ คิวรี 1 ครั้ง |
-| ค้นหา / กรอง | `<Form action="">` ของ `next/form` (GET) — เขียนลง URL, กด Back ได้เงื่อนไขเดิม; ส่ง `sort` / `page_size` เดิมเป็น hidden |
+| อ่านข้อมูล | server component: `loadList(api, searchParams, KEYS)` — เลือก key ที่อนุญาตจาก URL แล้วส่งให้ API ตรงๆ คิวรี 1 ครั้ง (KEYS อยู่ใน `features/organization/resources.ts` ตรงกับ backend) |
+| ค้นหา / กรอง | `ListToolbar` = `<Form action="">` ของ `next/form` (GET) — เขียนลง URL, กด Back ได้เงื่อนไขเดิม; ส่ง `sort` / `page_size` เดิมเป็น hidden |
+| กรองด้วยข้อมูลอ้างอิง | `RefFilter` (ReferenceSelect ที่มี `name`) ส่ง id ลง URL เช่น `?branch_id=`; ตอนเปิดหน้า `loadRef` โหลดชื่อมาแสดง — คิวรีเพิ่มเฉพาะตัวกรองที่ใช้ และเรียกพร้อมกับรายการ (`Promise.all`) |
 | เรียง | `DataTable` หัวคอลัมน์เป็นลิงก์ `?sort=key` / `?sort=-key` (กลับหน้า 1) |
 | แบ่งหน้า | `Pagination` ลิงก์ `?page=` จาก `meta` ของ API |
 | เพิ่ม / แก้ไข | หน้าแยก `/new`, `/{id}` — ฟอร์มเป็น client component เรียก `/api/v1/*` (POST / PUT / DELETE) แล้ว `router.push(listHref)` + `router.refresh()` |
 | กลับหน้ารายการเดิม | ลิงก์แถวพา `?back=<query ของรายการ>`; หน้าแก้ไขกรองด้วย `pickQuery` อีกชั้นก่อนใช้ |
 | สิทธิ์ | ปุ่ม "สร้าง" / บันทึก / ลบ แสดงเมื่อ `can(permissions, '...:manage')`; ไม่มีสิทธิ์ = ฟอร์มอ่านอย่างเดียว |
+| ฟอร์ม | `useResourceForm` (POST / PUT / DELETE + กลับหน้ารายการ + error จาก config), `FormSection`, `FormActions`, `AddressFields` |
+| แจ้งผล | `showToast()` (`lib/toast.ts`) → `Toaster` ใน AppShell มุมขวาล่าง หายเองใน 4 วินาที ไม่แย่งโฟกัส — `useResourceForm` เรียกให้เองหลังสร้าง / บันทึก / ลบ (เก็บใน sessionStorage ข้ามการเปลี่ยนหน้า) |
+| หน้าว่าง | `ListView` แยก 2 แบบ: ยังไม่มีข้อมูล (+ ปุ่มสร้างเมื่อมีสิทธิ์) / มีตัวกรองแต่ไม่พบ (+ ล้างตัวกรอง) |
+| หน้าฟอร์ม | `FormPage` มีเส้นทาง องค์กร › รายการ › หน้านี้; `FormSection` แบบ 2 คอลัมน์ (หัวข้อ + คำอธิบาย | ช่องกรอก) เหมือนหน้าข้อมูลบริษัท |
+
+### ช่องเลือกข้อมูลอ้างอิง (`ReferenceSelect`)
+
+- พิมพ์แล้วค้นหาจาก API (`?q=&page_size=20` + `params` เช่น `status=active`) หน่วง 250ms และยกเลิกคำขอเก่า — ใช้กับข้อมูลจำนวนมากได้
+- แสดง "รหัส · ชื่อ", ปุ่ม ✕ ล้างค่า, `excludeId` (หน่วยแม่ห้ามเลือกตัวเอง)
+- คีย์บอร์ด ↑ ↓ Enter Esc ตาม WAI-ARIA combobox
+- ใช้ได้ทั้งในฟอร์ม (`value` + `onChange`) และตัวกรองใน URL (`name` + `defaultValue`)
+
+### แอปผู้ใช้และสิทธิ์ (`users/`)
+
+| เมนู | หน้า | หมายเหตุ |
+|---|---|---|
+| สมาชิก | รายการ (ค้นหา, กรองสถานะ / บทบาท, ป้าย "รอเปลี่ยนรหัสผ่าน"), เพิ่ม, จัดการ | เพิ่มด้วยอีเมล — ไม่พบบัญชีจึงเปิดส่วน "สร้างบัญชีใหม่" (ชื่อ + รหัสผ่านชั่วคราว ปุ่มสุ่ม / คัดลอก); หน้าจัดการเปลี่ยนบทบาท และพัก / เปิดใช้งาน (ยืนยันก่อน) — แก้บัญชีตัวเองไม่ได้ |
+| บทบาท | รายการ, สร้าง / แก้ไข / ลบ | ตารางสิทธิ์ (`PermissionMatrix`) จาก `GET /permissions`: กลุ่มตาม module, แถว = ข้อมูล, คอลัมน์ = การกระทำ, เลือกทั้งแอป (checkbox แบบเลือกบางส่วน), เลือก action อื่น = เลือก "ดู" ให้ด้วย; owner อ่านอย่างเดียว; wildcard ของบทบาทเดิมแสดงเป็นช่องที่ครอบคลุม |
+
+- ชื่อสิทธิ์ภาษาไทยอยู่ที่ `texts.permissions` (module / resource / action) — ไม่มีชื่อ = แสดงรหัส จึงเพิ่มสิทธิ์ใหม่ใน backend ได้โดยตารางไม่พัง
+- ตรรกะตาราง (`features/users/matrix.ts`) เป็น pure function มีเทสต์แยก
+
+### บังคับเปลี่ยนรหัสผ่าน
+
+```text
+login (รหัสชั่วคราว) → cookie มี user.must_change_password → proxy.ts พาไป /change-password?redirect=<หน้าเดิม>
+  → PUT /api/session/password (Next) → backend PUT /me/password → ล้างค่าใน cookie → โหลดหน้าเดิมใหม่ทั้งหน้า
+```
+
+- ใช้ `window.location.assign` (ไม่ใช่ router) เพราะ router ของ Next จำ redirect เดิมไว้ — ต้องล้างแคช
+- ช่องรหัสผ่านตั้ง `autocomplete` (current-password / new-password) และมีช่อง username ซ่อน ให้ password manager ทำงานได้
+- `Toaster` อยู่ใน root layout — แจ้งผลได้ทุกหน้า (ข้ามการโหลดหน้าใหม่ด้วย sessionStorage)
+
+### แอปบัญชี (`accounting/`)
+
+| เมนู | หน้า | หมายเหตุ |
+|---|---|---|
+| รายการบัญชี | รายการ (กรองสถานะ / สมุด / บัญชี / ช่วงวันที่), สร้าง, ร่าง = ฟอร์ม, ผ่านแล้ว = หน้าแสดง + กลับรายการ | ตารางบรรทัด: บัญชี, คำอธิบาย, เดบิต, เครดิต (กรอกด้านหนึ่งอีกด้านถูกล้าง); ยอดรวม / ผลต่างคำนวณสด; มิติวิเคราะห์ซ่อนในแต่ละบรรทัด (ปุ่มไอคอนพร้อมจำนวนที่ระบุ); "บันทึกร่าง" ไม่ต้องสมดุล, "บันทึกและผ่านรายการ" ต้องสมดุล (ยืนยันก่อน) |
+| ผังบัญชี | ต้นไม้ (`GET /accounts/tree`), ค้นหา / กรอง = รายการแบบแบน (`GET /accounts` กรองใน DB), สร้าง / แก้ไข | แบบเดียวกับโปรเจกต์ต้นแบบ: ขยาย / ยุบทีละกลุ่มหรือทั้งหมด, ระดับบนสุดขยายไว้, บัญชีคุมตัวหนา + ป้าย "กลุ่มบัญชี"; ยังไม่มีบัญชี = ปุ่ม "สร้างผังบัญชีมาตรฐาน"; จอเล็กซ่อนคอลัมน์ชื่ออังกฤษ / หมวด และลดย่อหน้า |
+| สมุดรายวัน | รายการ, สร้าง / แก้ไข | ตัวอย่างเลขที่รายการทันทีขณะพิมพ์รูปแบบ (`lib/numbering`) |
+| รายงาน | หน้าเดียว `?book=&start_date=&end_date=&account_id=` | งบทดลอง (กดชื่อบัญชี = บัญชีแยกประเภท), งบแสดงฐานะการเงิน (+ ส่วนบัญชีพัก / คำเตือน), งบกำไรขาดทุน, บัญชีแยกประเภท (100 บรรทัดต่อหน้า); ปุ่ม**พิมพ์** (`print:` ซ่อนเมนู / ตัวกรอง) และ**ส่งออก CSV** (UTF-8 + BOM เปิดใน Excel ได้, ตัวเลขไม่คั่นหลัก, กันสูตร) — บัญชีแยกประเภทส่งออกเฉพาะหน้าที่แสดง |
+
+- จำนวนเงินคำนวณด้วย BigInt สเกล 10^6 (`features/accounting/money.ts`) — ไม่ใช้ float; แสดงคั่นหลัก ทศนิยม 2 ตำแหน่ง ติดลบในวงเล็บ
+- ตรรกะต้นไม้ (`tree.ts`), CSV (`csv.ts`, `reportCsv.ts`) เป็น pure function มีเทสต์
+
+### แอปองค์กร
+
+| เมนู | หน้า | หมายเหตุ |
+|---|---|---|
+| สาขา, หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ / ไซต์งาน | รายการ / สร้าง / แก้ไข / ลบ | ลำดับชั้นแสดงเป็นตาราง มีคอลัมน์ "แม่" และกรอง `?parent_id=`; backend ตรวจการวน, ข้อมูลที่ถูกอ้างอิงลบไม่ได้ |
+| ปีบัญชี / งวด | รายการปี, สร้างปี (backend สร้าง 12 งวด), หน้าปีพร้อมงวด | ปิด / เปิดทีละงวด (ยืนยันก่อน) — ปุ่มแสดงเฉพาะงวดแรกที่เปิด / งวดล่าสุดที่ปิด; ต้องมีสิทธิ์ `fiscal_period:close` |
+| เลขที่เอกสาร | ตารางทุกชนิดเอกสาร | แก้ทีละแถว, ตัวอย่างเลขที่เปลี่ยนทันทีที่พิมพ์ (`lib/numbering.ts`), "ใช้ค่าเริ่มต้น" |
+| ข้อมูลบริษัท | ฟอร์มเดียว | ทศนิยมเลือกได้ตั้งแต่ค่าปัจจุบัน (ลดไม่ได้), บันทึกแล้วอยู่หน้าเดิม |
 
 เพิ่มหน้าจริงให้แอปใหม่: สร้างโฟลเดอร์ `c/[companyId]/<app>/` ที่มี `layout.tsx` (AppShell), `page.tsx` (`redirectToFirstMenu`), `[...rest]/page.tsx` (`ComingSoon`) แบบเดียวกับ `organization/` แล้วเพิ่มหน้าของเมนูนั้น
 
@@ -181,11 +251,14 @@ test ที่มี:
 - `components/DataTable/DataTable.test.tsx` — ลิงก์เรียง (ขึ้น / ลง), `aria-sort`, ตารางว่าง, `Pagination`
 - `features/shell/shell.test.tsx` — ไอคอนเปิดแท็บใหม่ด้วยชื่อแท็บของแอป, ปุ่มปิด (ปิดไม่ได้ → กลับหน้ารวมแอป)
 - `features/branches/BranchForm.test.tsx` — validation, สร้าง (POST + รหัสพิมพ์ใหญ่), สำนักงานใหญ่แก้ / ลบไม่ได้, ลบแล้ว backend ปฏิเสธ, อ่านอย่างเดียว
+- `components/ReferenceSelect/ReferenceSelect.test.tsx` — ค้นหาจาก API พร้อม params, เลือกด้วยคีย์บอร์ด, hidden input, ล้างค่า, ไม่พบรายการ
+- `features/organization/organization.test.tsx` — แผนก (PUT + ล้างค่าอ้างอิง = null), ศูนย์ต้นทุน (ช่วงวันที่), โครงการ (ปิดต้องมีวันสิ้นสุด, อ่านอย่างเดียว), งวด (ปุ่มตามลำดับ + PATCH), เลขที่เอกสาร (ตัวอย่างทันที / ผิด = บันทึกไม่ได้), ข้อมูลบริษัท (ทศนิยมลดไม่ได้)
+- `lib/numbering.test.ts` — ตัวอย่างเลขที่ตรงกับ backend และข้อความ error ทุกกรณี
 
 ## 8.7 เวอร์ชัน
 
 ล็อกเวอร์ชันตรง (ไม่มี `^`):
-- Next.js 16.4, React 19.3, TypeScript 5.9, Tailwind 4.3, Vitest 3.2, lucide-react 1.69 (ไอคอน)
+- Next.js 16.4, React 19.3, TypeScript 5.9, Tailwind 4.3, Vitest 3.2, lucide-react 1.69 (ไอคอน), @fontsource/ibm-plex-sans-thai 5.3
 - Next 16 ใช้ `proxy.ts` แทน `middleware.ts` เดิม
 - เลือก major ที่ตรวจสอบ API ได้แล้ว (มี TS 7 ออกแล้ว) — การอัปเกรด major ควรทำเป็นงานแยก
 
