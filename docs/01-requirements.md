@@ -54,6 +54,9 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | ORG-06 | **โครงการ / ไซต์งาน (project site)** CRUD + ค้นหา | สถานะ planned / active / closed; ปิดโครงการต้องมีวันสิ้นสุด; ค้นหาตามช่วงวันที่ซ้อนทับ |
 | ORG-07 | **ปีบัญชี (fiscal year)** สร้าง / ดู / ค้นหา | สร้างแล้วได้ **12 งวดรายเดือน** อัตโนมัติ (ไม่มีงวดที่ 13), เริ่มวันที่ 1 ของเดือนใดก็ได้, ห้ามช่วงซ้อนกัน, ปีซ้ำไม่ได้ |
 | ORG-08 | **งวดบัญชี (fiscal period)** ดู / ค้นหา / ปิด-เปิด | ปิดงวดต้องเรียงจากงวดแรก, เปิดกลับต้องเรียงจากงวดท้าย |
+| ORG-09 | **รูปแบบเลขที่เอกสาร** ต่อชนิดเอกสาร (`document-numberings`) | ชนิดเอกสารลงทะเบียนโดย module เจ้าของ; ตั้ง prefix + รูปแบบได้ เช่น `{prefix}{yy}{mm}-{seq:5}` → PV2603-00001; นับใหม่ตามตัวแปร (เดือน / ปี / ปีบัญชี / ไม่นับใหม่); แก้แล้วมีผลกับเอกสารที่ออกเลขหลังจากนั้น; ค่าเริ่มต้น `{prefix}{fy}-{seq:6}` |
+
+ตัวแปรของรูปแบบเลขที่ (ORG-09 และรูปแบบของสมุดรายวัน ledger): `{prefix}`, `{yyyy}` / `{yy}` (ปี ค.ศ.), `{bbbb}` / `{bb}` (ปี พ.ศ.), `{mm}`, `{fy}` (ปีบัญชี), `{seq:N}` (เลขลำดับ N หลัก ต้องมี 1 ครั้งพอดี) — ปี / เดือนอิงวันที่ของเอกสาร; เลขที่ยาวรวมไม่เกิน 30 ตัวอักษร
 
 รายละเอียดของบริษัท (ORG-01):
 
@@ -126,13 +129,23 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | PUR-04 | **ใบรับสินค้า** ตามใบสั่งซื้อ (รับบางส่วนได้) | ไม่เกินจำนวนที่เหลือ; สินค้า stock ออกใบรับเข้าคลังของ inventory (FIFO) ใน transaction เดียว; ลงบัญชี Dr สินค้าคงเหลือ (perpetual + stock) หรือบัญชีซื้อ (periodic / ไม่นับสต็อก / บริการ) / Cr GR/IR; ต้นทุนไม่รวม VAT |
 | PUR-05 | **ใบแจ้งหนี้ผู้ขาย** ตามใบสั่งซื้อ | แจ้งหนี้ได้ไม่เกินจำนวนที่รับแล้ว; ราคาใบแจ้งหนี้ต่างจากใบสั่งซื้อได้ — ผลต่างลงบัญชีผลต่างราคา (perpetual + stock) หรือบัญชีซื้อ; Dr GR/IR + ภาษีซื้อ / Cr เจ้าหนี้; วันครบกำหนด = วันที่ลงบัญชี + เครดิตเทอมในใบสั่งซื้อ; เลขที่ใบแจ้งหนี้ของผู้ขายห้ามซ้ำ (ยกเว้นใบที่ยกเลิก) |
 | PUR-06 | **ยกเลิก** ใบรับสินค้า / ใบแจ้งหนี้ | กลับรายการบัญชี ณ วันที่เดิม (งวดต้องเปิด); ใบรับที่แจ้งหนี้แล้วต้องยกเลิกใบแจ้งหนี้ก่อน; ของที่รับถูกใช้ไปแล้วยกเลิกไม่ได้ |
-| PUR-07 | **รายงาน** `outstanding-purchase-orders` (ค้างรับ / ค้างแจ้งหนี้), `ap-aging` (อายุเจ้าหนี้ ณ วันที่) | ผ่าน `GET /reports?book=` |
+| PUR-07 | **รายงาน** `outstanding-purchase-orders` (ค้างรับ / ค้างแจ้งหนี้), `ap-aging` (อายุเจ้าหนี้ ณ วันที่ หักยอดจ่ายแล้ว), `withholding-tax` (ภาษีหัก ณ ที่จ่ายรายเดือน แยก ภ.ง.ด.3 / 53) | ผ่าน `GET /reports?book=` |
+| PUR-08 | **ประเภทผู้ขายทางภาษี** บุคคลธรรมดา / นิติบุคคล (`tax_type`, บังคับ) | กำหนดแบบยื่นภาษีหัก ณ ที่จ่าย ภ.ง.ด.3 / ภ.ง.ด.53 |
+| PUR-09 | **ประเภทภาษีหัก ณ ที่จ่าย** (`withholding-tax-types`) รหัส, ชื่อ, อัตรา | อัตรา > 0 ถึง 100 ทศนิยม 2 ตำแหน่ง; ใบจ่ายเก็บอัตรา ณ วันจ่าย |
+| PUR-10 | **ใบจ่ายชำระ** (`supplier-payments`) ผู้ขาย 1 รายต่อใบ, ตัดหลายใบแจ้งหนี้ / จ่ายบางส่วนได้, จ่ายหลายช่องทาง (เงินสด / ธนาคารจากทะเบียน cashbank) | หักภาษีตอนจ่าย: ฐาน = ยอดก่อน VAT ตามสัดส่วนที่จ่าย; ยอดรวมช่องทางจ่าย = ยอดตัดหนี้ - ภาษีหัก; ลงบัญชีรายการเดียว Dr เจ้าหนี้ / Cr เงินสด / ธนาคาร / ภาษีหัก ณ ที่จ่ายค้างจ่าย (บัญชีตามแบบ ภ.ง.ด.); ยกเลิก = กลับรายการ ณ วันที่เดิม; ใบแจ้งหนี้ที่จ่ายแล้วยกเลิกไม่ได้ |
 
 ข้อตกลง:
 - VAT ปัดต่อบรรทัดตาม `amount_decimals`; ราคารวม VAT: VAT = ยอด × อัตรา / (100 + อัตรา)
 - รับครบและแจ้งหนี้ครบทุกบรรทัด = ปิดใบสั่งซื้ออัตโนมัติ; ปิดเอง = หยุดรับ (ยังแจ้งหนี้ของที่รับแล้วได้)
 - แจ้งหนี้ครบจำนวนที่รับ = ล้าง GR/IR เท่ายอดที่ลงไว้จริง (ไม่มีเศษปัดค้างใน GR/IR)
-- ยังไม่ทำ: ภาษีหัก ณ ที่จ่าย, จ่ายชำระ, ใบลดหนี้ / คืนสินค้า, สกุลเงินต่างประเทศ
+- **รายการบัญชีทุกเอกสาร: 1 ผังบัญชี = 1 บรรทัด** (รวมยอดของบรรทัดที่ลงบัญชีเดียวกัน หักกลบเดบิต / เครดิต)
+- ยังไม่ทำ: หนังสือรับรองการหักภาษี (50 ทวิ), ใบลดหนี้ / คืนสินค้า, จ่ายล่วงหน้า, ค่าธรรมเนียมธนาคาร, สกุลเงินต่างประเทศ
+
+## 1.4.4 Functional Requirements — `cashbank` (ทะเบียนเงินสด / บัญชีธนาคาร)
+
+| ID | ความต้องการ | กฎธุรกิจ |
+|---|---|---|
+| CB-01 | **ทะเบียน** (`cash-accounts`) CRUD + ค้นหา: รหัส, ชื่อ, ประเภท (cash / bank), ธนาคาร, สาขา, เลขที่บัญชี, บัญชีแยกประเภท | ธนาคารต้องมีชื่อธนาคาร + เลขที่บัญชี; ผูกผังบัญชีย่อยที่ active 1 บัญชี; เอกสารรับ / จ่ายเงินเลือกทะเบียนแล้วลงบัญชีที่ผูกไว้ |
 
 ## 1.5 สิทธิ์ (Permissions)
 
@@ -142,7 +155,9 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | organization | `organization.{company,branch,business_unit,department,cost_center,project_site}:{read,manage}` |
 | organization (บัญชี) | `organization.fiscal_period:read`, `organization.fiscal_period:manage` (สร้างปีบัญชี), `organization.fiscal_period:close` (ปิด/เปิดงวด) |
 | inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read`, `inventory.settings:{read,manage}`, `inventory.closing:read`, `inventory.closing:post` (ปรับปรุงสิ้นงวด / ยกเลิก) |
-| purchasing | `purchasing.{settings,supplier}:{read,manage}`, `purchasing.order:{read,manage}`, `purchasing.order:approve`, `purchasing.receipt:{read,post}`, `purchasing.invoice:{read,post}`, `purchasing.report:read` |
+| purchasing | `purchasing.{settings,supplier}:{read,manage}` (ประเภทภาษีหัก ณ ที่จ่ายใช้สิทธิ์ settings), `purchasing.order:{read,manage}`, `purchasing.order:approve`, `purchasing.receipt:{read,post}`, `purchasing.invoice:{read,post}`, `purchasing.payment:{read,post}`, `purchasing.report:read` |
+| cashbank | `cashbank.account:{read,manage}` |
+| organization (เลขที่) | `organization.numbering:{read,manage}` |
 | ledger | `ledger.account:{read,manage}`, `ledger.journal:{read,manage}`, `ledger.entry:read`, `ledger.entry:manage` (สร้าง / แก้ / ลบ draft), `ledger.entry:post` (ผ่าน / กลับรายการ), `ledger.report:read` |
 
 owner ได้สิทธิ์ `*` อัตโนมัติ — role อื่นต้องกำหนดสิทธิ์เอง

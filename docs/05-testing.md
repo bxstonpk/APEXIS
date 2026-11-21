@@ -78,11 +78,15 @@ PowerShell: `$env:IDENTITY_TEST_DSN = "postgres://…"; go test -p 1 ./...`
 | `domain/entities/entities_test.go` | `TestVatTermsFollowSupplierAtCreation`, `TestLineAmounts`, `TestOrderReceiveInvoiceAndAutoClose`, `TestInvoiceJournalBalances` | VAT ตามผู้ขาย, รวม / แยก VAT, รับไม่เกิน / แจ้งหนี้ไม่เกิน, ล้าง GR/IR ไม่มีเศษปัด, ปิดอัตโนมัติ, รายการบัญชีสมดุล |
 | `purchasing_integration_test.go` | `TestPurchasingFlow` | ค่าตั้ง / ผู้ขาย, ใบสั่งซื้อ VAT, สิทธิ์อนุมัติ, ผู้ขายเลิกจด VAT แล้วใบเดิมยังคิด VAT, **รับสินค้า → สต็อก FIFO + GL, แจ้งหนี้ราคาต่าง → ผลต่างราคา, งบทดลองเทียบตัวเลข**, รายงานค้างรับ / อายุเจ้าหนี้, ลำดับการยกเลิก (GL / สต็อกกลับเป็นศูนย์), เลขใบแจ้งหนี้ซ้ำ, ปิดใบสั่งซื้อ, **periodic: รับสินค้าลงบัญชีซื้อ**, ปิดอัตโนมัติ |
 
+| `domain/entities/entities_test.go` | `TestWithholdingOnPreVatAmount`, `TestPaymentRulesAndJournalOneLinePerAccount`, `TestInvoicePayRules` | ฐานภาษีหัก ณ ที่จ่าย (จ่ายครบ / บางส่วน), ยอดช่องทางจ่าย, **รายการบัญชี 1 ผังบัญชี = 1 บรรทัด**, จ่ายเกิน / ผู้ขายผิด, ใบแจ้งหนี้ที่จ่ายแล้วยกเลิกไม่ได้ |
+| `payment_integration_test.go` | `TestSupplierPayments` | **รูปแบบเลขที่ (organization + สมุดรายวัน พ.ศ.)**, ทะเบียนเงินสด / ธนาคาร, ประเภทภาษีหัก ณ ที่จ่าย, จ่าย 2 ใบแจ้งหนี้ / 2 ช่องทาง, **บรรทัดบัญชีเทียบตัวเลข**, ยอดค้าง, อายุเจ้าหนี้ก่อน / หลังจ่าย, รายงาน ภ.ง.ด.53 / 3, ยกเลิกแล้วยอดกลับ, เลขที่ต่อเนื่อง |
+
 ### platform
 
 | ไฟล์ | Test |
 |---|---|
 | `platform/numeric/numeric_test.go` | `TestParse`, `TestFitsScale`, `TestInRange` |
+| `platform/numbering/numbering_test.go` | `TestRenderAndPeriodKey`, `TestNormalizeRejects` |
 | `platform/listing/listing_test.go` | `TestParsePage`, `TestParseSort`, `TestParseSearch`, `TestParseDateRange`, `TestParseListAndOptional` |
 | `platform/database/database_test.go` | `TestLikeContainsEscapesWildcards` |
 

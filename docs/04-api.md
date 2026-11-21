@@ -104,6 +104,7 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 | Project site | `/project-sites[/{projectSiteID}]` | `status` (planned/active/closed), `branch_id, cost_center_id, start_date, end_date` (ช่วงที่ซ้อนทับ) | `code, name, start_date` |
 | Fiscal year | `GET`, `POST /fiscal-years`; `GET /fiscal-years/{fiscalYearID}` | `year` | `year` (ค่าเริ่มต้น `-year`) |
 | Fiscal period | `GET /fiscal-periods`; `GET`, `PATCH /fiscal-periods/{fiscalPeriodID}` | `fiscal_year, status` (open/closed), `date` | `start_date` |
+| เลขที่เอกสาร | `GET /document-numberings`; `PUT /document-numberings/{docType}` | — (ทุกชนิดเอกสาร พร้อม `example`) | `organization.numbering:read\|manage` |
 
 ### Request body (organization)
 
@@ -195,8 +196,8 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 // POST/PUT /accounts   (postable: ค่าเริ่มต้น true ตอน POST, บังคับส่งตอน PUT)
 { "code": "1101", "name": "เงินสด", "name_en": "Cash", "type": "asset", "parent_id": "<id บัญชีคุม>", "postable": true, "status": "active" }
 
-// POST/PUT /journals
-{ "code": "JV", "name": "สมุดรายวันทั่วไป", "status": "active" }
+// POST/PUT /journals — number_template ไม่ส่ง = "{prefix}{fy}-{seq:6}" (prefix = code)
+{ "code": "JV", "name": "สมุดรายวันทั่วไป", "number_template": "{prefix}{bb}{mm}-{seq:4}", "status": "active" }
 
 // POST/PUT /journal-entries   (status เฉพาะ POST: "draft" ค่าเริ่มต้น | "posted")
 { "journal_id": "…", "date": "2026-01-10", "description": "ค่าเช่า", "reference": "INV-001", "status": "draft",
@@ -264,6 +265,9 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบสั่งซื้อ | `GET`, `POST /purchase-orders`; `GET`, `PUT`, `PATCH`, `DELETE /purchase-orders/{orderID}` | `status, supplier_id, item_id, start_date, end_date`; sort `date\|order_no\|created_at` | `purchasing.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `purchasing.order:approve` |
 | ใบรับสินค้า | `GET`, `POST /goods-receipts`; `GET`, `PATCH /goods-receipts/{receiptID}` | `status, supplier_id, order_id, start_date, end_date` | `purchasing.receipt:read\|post` |
 | ใบแจ้งหนี้ | `GET`, `POST /supplier-invoices`; `GET`, `PATCH /supplier-invoices/{invoiceID}` | เหมือนใบรับสินค้า | `purchasing.invoice:read\|post` |
+| ประเภทภาษีหัก ณ ที่จ่าย | `/withholding-tax-types[/{whtTypeID}]` | `status` | `purchasing.settings:read\|manage` |
+| ใบจ่ายชำระ | `GET`, `POST /supplier-payments`; `GET`, `PATCH /supplier-payments/{paymentID}` | `status, supplier_id, start_date, end_date`; sort `date\|document_no` | `purchasing.payment:read\|post` |
+| ทะเบียนเงินสด / ธนาคาร (cashbank) | `/cash-accounts[/{cashAccountID}]` | `type` (cash,bank), `status` | `cashbank.account:read\|manage` |
 
 - ใบสั่งซื้อ `PATCH` รับ `approved` / `closed` / `cancelled`; ใบรับ / ใบแจ้งหนี้ `PATCH` รับเฉพาะ `cancelled`
 - ใบรับ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที (response มี `entry_no` ของ ledger, ใบรับมี `stock_document_no` ของ inventory)
@@ -284,4 +288,20 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `book` | parameter | ผลลัพธ์ |
 |---|---|---|
 | `outstanding-purchase-orders` | `supplier_id, item_id, q, sort` (date, order_no, supplier_code, delivery_date), `page, page_size` | บรรทัดใบสั่งซื้อที่ค้างรับ (`to_receive`) หรือค้างแจ้งหนี้ (`to_invoice`) |
-| `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย: `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |
+| `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย (หักยอดจ่ายถึงวันที่รายงาน): `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |
+| `withholding-tax` | `start_date, end_date` (บังคับ, ตามวันที่จ่าย), `form` (pnd3 / pnd53), `supplier_id, sort` (date, document_no, supplier_code), `page, page_size` | บรรทัดใบจ่ายที่หักภาษี: ผู้ขาย + เลขผู้เสียภาษี / สาขา, ประเภท, อัตรา, ฐาน, ภาษี; `total_base`, `total_wht` |
+
+```jsonc
+// PUT /document-numberings/purchasing.payment
+{ "prefix": "PV", "template": "{prefix}{yy}{mm}-{seq:5}" }          // → PV2603-00001 (นับใหม่ทุกเดือน)
+// POST /cash-accounts
+{ "code": "BBL", "name": "กรุงเทพ ออมทรัพย์", "type": "bank", "bank_name": "BBL", "account_no": "123-4-56789-0", "gl_account_id": "…" }
+// POST /suppliers — tax_type บังคับ: individual (ภ.ง.ด.3) / juristic (ภ.ง.ด.53)
+// PUT /purchasing-settings — เพิ่ม wht_pnd3_account_id, wht_pnd53_account_id
+// POST /supplier-payments — ยอดรวม methods = ยอดรวม lines - ภาษีหัก ณ ที่จ่าย
+{ "supplier_id": "…", "date": "2026-03-10",
+  "lines": [ { "invoice_id": "…", "amount": "5350", "wht_type_id": "…" }, { "invoice_id": "…", "amount": "2675" } ],
+  "methods": [ { "cash_account_id": "<เงินสด>", "amount": "2000" }, { "cash_account_id": "<ธนาคาร>", "amount": "5875", "reference": "CHQ-001" } ] }
+```
+
+- ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม

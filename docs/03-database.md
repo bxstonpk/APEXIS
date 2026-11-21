@@ -57,6 +57,7 @@ organization_companies                      ← tenant ของทั้งร�
 | `organization_project_sites` | id, company_id, code, name, branch_id, cost_center_id, address_*, start_date, end_date, status, deleted_at | partial UNIQUE code; FK branch / cost center; CHECK วันที่, CHECK status `planned/active/closed` |
 | `organization_fiscal_years` | id, company_id, year, start_date, end_date | UNIQUE `(company_id, year)`; CHECK `end_date > start_date`; **ไม่มี soft delete** |
 | `organization_fiscal_periods` | id, fiscal_year_id, period_no, start_date, end_date, status | UNIQUE `(fiscal_year_id, period_no)`; CHECK period_no 1–12, วันที่, status `open/closed`; index `(start_date, end_date)` |
+| `organization_document_numberings` | company_id, doc_type, prefix, template | PK `(company_id, doc_type)` — ไม่มีแถว = ค่าเริ่มต้นของชนิดเอกสาร |
 
 - ทุกตาราง (ยกเว้น `organization_companies`, `organization_fiscal_periods`) มี FK `company_id → organization_companies` (RESTRICT)
 - `address_*` = `address_line, address_sub_district, address_district, address_province, address_postal_code, address_country` (ค่าเริ่มต้น `TH`)
@@ -73,10 +74,10 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | ตาราง | คอลัมน์หลัก | Constraint / Index |
 |---|---|---|
 | `ledger_accounts` | id, company_id, code, name, name_en, type, parent_id, postable, status, deleted_at | partial UNIQUE `(company_id, code)`; FK parent (self) RESTRICT; CHECK type 5 หมวด, CHECK status |
-| `ledger_journals` | id, company_id, code, name, status, deleted_at | partial UNIQUE `(company_id, code)`; CHECK status |
+| `ledger_journals` | id, company_id, code, name, number_template, status, deleted_at | partial UNIQUE `(company_id, code)`; CHECK status |
 | `ledger_journal_entries` | id, company_id, journal_id, entry_no, entry_date, fiscal_period_id, description, reference, status, total_debit, total_credit, reversal_of_id, reversed_by_id, posted_at, posted_by, created_by | UNIQUE `(company_id, entry_no) WHERE entry_no IS NOT NULL`; index `(company_id, entry_date)`; FK journal / reversal (self) RESTRICT; CHECK status; **CHECK ไม่ใช่ draft ⇒ มี entry_no / งวด / ผู้ผ่าน**; **CHECK ไม่ใช่ draft ⇒ total_debit = total_credit > 0** |
 | `ledger_journal_lines` | entry_id, line_no, account_id, description, debit, credit, branch_id, department_id, cost_center_id, project_site_id | PK `(entry_id, line_no)`; FK entry CASCADE, FK account RESTRICT; index account_id; **CHECK debit ≥ 0, credit ≥ 0 และมีด้านเดียวที่ > 0** |
-| `ledger_journal_sequences` | journal_id, fiscal_year, company_id, last_no | PK `(journal_id, fiscal_year)`; FK journal |
+| `ledger_number_sequences` | journal_id, period_key, company_id, last_no | PK `(journal_id, period_key)`; FK journal (แทน `ledger_journal_sequences` — ย้ายข้อมูลเป็นคีย์ `F<ปีบัญชี>` ตอน migrate) |
 
 - จำนวนเงินเป็น `NUMERIC(24,6)` — ทศนิยมที่ยอมรับกำหนดต่อบริษัท (`amount_decimals`)
 - `company_id`, `fiscal_period_id` และมิติวิเคราะห์ไม่มี FK ข้าม module — ตรวจผ่าน organization ตอนบันทึก / ผ่านรายการ
@@ -97,7 +98,7 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `inventory_layers` | id, company_id, item_id, warehouse_id, layer_date, document_id, line_no, quantity, value, remaining_quantity, remaining_value | **partial index `(company_id, item_id, warehouse_id, layer_date, id) WHERE remaining_quantity > 0`**; **CHECK 0 ≤ remaining ≤ quantity** |
 | `inventory_movements` | id, company_id, item_id, warehouse_id, movement_date, document_id, line_no, quantity (±), value (±) | index `(company_id, item_id, warehouse_id, movement_date)`; CHECK quantity ≠ 0 |
 | `inventory_allocations` | movement_id, layer_id, quantity, value | PK คู่; FK RESTRICT ทั้งสองฝั่ง |
-| `inventory_sequences` | company_id, doc_type, fiscal_year, last_no | PK `(company_id, doc_type, fiscal_year)` |
+| `inventory_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` (แทน `inventory_sequences`) |
 | `inventory_settings` | company_id, default_purchase_account_id, default_inventory_account_id, cogs_account_id, journal_id | PK company_id — แถวนี้ใช้ lock การเปลี่ยนระบบบัญชี (FOR UPDATE) เทียบกับการลงบัญชีซื้อ (FOR SHARE) |
 | `inventory_accounting_systems` | company_id, from_year, system | PK `(company_id, from_year)`; CHECK system IN (perpetual, periodic) |
 | `inventory_period_closings` | id, company_id, fiscal_period_id, fiscal_year, period_end, entry_id, entry_no, adjustment, status, created_by, cancelled_at/by | **partial UNIQUE `(company_id, fiscal_period_id) WHERE status = 'posted'`** (งวดละครั้ง); index `(company_id, period_end)` |
@@ -113,12 +114,22 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | ตาราง | คอลัมน์หลัก | Constraint / Index |
 |---|---|---|
 | `purchasing_settings` | company_id, vat_rate, journal_id, grir_account_id, ap_account_id, input_vat_account_id, price_variance_account_id | PK company_id; CHECK vat_rate 0–100 |
-| `purchasing_suppliers` | id, company_id, code, name, tax_id, branch_no, address, payment_term_days, vat_registered, status, deleted_at | partial UNIQUE code; CHECK term 0–365 |
+| `purchasing_suppliers` | id, company_id, code, name, tax_id, branch_no, address, payment_term_days, vat_registered, tax_type, status, deleted_at | partial UNIQUE code; CHECK term 0–365; CHECK tax_type IN (individual, juristic) |
 | `purchasing_orders` | id, company_id, order_no, fiscal_year, supplier_id, order_date, delivery_date, **vat_registered, vat_rate, price_includes_vat, payment_term_days** (เงื่อนไขที่เก็บตอนสร้าง), total_net/vat/gross, status, approved/closed/cancelled by/at | UNIQUE `(company_id, order_no) WHERE order_no IS NOT NULL`; FK supplier RESTRICT; **CHECK ผู้ขายไม่จด VAT ⇒ อัตรา 0 และราคาไม่รวม VAT**; CHECK อนุมัติแล้วต้องมีเลขที่ |
 | `purchasing_order_lines` | order_id, line_no, item_id, quantity, unit_price, net, vat, gross, received_qty, invoiced_qty, received_value, cleared_value | **CHECK 0 ≤ received ≤ quantity, 0 ≤ invoiced ≤ received** |
 | `purchasing_receipts` (+ `_lines`) | id, document_no, fiscal_year, fiscal_period_id, order_id, supplier_id, receipt_date, warehouse_id, system, stock_document_id/no, total_value, entry_id/no, status; บรรทัด: order_line_no, item_id, stock, quantity, unit_cost, value, account_id | UNIQUE `(company_id, document_no)`; FK order / supplier RESTRICT |
-| `purchasing_invoices` (+ `_lines`) | id, document_no, supplier_invoice_no, invoice_date, posting_date, due_date, vat_rate, price_includes_vat, total_net/vat/gross, entry_id/no, status; บรรทัด: quantity, unit_price, net, vat, gross, cleared, variance_account_id | UNIQUE `(company_id, document_no)`; **partial UNIQUE `(company_id, supplier_id, supplier_invoice_no) WHERE status = 'posted'`**; CHECK gross = net + vat |
-| `purchasing_sequences` | company_id, prefix (PO / RC / PI), fiscal_year, last_no | PK `(company_id, prefix, fiscal_year)` |
+| `purchasing_invoices` (+ `_lines`) | id, document_no, supplier_invoice_no, invoice_date, posting_date, due_date, vat_rate, price_includes_vat, total_net/vat/gross, **paid_amount**, entry_id/no, status; บรรทัด: quantity, unit_price, net, vat, gross, cleared, variance_account_id | UNIQUE `(company_id, document_no)`; **partial UNIQUE `(company_id, supplier_id, supplier_invoice_no) WHERE status = 'posted'`**; CHECK gross = net + vat; **CHECK 0 ≤ paid_amount ≤ total_gross** |
+| `purchasing_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` (แทน `purchasing_sequences`) |
+| `purchasing_wht_types` | id, company_id, code, name, rate, status, deleted_at | partial UNIQUE code; CHECK 0 < rate ≤ 100 |
+| `purchasing_payments` | id, document_no, fiscal_year, fiscal_period_id, supplier_id, tax_type (ณ วันจ่าย), payment_date, total_amount, total_wht, total_paid, entry_id/no, status | UNIQUE `(company_id, document_no)`; **CHECK total_paid = total_amount - total_wht**; index `(company_id, payment_date)` |
+| `purchasing_payment_lines` | payment_id, line_no, invoice_id, amount, wht_type_id, wht_rate, wht_base, wht | FK invoice / wht type RESTRICT; index invoice_id; CHECK 0 ≤ wht ≤ amount |
+| `purchasing_payment_methods` | payment_id, line_no, cash_account_id (cashbank), gl_account_id (ณ วันจ่าย), amount, reference | CHECK amount > 0 |
+
+## 3.3.4 ตาราง — cashbank
+
+| ตาราง | คอลัมน์หลัก | Constraint / Index |
+|---|---|---|
+| `cashbank_accounts` | id, company_id, code, name, type, bank_name, bank_branch, account_no, gl_account_id, status, deleted_at | partial UNIQUE code; CHECK type IN (cash, bank); **CHECK bank ต้องมี bank_name + account_no** |
 
 - สินค้า / คลัง / บัญชี / งวด / เอกสารสต็อก / รายการบัญชี เก็บเป็น id ของ module เจ้าของ (ไม่มี FK ข้าม module)
 

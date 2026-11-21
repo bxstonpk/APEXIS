@@ -183,9 +183,10 @@ module ที่ให้บริการ module อื่นมี public API
 
 | ผู้ให้บริการ | public API | ผู้ใช้ |
 |---|---|---|
-| organization | `CompanySettings`, `FiscalPeriodAt`, `FiscalPeriodRange`, `MissingDimensions` | ทุก module |
+| organization | `CompanySettings`, `FiscalPeriodAt`, `FiscalPeriodRange`, `MissingDimensions`, `RegisterDocumentTypes`, `DocumentFormat` | ทุก module |
 | ledger | `PostEntry`, `ReverseEntry`, `InvalidPostingAccounts`, `JournalUsable`, `AccountBalances` | inventory, purchasing |
 | inventory | `PurchaseItems`, `PurchaseContext` (ระบบบัญชีของปี + บัญชีของสินค้า, lock ค่าตั้ง FOR SHARE), `PostReceipt`, `CancelDocument` | purchasing |
+| cashbank | `CashAccounts` (ทะเบียน + บัญชีแยกประเภทที่ผูกไว้) | purchasing |
 
 - ไม่ตรวจสิทธิ์ของผู้ให้บริการ (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎธุรกิจครบ และเข้าร่วม transaction ใน ctx ของผู้เรียก
 - error กฎธุรกิจถูกห่อเป็น `integration.ErrRejected` (ข้อความเดิม) — ผู้เรียกแปลงเป็น 422 พร้อมรายละเอียด
@@ -211,13 +212,38 @@ POST /goods-receipts
 
 ใบแจ้งหนี้ทำแบบเดียวกัน (ไม่มีขั้น inventory): Dr GR/IR ± ผลต่างราคา + Dr ภาษีซื้อ / Cr เจ้าหนี้
 
+ใบจ่ายชำระ:
+
+```text
+POST /supplier-payments
+  BEGIN
+    SELECT purchasing_invoices WHERE id IN (...) ORDER BY id FOR UPDATE   ← กันจ่ายเกินเมื่อจ่ายพร้อมกัน
+    ประเภทภาษีหัก ณ ที่จ่าย (IN) / cashbank.CashAccounts (IN)           ← query ละ 1 ครั้ง
+    organization.FiscalPeriodAt / DocumentFormat + ลำดับเลข             ← PV ตามรูปแบบที่ตั้ง
+    ledger.PostEntry  Dr เจ้าหนี้  Cr เงินสด / ธนาคาร  Cr ภาษีหัก ณ ที่จ่ายค้างจ่าย
+    INSERT purchasing_payments (+ lines, methods) ; UPDATE purchasing_invoices.paid_amount FROM (VALUES ...)
+  COMMIT
+```
+
+### เลขที่เอกสาร (`platform/numbering`)
+
+- `platform/numbering` คือ engine แบบ pure: ตรวจรูปแบบ, สร้างเลขที่ (`Render`) และคีย์ช่วงนับ (`PeriodKey` เช่น `F2026`, `Y2026M03`)
+- organization เก็บรูปแบบต่อบริษัท × ชนิดเอกสาร (`organization_document_numberings`) และทะเบียนชนิดเอกสาร — module ลงทะเบียนตอน `New` (`inventory.*`, `purchasing.*`)
+- module เจ้าของเอกสารออกเลขเอง ในตาราง `<module>_number_sequences` ต่อ (ชนิดเอกสาร, คีย์ช่วงนับ) ด้วย `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` (lock แถวลำดับจน commit = ไม่ซ้ำ / ไม่ขาดตอน)
+- ledger ใช้ engine เดียวกันแต่รูปแบบอยู่ที่สมุดรายวัน (`number_template`, prefix = รหัสสมุด)
+- เปลี่ยนรูปแบบจนเลขชนกับเลขเดิม → UNIQUE ของเลขที่ปฏิเสธ (409 `document number is already used`)
+
+### รายการบัญชี: 1 ผังบัญชี = 1 บรรทัด
+
+ทุกเอกสารที่ลงบัญชี (ใบรับสินค้า, ใบแจ้งหนี้, ใบจ่าย, ปรับปรุงสิ้นงวด) สร้างบรรทัดผ่านตัวรวมยอด (`services.Journal` / `PlanClosing`) ที่รวมยอดสุทธิต่อบัญชีก่อนส่งให้ ledger — บัญชีที่ยอดสุทธิเป็นศูนย์ไม่ถูกส่ง
+
 ## 2.6.1 รายงานรวม (`platform/reports`)
 
 - endpoint เดียวของทั้งระบบ: `GET /api/v1/companies/{companyID}/reports?book=...`
 - แต่ละ module ลงทะเบียน book ของตัวเอง (`RegisterReports`):
   - ledger: `trial-balance`, `balance-sheet`, `income-statement`, `general-ledger`
   - inventory: `stock-on-hand`, `stock-card`
-  - purchasing: `outstanding-purchase-orders`, `ap-aging`
+  - purchasing: `outstanding-purchase-orders`, `ap-aging`, `withholding-tax`
 - registry ส่งต่อตาม `book`; book ไม่รู้จัก = 400 พร้อมรายชื่อ book ทั้งหมด; ชื่อซ้ำข้าม module = panic ตอนเริ่มโปรแกรม
 - `main.go` mount registry พร้อม `Authenticate`; แต่ละ handler ตรวจสิทธิ์ของ module ตัวเอง
 
