@@ -12,6 +12,7 @@ import (
 	"apexis/backend/internal/modules/inventory/domain/services"
 	vo "apexis/backend/internal/modules/inventory/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
+	"apexis/backend/internal/platform/numbering"
 )
 
 // DocumentUseCases จัดการเอกสารเคลื่อนไหวสต็อก: draft -> posted -> cancelled
@@ -189,12 +190,17 @@ func (uc *DocumentUseCases) post(ctx context.Context, a dto.Actor, s ports.Compa
 	if err := uc.stock.ApplyPosting(ctx, a.CompanyID, plan); err != nil {
 		return err
 	}
-	n, err := uc.docs.NextNumber(ctx, a.CompanyID, data.Type, period.FiscalYear)
+	format, err := uc.org.DocumentFormat(ctx, a.CompanyID, data.Type.NumberingKey())
+	if err != nil {
+		return err
+	}
+	nc := numbering.Context{Date: data.Date, FiscalYear: period.FiscalYear}
+	n, err := uc.docs.NextNumber(ctx, a.CompanyID, data.Type, format.PeriodKey(nc))
 	if err != nil {
 		return err
 	}
 	err = d.Post(entities.Posting{
-		DocumentNo: fmt.Sprintf("%s%d-%06d", data.Type.Prefix(), period.FiscalYear, n),
+		DocumentNo: format.Render(nc, n),
 		PeriodID:   period.ID, FiscalYear: period.FiscalYear, By: a.UserID, At: uc.now(),
 	}, plan.LineValues)
 	if err != nil {

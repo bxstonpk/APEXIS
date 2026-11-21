@@ -81,7 +81,7 @@ func (r *DocumentRepository) UpdateStatus(ctx context.Context, d *entities.Docum
 		})
 	if res.Error != nil {
 		if database.IsUniqueViolation(res.Error) {
-			return domain.ErrCodeExists
+			return domain.ErrDocumentNoUsed
 		}
 		return res.Error
 	}
@@ -132,16 +132,16 @@ func (r *DocumentRepository) FindForUpdate(ctx context.Context, companyID vo.Com
 }
 
 // NextNumber — statement เดียว: INSERT ... ON CONFLICT DO UPDATE ... RETURNING (lock แถวลำดับจน commit)
-func (r *DocumentRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, t vo.DocumentType, fiscalYear int) (int64, error) {
+func (r *DocumentRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, t vo.DocumentType, periodKey string) (int64, error) {
 	tx, err := database.TxConn(ctx)
 	if err != nil {
 		return 0, err
 	}
 	var n int64
 	err = tx.Raw(`
-		INSERT INTO inventory_sequences (company_id, doc_type, fiscal_year, last_no) VALUES (?, ?, ?, 1)
-		ON CONFLICT (company_id, doc_type, fiscal_year) DO UPDATE SET last_no = inventory_sequences.last_no + 1
-		RETURNING last_no`, uuidOf(companyID), string(t), fiscalYear).Scan(&n).Error
+		INSERT INTO inventory_number_sequences (company_id, doc_type, period_key, last_no) VALUES (?, ?, ?, 1)
+		ON CONFLICT (company_id, doc_type, period_key) DO UPDATE SET last_no = inventory_number_sequences.last_no + 1
+		RETURNING last_no`, uuidOf(companyID), string(t), periodKey).Scan(&n).Error
 	return n, err
 }
 

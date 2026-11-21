@@ -57,8 +57,9 @@ type DocumentRepository interface {
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.DocumentID) (*entities.Document, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.DocumentID) (dto.Document, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.DocumentSummary], error)
-	// NextNumber: เลขลำดับถัดไปของชนิดเอกสาร + ปีบัญชี — lock แถวลำดับจน commit (ไม่ซ้ำ / ไม่ขาดตอน)
-	NextNumber(ctx context.Context, companyID vo.CompanyID, t vo.DocumentType, fiscalYear int) (int64, error)
+	// NextNumber: เลขลำดับถัดไปของชนิดเอกสาร + คีย์ช่วงนับ (numbering.Format.PeriodKey)
+	// lock แถวลำดับจน commit (ไม่ซ้ำ / ไม่ขาดตอน)
+	NextNumber(ctx context.Context, companyID vo.CompanyID, t vo.DocumentType, periodKey string) (int64, error)
 }
 
 // StockRepository คือชั้นต้นทุน FIFO และการเคลื่อนไหวสต็อก

@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
 	"apexis/backend/internal/modules/purchasing/application/ports"
@@ -106,9 +107,17 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 			}
 			lines[i] = line
 		}
-		no, err := uc.number(ctx, in.CompanyID, "PI", period.FiscalYear)
+		no, err := uc.number(ctx, in.CompanyID, vo.DocInvoice, in.Data.Date, period.FiscalYear)
 		if err != nil {
 			return err
+		}
+		// ตรวจหลังออกเลข: แถวลำดับถูก lock แล้ว ใบแจ้งหนี้ช่วงเดียวกันจึงต่อคิวกัน (unique ที่ DB กันกรณีที่เหลือ)
+		used, err := uc.invoices.SupplierInvoiceNoUsed(ctx, in.CompanyID, o.Data().SupplierID, strings.TrimSpace(in.Data.SupplierInvoiceNo))
+		if err != nil {
+			return err
+		}
+		if used {
+			return domain.ErrInvoiceNoExists
 		}
 		inv, err := entities.NewInvoice(entities.InvoiceState{
 			CompanyID: in.CompanyID, OrderID: o.ID(), SupplierID: o.Data().SupplierID,

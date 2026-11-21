@@ -28,9 +28,10 @@ type SupplierRepository interface {
 	List(ctx context.Context, companyID vo.CompanyID, f dto.SupplierFilter) (listing.Result[dto.Supplier], error)
 }
 
-// Sequence: เลขที่เอกสารถัดไปต่อ prefix + ปีบัญชี — lock แถวลำดับจน commit (ไม่ซ้ำ / ไม่ขาดตอน)
+// Sequence: เลขลำดับถัดไปต่อชนิดเอกสาร + คีย์ช่วงนับ (numbering.Format.PeriodKey)
+// lock แถวลำดับจน commit (ไม่ซ้ำ / ไม่ขาดตอน)
 type Sequence interface {
-	NextNumber(ctx context.Context, companyID vo.CompanyID, prefix string, fiscalYear int) (int64, error)
+	NextNumber(ctx context.Context, companyID vo.CompanyID, docType vo.DocType, periodKey string) (int64, error)
 }
 
 type OrderRepository interface {
@@ -54,10 +55,15 @@ type ReceiptRepository interface {
 }
 
 type InvoiceRepository interface {
-	// Create คืน domain.ErrInvoiceNoExists เมื่อเลขที่ใบแจ้งหนี้ของผู้ขายซ้ำ (ที่ยังไม่ยกเลิก)
+	// SupplierInvoiceNoUsed: เลขที่ใบแจ้งหนี้ของผู้ขายนี้ถูกบันทึกแล้ว (ยังไม่ยกเลิก)
+	SupplierInvoiceNoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error)
 	Create(ctx context.Context, i *entities.Invoice) error
 	UpdateStatus(ctx context.Context, i *entities.Invoice) error
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (*entities.Invoice, error)
+	// LockForPayment โหลดหัวใบแจ้งหนี้ (ไม่มีบรรทัด) พร้อม lock FOR UPDATE เรียงตาม id — query เดียว
+	LockForPayment(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
+	// SavePaid เขียนยอดจ่ายแล้วของหลายใบ — statement เดียว
+	SavePaid(ctx context.Context, invoices []*entities.Invoice) error
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error)
 }
@@ -66,4 +72,23 @@ type ReportRepository interface {
 	Outstanding(ctx context.Context, companyID vo.CompanyID, f dto.OutstandingFilter) (listing.Result[dto.OutstandingRow], error)
 	// Aging: ใบแจ้งหนี้ที่ลงบัญชีถึงวันที่ asOf (ยังไม่ยกเลิก) ตามอายุนับจากวันครบกำหนด — แบ่งหน้าใน DB
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
+	// Withholding: บรรทัดใบจ่าย (ยังไม่ยกเลิก) ที่หักภาษี ในช่วงวันที่จ่าย + ยอดรวม — แบ่งหน้าใน DB
+	Withholding(ctx context.Context, companyID vo.CompanyID, f dto.WithholdingFilter) (listing.Result[dto.WithholdingRow], dto.WithholdingTotals, error)
+}
+
+type WhtTypeRepository interface {
+	Create(ctx context.Context, w *entities.WhtType) error // domain.ErrCodeExists เมื่อรหัสซ้ำ
+	Update(ctx context.Context, w *entities.WhtType) error
+	Delete(ctx context.Context, companyID vo.CompanyID, id vo.WhtTypeID) error // soft delete
+	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.WhtTypeID) (*entities.WhtType, error)
+	FindByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.WhtTypeID) ([]*entities.WhtType, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.WhtTypeFilter) (listing.Result[dto.WhtType], error)
+}
+
+type PaymentRepository interface {
+	Create(ctx context.Context, p *entities.Payment) error
+	UpdateStatus(ctx context.Context, p *entities.Payment) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.PaymentID) (*entities.Payment, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.PaymentID) (dto.Payment, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.PaymentSummary], error)
 }

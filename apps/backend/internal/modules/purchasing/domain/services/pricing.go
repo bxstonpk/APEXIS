@@ -109,3 +109,20 @@ func (j *Journal) Lines() []JournalLine {
 	}
 	return out
 }
+
+// ---------- ภาษีหัก ณ ที่จ่าย ----------
+
+// Withholding: ฐานภาษี = ยอดก่อน VAT ของใบแจ้งหนี้ตามสัดส่วนที่จ่าย (จ่ายครบ = ยอดก่อน VAT ทั้งหมด)
+// ภาษี = ฐาน × อัตรา / 100 — ปัดตามทศนิยมของบริษัททั้งสองค่า
+func Withholding(paid, invoiceNet, invoiceGross, rate vo.Money, amountDecimals int) (base, tax vo.Money) {
+	d := int32(amountDecimals)
+	switch {
+	case invoiceGross.IsZero():
+		base = decimal.Zero
+	case paid.Equal(invoiceGross):
+		base = invoiceNet
+	default:
+		base = invoiceNet.Mul(paid).Div(invoiceGross).Round(d)
+	}
+	return base, base.Mul(rate).Div(hundred).Round(d)
+}

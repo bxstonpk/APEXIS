@@ -180,5 +180,19 @@ func AutoMigrate(db *gorm.DB) error {
 		&ProjectSiteModel{},
 		&FiscalYearModel{},
 		&FiscalPeriodModel{},
+		&NumberingModel{},
 	)
 }
+
+// NumberingModel: รูปแบบเลขที่เอกสารที่บริษัทตั้งเอง (ไม่มีแถว = ใช้ค่าเริ่มต้นของชนิดเอกสาร)
+// doc_type คือ key ที่ module ลงทะเบียน เช่น "purchasing.payment" — ลำดับเลขเก็บที่ module เจ้าของเอกสาร
+type NumberingModel struct {
+	CompanyID uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	Company   *CompanyModel `gorm:"foreignKey:CompanyID;constraint:OnDelete:RESTRICT"`
+	DocType   string        `gorm:"size:50;primaryKey"`
+	Prefix    string        `gorm:"size:10;not null;default:''"`
+	Template  string        `gorm:"size:60;not null"`
+	UpdatedAt time.Time     `gorm:"not null"`
+}
+
+func (NumberingModel) TableName() string { return "organization_document_numberings" }

@@ -158,7 +158,7 @@ func (uc *OrderUseCases) approve(ctx context.Context, a dto.Actor, o *entities.O
 	if err != nil {
 		return err
 	}
-	no, err := uc.number(ctx, a.CompanyID, "PO", p.FiscalYear)
+	no, err := uc.number(ctx, a.CompanyID, vo.DocOrder, o.Data().Date, p.FiscalYear)
 	if err != nil {
 		return err
 	}

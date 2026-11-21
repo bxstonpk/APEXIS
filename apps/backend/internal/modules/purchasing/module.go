@@ -7,12 +7,14 @@
 // การลงบัญชี (ระบบบัญชีตามปีบัญชีที่ inventory กำหนด):
 //   - รับสินค้า: Dr สินค้าคงเหลือ (perpetual + stock) หรือบัญชีซื้อ (อื่นๆ) / Cr GR/IR
 //   - แจ้งหนี้: Dr GR/IR ± ผลต่างราคา + Dr ภาษีซื้อ / Cr เจ้าหนี้
+//   - จ่ายชำระ: Dr เจ้าหนี้ / Cr เงินสด / ธนาคาร (ตามทะเบียน) + Cr ภาษีหัก ณ ที่จ่ายค้างจ่าย (ภ.ง.ด.3 / 53)
 //
 // พึ่งพา module อื่นผ่าน interface เท่านั้น (ทั้งหมดอยู่ใน transaction เดียวกัน):
 //   - identity: ตรวจ token, user ปัจจุบัน, ตรวจสิทธิ์
 //   - organization: สถานะบริษัท + จำนวนทศนิยม, งวดบัญชี
 //   - inventory: สินค้า + บัญชี, ระบบบัญชี, ใบรับเข้าคลัง (FIFO)
 //   - ledger: ตรวจบัญชี / สมุดรายวัน, ลงรายการ / กลับรายการ
+//   - cashbank: ทะเบียนเงินสด / ธนาคารที่ใช้จ่ายชำระ (บัญชีที่ผูกไว้)
 package purchasing
 
 import (
@@ -23,12 +25,14 @@ import (
 	"gorm.io/gorm"
 
 	"apexis/backend/internal/modules/purchasing/application/usecases"
+	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	gp "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm"
 	"apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/purchasing/infrastructure/services"
 	purchasinghttp "apexis/backend/internal/modules/purchasing/presentation/http"
 	"apexis/backend/internal/modules/purchasing/presentation/http/handlers"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -44,6 +48,7 @@ type (
 	Organization = services.OrganizationAccess
 	Ledger       = services.LedgerAccess
 	Inventory    = services.InventoryAccess
+	CashBank     = services.CashBankAccess
 )
 
 type Module struct {
@@ -52,13 +57,15 @@ type Module struct {
 	handler  *handlers.Handler
 }
 
-func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, inventory Inventory) *Module {
+func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, inventory Inventory, cashbank CashBank) *Module {
+	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
 		Tx:        gp.NewTransactionManager(db),
 		Auth:      services.NewIdentityAuthorizer(identity),
 		Org:       services.NewOrganization(org),
 		Ledger:    services.NewLedger(ledger),
 		Inventory: services.NewInventory(inventory),
+		CashBank:  services.NewCashBank(cashbank),
 		Settings:  gormrepo.NewSettingsRepository(db),
 		Suppliers: gormrepo.NewSupplierRepository(db),
 		Sequence:  gormrepo.NewSequenceRepository(),
@@ -66,6 +73,8 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, invent
 		Receipts:  gormrepo.NewReceiptRepository(db),
 		Invoices:  gormrepo.NewInvoiceRepository(db),
 		Reports:   gormrepo.NewReportRepository(db),
+		WhtTypes:  gormrepo.NewWhtTypeRepository(db),
+		Payments:  gormrepo.NewPaymentRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -77,6 +86,15 @@ func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 // RegisterReports ลงทะเบียน book ของ purchasing กับ GET /reports?book=
 func (m *Module) RegisterReports(reg *reports.Registry) {
 	purchasinghttp.RegisterReports(reg, m.handler)
+}
+
+// DocumentTypes คือชนิดเอกสารของจัดซื้อที่ตั้งรูปแบบเลขที่ได้ (ลงทะเบียนกับ organization ตอน New)
+func DocumentTypes() []integration.DocumentType {
+	out := make([]integration.DocumentType, len(vo.DocTypes))
+	for i, t := range vo.DocTypes {
+		out[i] = integration.DocumentType{Key: string(t), Name: t.Name(), DefaultPrefix: t.Prefix()}
+	}
+	return out
 }
 
 // Migrate สร้างตารางของ purchasing

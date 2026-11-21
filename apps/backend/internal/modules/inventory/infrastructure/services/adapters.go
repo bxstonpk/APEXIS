@@ -12,6 +12,7 @@ import (
 	domain "apexis/backend/internal/modules/inventory/domain/errors"
 	vo "apexis/backend/internal/modules/inventory/domain/value_objects"
 	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/numbering"
 )
 
 // IdentityAccess คือ public API ของ identity ที่ inventory ใช้
@@ -43,6 +44,7 @@ type OrganizationAccess interface {
 	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
+	DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
@@ -129,4 +131,8 @@ func (l *Ledger) Post(ctx context.Context, e ports.LedgerEntry) (vo.EntryID, str
 func (l *Ledger) Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error {
 	_, err := l.ledger.ReverseEntry(ctx, uuid.UUID(companyID), uuid.UUID(userID), uuid.UUID(id), date, description)
 	return err
+}
+
+func (o *Organization) DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType string) (numbering.Format, error) {
+	return o.org.DocumentFormat(ctx, uuid.UUID(companyID), docType)
 }

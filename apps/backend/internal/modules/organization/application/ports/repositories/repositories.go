@@ -10,6 +10,7 @@
 package repositories
 
 import (
+	"apexis/backend/internal/platform/numbering"
 	"context"
 	"time"
 
@@ -95,4 +96,11 @@ type FiscalRepository interface {
 type DimensionRepository interface {
 	// Missing คืนชื่อชนิดมิติที่มี id ไม่พบ เช่น ["branch"] — ว่าง = ครบ
 	Missing(ctx context.Context, companyID vo.CompanyID, d dto.Dimensions) ([]string, error)
+}
+
+// NumberingRepository: รูปแบบเลขที่ที่บริษัทตั้งไว้ (ไม่มีแถว = ใช้ค่าเริ่มต้นของชนิดเอกสาร)
+type NumberingRepository interface {
+	Get(ctx context.Context, companyID vo.CompanyID, docType string) (numbering.Format, bool, error)
+	List(ctx context.Context, companyID vo.CompanyID) (map[string]numbering.Format, error)
+	Save(ctx context.Context, companyID vo.CompanyID, docType string, f numbering.Format) error
 }

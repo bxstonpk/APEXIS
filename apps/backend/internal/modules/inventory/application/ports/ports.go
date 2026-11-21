@@ -7,6 +7,7 @@ import (
 
 	"apexis/backend/internal/modules/inventory/domain/services"
 	vo "apexis/backend/internal/modules/inventory/domain/value_objects"
+	"apexis/backend/internal/platform/numbering"
 )
 
 // TransactionManager: repository ทุกตัว (รวมถึง module อื่นที่เรียกผ่าน ctx) ใช้ transaction เดียวกัน
@@ -40,6 +41,8 @@ type Organization interface {
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)
 	// BranchExists: สาขามีอยู่ (ยังไม่ถูกลบ) ในบริษัท
 	BranchExists(ctx context.Context, companyID vo.CompanyID, id vo.BranchID) (bool, error)
+	// DocumentFormat: รูปแบบเลขที่ที่บริษัทตั้งสำหรับชนิดเอกสาร (key จาก vo.DocumentType.NumberingKey)
+	DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType string) (numbering.Format, error)
 }
 
 // Ledger คือสิ่งที่ inventory ต้องการจาก ledger module (เข้าร่วม transaction ใน ctx)

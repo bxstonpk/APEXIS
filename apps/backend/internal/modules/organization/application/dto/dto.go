@@ -9,6 +9,17 @@ import (
 	"apexis/backend/internal/platform/listing"
 )
 
+// DocumentNumbering คือรูปแบบเลขที่ของชนิดเอกสาร — Custom = บริษัทตั้งเอง (ไม่ใช่ค่าเริ่มต้น)
+type DocumentNumbering struct {
+	DocType       string
+	Name          string
+	DefaultPrefix string
+	Prefix        string
+	Template      string
+	Example       string // ตัวอย่างเลขที่ของวันนี้ (ลำดับ 1)
+	Custom        bool
+}
+
 // ---------- Input ----------
 
 // Actor คือผู้เรียกและบริษัทที่กำลังทำงาน — ทุก use case ของ organization อยู่ภายใต้บริษัทเดียว

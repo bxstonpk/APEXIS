@@ -59,12 +59,15 @@ func AccountToEntity(m models.AccountModel) *entities.Account {
 
 func JournalToModel(j *entities.Journal) models.JournalModel {
 	d := j.Data()
-	return models.JournalModel{ID: uuid.UUID(j.ID()), CompanyID: uuid.UUID(j.CompanyID()), Code: d.Code, Name: d.Name, Status: string(d.Status)}
+	return models.JournalModel{
+		ID: uuid.UUID(j.ID()), CompanyID: uuid.UUID(j.CompanyID()), Code: d.Code, Name: d.Name,
+		NumberTemplate: d.NumberTemplate, Status: string(d.Status),
+	}
 }
 
 func JournalToEntity(m models.JournalModel) *entities.Journal {
 	return entities.RehydrateJournal(vo.JournalID(m.ID), vo.CompanyID(m.CompanyID), entities.JournalData{
-		Code: m.Code, Name: m.Name, Status: vo.Status(m.Status),
+		Code: m.Code, Name: m.Name, NumberTemplate: m.NumberTemplate, Status: vo.Status(m.Status),
 	})
 }
 

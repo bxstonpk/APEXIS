@@ -144,10 +144,11 @@ type Account struct {
 }
 
 type Journal struct {
-	ID     string
-	Code   string
-	Name   string
-	Status string
+	ID             string
+	Code           string
+	Name           string
+	NumberTemplate string
+	Status         string
 }
 
 type EntrySummary struct {

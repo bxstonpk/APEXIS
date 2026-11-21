@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"apexis/backend/internal/modules/cashbank"
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
@@ -91,14 +92,15 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
+		"purchasing_payment_methods", "purchasing_payment_lines", "purchasing_payments", "purchasing_wht_types", "cashbank_accounts",
 		"purchasing_invoice_lines", "purchasing_invoices", "purchasing_receipt_lines", "purchasing_receipts",
-		"purchasing_order_lines", "purchasing_orders", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences",
+		"purchasing_order_lines", "purchasing_orders", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
-		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_document_lines",
+		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_number_sequences", "inventory_document_lines",
 		"inventory_documents", "inventory_items", "inventory_warehouses", "inventory_item_categories", "inventory_uoms",
-		"ledger_journal_lines", "ledger_journal_entries", "ledger_journal_sequences", "ledger_journals", "ledger_accounts",
+		"ledger_journal_lines", "ledger_journal_entries", "ledger_journal_sequences", "ledger_number_sequences", "ledger_journals", "ledger_accounts",
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
-		"organization_departments", "organization_business_units", "organization_branches", "organization_companies",
+		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings", "organization_companies",
 		"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_users",
 	} {
 		if err := db.Exec("DROP TABLE IF EXISTS " + tbl + " CASCADE").Error; err != nil {
@@ -110,6 +112,7 @@ func setup(t *testing.T) api {
 		func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) },
 		func() error { return inventory.Migrate(db) },
+		func() error { return cashbank.Migrate(db) },
 		func() error { return purchasing.Migrate(db) },
 	} {
 		if err := migrate(); err != nil {
@@ -128,7 +131,9 @@ func setup(t *testing.T) api {
 	led.RegisterRoutes(mux)
 	inv := inventory.New(db, idm, org, led)
 	inv.RegisterRoutes(mux)
-	pur := purchasing.New(db, idm, org, led, inv)
+	cb := cashbank.New(db, idm, org, led)
+	cb.RegisterRoutes(mux)
+	pur := purchasing.New(db, idm, org, led, inv, cb)
 	pur.RegisterRoutes(mux)
 	reg := reports.NewRegistry()
 	led.RegisterReports(reg)
@@ -179,10 +184,10 @@ func TestPurchasingFlow(t *testing.T) {
 	// ---------- ผู้ขาย ----------
 	supplier := func(code string, vat bool) string {
 		t.Helper()
-		return a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": code, "name": code, "tax_id": "0105551234567", "payment_term_days": 30, "vat_registered": vat}), 201, "supplier "+code).id()
+		return a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": code, "name": code, "tax_id": "0105551234567", "payment_term_days": 30, "vat_registered": vat, "tax_type": "juristic"}), 201, "supplier "+code).id()
 	}
 	vatSup, plainSup := supplier("V", true), supplier("N", false)
-	a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "X", "name": "x", "tax_id": "123", "vat_registered": true}), 400, "bad tax id")
+	a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "X", "name": "x", "tax_id": "123", "vat_registered": true, "tax_type": "juristic"}), 400, "bad tax id")
 	a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "X", "name": "x"}), 400, "vat_registered missing")
 
 	// ---------- ใบสั่งซื้อ: VAT ตามผู้ขาย ณ ตอนสร้าง ----------
@@ -215,7 +220,7 @@ func TestPurchasingFlow(t *testing.T) {
 	a.expect(a.do("PUT", base+"/purchase-orders/"+poID, owner, order(vatSup, "2026-02-01", false, line(itemA, "1", "1"))), 422, "edit approved PO")
 
 	// ผู้ขายยกเลิกจด VAT -> ใบสั่งซื้อเดิมยังคิด VAT 7% (เอกสารที่ตามมาใช้ค่าในใบสั่งซื้อ)
-	a.expect(a.do("PUT", base+"/suppliers/"+vatSup, owner, obj{"code": "V", "name": "V", "tax_id": "0105551234567", "payment_term_days": 30, "vat_registered": false, "status": "active"}), 200, "supplier deregisters VAT")
+	a.expect(a.do("PUT", base+"/suppliers/"+vatSup, owner, obj{"code": "V", "name": "V", "tax_id": "0105551234567", "payment_term_days": 30, "vat_registered": false, "tax_type": "juristic", "status": "active"}), 200, "supplier deregisters VAT")
 
 	// ---------- รับสินค้า (perpetual): Dr สินค้าคงเหลือ 400 + ซื้อ 500 / Cr GR/IR 900 ----------
 	a.expect(a.do("POST", base+"/goods-receipts", owner, receipt("2026-02-10", qty(1, "11"))), 422, "over receipt")

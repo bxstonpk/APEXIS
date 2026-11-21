@@ -46,7 +46,7 @@ type JournalRepository interface {
 	List(ctx context.Context, companyID vo.CompanyID, f dto.JournalFilter) (listing.Result[dto.Journal], error)
 	// NextNumber คืนเลขลำดับถัดไปของสมุด + ปีบัญชี (เริ่ม 1) — ต้องอยู่ใน transaction
 	// แถวลำดับถูก lock จน commit จึงไม่มีเลขซ้ำ / ขาดตอนเมื่อผ่านรายการพร้อมกัน
-	NextNumber(ctx context.Context, companyID vo.CompanyID, journalID vo.JournalID, fiscalYear int) (int64, error)
+	NextNumber(ctx context.Context, companyID vo.CompanyID, journalID vo.JournalID, periodKey string) (int64, error)
 }
 
 type EntryRepository interface {

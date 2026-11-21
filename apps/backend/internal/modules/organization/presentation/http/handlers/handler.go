@@ -52,6 +52,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidDateRange, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalYear, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalStart, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidNumbering, Status: http.StatusBadRequest},
 	// 401 / 403
 	{Err: errUnauthenticated, Status: http.StatusUnauthorized},
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
@@ -64,6 +65,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrProjectSiteNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrFiscalYearNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrFiscalPeriodNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrDocumentTypeNotFound, Status: http.StatusNotFound},
 	// 409
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
 	{Err: domain.ErrBranchExists, Status: http.StatusConflict},
@@ -78,7 +80,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrProjectEndDateRequired, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodCloseOrder, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodReopenOrder, Status: http.StatusUnprocessableEntity},
-}, requests.ErrValidation)
+}, requests.ErrValidation, domain.ErrInvalidNumbering)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response (route ใต้ /companies/{companyID})
 // fn คืน body ที่ห่อ envelope แล้ว (one / httpx.ToList) หรือ nil สำหรับ 204

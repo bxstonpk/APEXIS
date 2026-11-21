@@ -12,6 +12,7 @@ import (
 	domain "apexis/backend/internal/modules/purchasing/domain/errors"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/numbering"
 )
 
 func toUUIDs[T ~[16]byte](ids []T) []uuid.UUID {
@@ -52,6 +53,8 @@ func (a *IdentityAuthorizer) Authorize(ctx context.Context, userID vo.UserID, co
 type OrganizationAccess interface {
 	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
+	RegisterDocumentTypes(types ...integration.DocumentType)
+	DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
@@ -74,6 +77,10 @@ func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, dat
 		return ports.Period{}, domain.ErrNoFiscalPeriod
 	}
 	return ports.Period{ID: vo.FiscalPeriodID(id), FiscalYear: year, Open: open}, nil
+}
+
+func (o *Organization) DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType vo.DocType) (numbering.Format, error) {
+	return o.org.DocumentFormat(ctx, uuid.UUID(companyID), string(docType))
 }
 
 // ---------- ledger ----------
@@ -179,4 +186,30 @@ func (a *Inventory) PostReceipt(ctx context.Context, companyID vo.CompanyID, use
 
 func (a *Inventory) CancelDocument(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.StockDocumentID) error {
 	return a.inv.CancelDocument(ctx, uuid.UUID(companyID), uuid.UUID(userID), uuid.UUID(id))
+}
+
+// ---------- cashbank ----------
+
+type CashBankAccess interface {
+	CashAccounts(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.CashAccount, error)
+}
+
+var _ ports.CashBank = (*CashBank)(nil)
+
+type CashBank struct{ cb CashBankAccess }
+
+func NewCashBank(cb CashBankAccess) *CashBank { return &CashBank{cb: cb} }
+
+func (c *CashBank) CashAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.CashAccountID) (map[vo.CashAccountID]ports.CashAccount, error) {
+	found, err := c.cb.CashAccounts(ctx, uuid.UUID(companyID), toUUIDs(ids))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[vo.CashAccountID]ports.CashAccount, len(found))
+	for id, a := range found {
+		out[vo.CashAccountID(id)] = ports.CashAccount{
+			ID: vo.CashAccountID(id), Code: a.Code, Name: a.Name, GLAccountID: vo.AccountID(a.GLAccountID), Active: a.Active,
+		}
+	}
+	return out, nil
 }

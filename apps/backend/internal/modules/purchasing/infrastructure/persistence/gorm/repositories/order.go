@@ -81,6 +81,9 @@ func (r *OrderRepository) SaveProgress(ctx context.Context, o *entities.Order) e
 			"updated_at": time.Now().UTC(),
 		})
 	if res.Error != nil {
+		if database.IsUniqueViolation(res.Error) {
+			return domain.ErrDocumentNoUsed
+		}
 		return res.Error
 	}
 	if res.RowsAffected == 0 {

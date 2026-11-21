@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,6 +111,9 @@ func (r *ReceiptRepository) Create(ctx context.Context, rc *entities.Receipt) er
 	}
 	m := gp.ReceiptToModel(rc)
 	if err := tx.Omit(clause.Associations).Create(&m).Error; err != nil {
+		if database.IsUniqueViolation(err) {
+			return domain.ErrDocumentNoUsed
+		}
 		return err
 	}
 	return tx.Create(&m.Lines).Error
@@ -214,11 +218,53 @@ func (r *InvoiceRepository) Create(ctx context.Context, inv *entities.Invoice) e
 	m := gp.InvoiceToModel(inv)
 	if err := tx.Omit(clause.Associations).Create(&m).Error; err != nil {
 		if database.IsUniqueViolation(err) {
-			return domain.ErrInvoiceNoExists
+			return domain.ErrDocumentNoUsed
 		}
 		return err
 	}
 	return tx.Create(&m.Lines).Error
+}
+
+// LockForPayment — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
+func (r *InvoiceRepository) LockForPayment(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	u := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		u[i] = uuidOf(id)
+	}
+	var ms []models.InvoiceModel
+	err := database.Conn(ctx, r.db).Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("company_id = ? AND id IN ?", uuidOf(companyID), u).Order("id").Find(&ms).Error
+	out := make([]*entities.Invoice, len(ms))
+	for i, m := range ms {
+		out[i] = gp.InvoiceToEntity(m)
+	}
+	return out, err
+}
+
+// SavePaid — statement เดียว: UPDATE ... FROM (VALUES ...)
+func (r *InvoiceRepository) SavePaid(ctx context.Context, invoices []*entities.Invoice) error {
+	if len(invoices) == 0 {
+		return nil
+	}
+	values := make([]string, len(invoices))
+	args := make([]any, 0, 2*len(invoices)+1)
+	for i, inv := range invoices {
+		values[i] = "(?::uuid, ?::numeric)"
+		args = append(args, uuidOf(inv.ID()), inv.State().Paid)
+	}
+	args = append(args, uuidOf(invoices[0].State().CompanyID))
+	return database.Conn(ctx, r.db).Exec(`UPDATE purchasing_invoices AS i SET paid_amount = v.paid, updated_at = now()
+		FROM (VALUES `+strings.Join(values, ", ")+`) AS v(id, paid)
+		WHERE i.id = v.id AND i.company_id = ?`, args...).Error
+}
+
+func (r *InvoiceRepository) SupplierInvoiceNoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error) {
+	return exists(ctx, r.db, []string{`SELECT 1 FROM purchasing_invoices
+		WHERE company_id = ? AND supplier_id = ? AND supplier_invoice_no = ? AND status = 'posted'`},
+		uuidOf(companyID), uuidOf(supplierID), no)
 }
 
 func (r *InvoiceRepository) UpdateStatus(ctx context.Context, inv *entities.Invoice) error {
@@ -251,6 +297,7 @@ type invoiceRow struct {
 	TotalNet          decimal.Decimal
 	TotalVat          decimal.Decimal
 	TotalGross        decimal.Decimal
+	PaidAmount        decimal.Decimal
 	Description       string
 	VatRate           decimal.Decimal
 	PriceIncludesVat  bool
@@ -262,11 +309,12 @@ func (r invoiceRow) summary() dto.InvoiceSummary {
 	return dto.InvoiceSummary{
 		DocumentSummary: r.DocRow.summary(), SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: gp.DateUTC(r.InvoiceDate),
 		DueDate: gp.DateUTC(r.DueDate), Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
+		Paid: r.PaidAmount, Outstanding: r.TotalGross.Sub(r.PaidAmount),
 	}
 }
 
 var (
-	invoiceSummaryColumns = invoiceTable.columns("d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross")
+	invoiceSummaryColumns = invoiceTable.columns("d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount")
 	invoiceColumns        = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by"
 )
 

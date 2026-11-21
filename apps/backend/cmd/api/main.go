@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"apexis/backend/internal/modules/cashbank"
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
@@ -57,6 +58,9 @@ func run(logger *slog.Logger) error {
 	if err := inventory.Migrate(db); err != nil {
 		return err
 	}
+	if err := cashbank.Migrate(db); err != nil {
+		return err
+	}
 	if err := purchasing.Migrate(db); err != nil {
 		return err
 	}
@@ -85,7 +89,9 @@ func run(logger *slog.Logger) error {
 	ledgerModule.RegisterRoutes(mux)
 	inventoryModule := inventory.New(db, identityModule, organizationModule, ledgerModule)
 	inventoryModule.RegisterRoutes(mux)
-	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
+	cashbankModule := cashbank.New(db, identityModule, organizationModule, ledgerModule)
+	cashbankModule.RegisterRoutes(mux)
+	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule, cashbankModule)
 	purchasingModule.RegisterRoutes(mux)
 
 	// รายงานทุก module ผ่าน endpoint เดียว: GET /reports?book=... (หน้ารายงานของ frontend เป็นหน้าเดียว)

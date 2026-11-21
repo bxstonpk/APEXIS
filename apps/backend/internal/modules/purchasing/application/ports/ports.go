@@ -8,6 +8,7 @@ import (
 
 	"apexis/backend/internal/modules/purchasing/domain/services"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
+	"apexis/backend/internal/platform/numbering"
 )
 
 type TransactionManager interface {
@@ -35,6 +36,8 @@ type Period struct {
 type Organization interface {
 	CompanySettings(ctx context.Context, companyID vo.CompanyID) (CompanySettings, error)
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)
+	// DocumentFormat: รูปแบบเลขที่ที่บริษัทตั้งสำหรับชนิดเอกสาร
+	DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType vo.DocType) (numbering.Format, error)
 }
 
 // Item คือสินค้าจาก inventory พร้อมบัญชีที่ใช้จริง (สินค้า -> หมวด -> ค่าเริ่มต้น; nil = ไม่ได้ตั้ง)
@@ -86,4 +89,18 @@ type Ledger interface {
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
+}
+
+// CashAccount คือทะเบียนเงินสด / ธนาคารจาก cashbank พร้อมบัญชีแยกประเภทที่ผูกไว้
+type CashAccount struct {
+	ID          vo.CashAccountID
+	Code        string
+	Name        string
+	GLAccountID vo.AccountID
+	Active      bool
+}
+
+type CashBank interface {
+	// CashAccounts: ที่ไม่พบ / ถูกลบจะไม่อยู่ใน map
+	CashAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.CashAccountID) (map[vo.CashAccountID]CashAccount, error)
 }

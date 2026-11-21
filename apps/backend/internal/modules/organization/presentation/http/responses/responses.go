@@ -203,3 +203,20 @@ func FromFiscalPeriod(p dto.FiscalPeriod) FiscalPeriod {
 		StartDate: date(p.StartDate), EndDate: date(p.EndDate), Status: p.Status,
 	}
 }
+
+type DocumentNumbering struct {
+	DocType       string `json:"doc_type"`
+	Name          string `json:"name"`
+	DefaultPrefix string `json:"default_prefix"`
+	Prefix        string `json:"prefix"`
+	Template      string `json:"template"`
+	Example       string `json:"example"`
+	Custom        bool   `json:"custom"`
+}
+
+func FromDocumentNumbering(n dto.DocumentNumbering) DocumentNumbering {
+	return DocumentNumbering{
+		DocType: n.DocType, Name: n.Name, DefaultPrefix: n.DefaultPrefix, Prefix: n.Prefix, Template: n.Template,
+		Example: n.Example, Custom: n.Custom,
+	}
+}

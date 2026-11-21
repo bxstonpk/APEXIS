@@ -30,7 +30,7 @@ func (r *JournalRepository) Create(ctx context.Context, j *entities.Journal) err
 
 func (r *JournalRepository) Update(ctx context.Context, j *entities.Journal) error {
 	m := gp.JournalToModel(j)
-	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "status"}, domain.ErrCodeExists, domain.ErrJournalNotFound)
+	return update(ctx, r.db, &m, m.CompanyID, []string{"code", "name", "number_template", "status"}, domain.ErrCodeExists, domain.ErrJournalNotFound)
 }
 
 func (r *JournalRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) error {
@@ -54,18 +54,19 @@ func (r *JournalRepository) HasEntries(ctx context.Context, companyID vo.Company
 }
 
 type journalRow struct {
-	ID     uuid.UUID
-	Code   string
-	Name   string
-	Status string
-	Total  int64
+	ID             uuid.UUID
+	Code           string
+	Name           string
+	NumberTemplate string
+	Status         string
+	Total          int64
 }
 
 func (r journalRow) dto() dto.Journal {
-	return dto.Journal{ID: r.ID.String(), Code: r.Code, Name: r.Name, Status: r.Status}
+	return dto.Journal{ID: r.ID.String(), Code: r.Code, Name: r.Name, NumberTemplate: r.NumberTemplate, Status: r.Status}
 }
 
-const journalColumns = "j.id, j.code, j.name, j.status"
+const journalColumns = "j.id, j.code, j.name, j.number_template, j.status"
 
 func (r *JournalRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
 	return database.Conn(ctx, r.db).Table("ledger_journals AS j").
@@ -102,15 +103,15 @@ func (r *JournalRepository) List(ctx context.Context, companyID vo.CompanyID, f 
 // NextNumber — statement เดียว: INSERT ... ON CONFLICT DO UPDATE ... RETURNING
 // แถวลำดับถูก lock จน transaction commit — การผ่านรายการพร้อมกันในสมุด / ปีเดียวกันจึงต่อคิวกัน
 // ถ้า transaction rollback เลขก็ถูก rollback ด้วย จึงไม่มีเลขขาดตอน
-func (r *JournalRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, journalID vo.JournalID, fiscalYear int) (int64, error) {
+func (r *JournalRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, journalID vo.JournalID, periodKey string) (int64, error) {
 	tx, err := database.TxConn(ctx)
 	if err != nil {
 		return 0, err
 	}
 	var n int64
 	err = tx.Raw(`
-		INSERT INTO ledger_journal_sequences (journal_id, fiscal_year, company_id, last_no) VALUES (?, ?, ?, 1)
-		ON CONFLICT (journal_id, fiscal_year) DO UPDATE SET last_no = ledger_journal_sequences.last_no + 1
-		RETURNING last_no`, uuidOf(journalID), fiscalYear, uuidOf(companyID)).Scan(&n).Error
+		INSERT INTO ledger_number_sequences (journal_id, period_key, company_id, last_no) VALUES (?, ?, ?, 1)
+		ON CONFLICT (journal_id, period_key) DO UPDATE SET last_no = ledger_number_sequences.last_no + 1
+		RETURNING last_no`, uuidOf(journalID), periodKey, uuidOf(companyID)).Scan(&n).Error
 	return n, err
 }

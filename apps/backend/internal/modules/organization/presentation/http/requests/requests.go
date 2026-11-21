@@ -5,6 +5,7 @@
 package requests
 
 import (
+	"apexis/backend/internal/platform/numbering"
 	"errors"
 	"fmt"
 	"slices"
@@ -366,4 +367,17 @@ type UpdateFiscalPeriod struct {
 
 func (r UpdateFiscalPeriod) Parse() (vo.PeriodStatus, error) {
 	return status(r.Status, "", false, vo.ParsePeriodStatus)
+}
+
+// Numbering: PUT /document-numberings/{docType} — {"prefix": "PV", "template": "{prefix}{yy}{mm}-{seq:5}"}
+type Numbering struct {
+	Prefix   string `json:"prefix"`
+	Template string `json:"template"`
+}
+
+func (r Numbering) ToFormat() (numbering.Format, error) {
+	if err := required(map[string]string{"template": r.Template}); err != nil {
+		return numbering.Format{}, err
+	}
+	return numbering.Format{Prefix: r.Prefix, Template: r.Template}, nil
 }

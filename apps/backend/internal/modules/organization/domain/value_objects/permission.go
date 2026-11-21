@@ -20,6 +20,8 @@ const (
 	PermFiscalPeriodRead  Permission = "organization.fiscal_period:read"
 	PermFiscalPeriodMng   Permission = "organization.fiscal_period:manage" // สร้างปีบัญชี
 	PermFiscalPeriodClose Permission = "organization.fiscal_period:close"  // ปิด / เปิดงวด
+	PermNumberingRead     Permission = "organization.numbering:read"
+	PermNumberingManage   Permission = "organization.numbering:manage" // รูปแบบเลขที่เอกสาร
 )
 
 func (p Permission) String() string { return string(p) }

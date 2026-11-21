@@ -61,6 +61,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
 	{Err: domain.ErrInUse, Status: http.StatusConflict},
 	{Err: domain.ErrClosingExists, Status: http.StatusConflict},
+	{Err: domain.ErrDocumentNoUsed, Status: http.StatusConflict},
 	// 422
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrItemNotStocked, Status: http.StatusUnprocessableEntity},

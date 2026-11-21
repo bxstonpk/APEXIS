@@ -61,4 +61,8 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("GET "+base+"/fiscal-periods", h.ListFiscalPeriods)
 	handle("GET "+base+"/fiscal-periods/{fiscalPeriodID}", h.GetFiscalPeriod)
 	handle("PATCH "+base+"/fiscal-periods/{fiscalPeriodID}", h.UpdateFiscalPeriod)
+
+	// รูปแบบเลขที่เอกสาร (ทุกชนิดที่ module ลงทะเบียน) — แก้แล้วมีผลกับเอกสารที่ออกเลขหลังจากนี้
+	handle("GET "+base+"/document-numberings", h.ListNumberings)
+	handle("PUT "+base+"/document-numberings/{docType}", h.UpdateNumbering)
 }

@@ -28,6 +28,8 @@ type Settings struct {
 	APAccountID            *vo.AccountID // เจ้าหนี้การค้า
 	InputVatAccountID      *vo.AccountID // ภาษีซื้อ
 	PriceVarianceAccountID *vo.AccountID // ผลต่างราคา (perpetual: ราคาใบแจ้งหนี้ต่างจากราคารับสินค้า)
+	WhtPnd3AccountID       *vo.AccountID // ภาษีหัก ณ ที่จ่ายค้างจ่าย ภ.ง.ด.3
+	WhtPnd53AccountID      *vo.AccountID // ภาษีหัก ณ ที่จ่ายค้างจ่าย ภ.ง.ด.53
 }
 
 func DefaultSettings() Settings { return Settings{VatRate: DefaultVatRate} }
@@ -42,7 +44,7 @@ func NewSettings(s Settings) (Settings, error) {
 // AccountIDs คือบัญชีทั้งหมดที่ตั้งไว้ (ใช้ตรวจกับ ledger)
 func (s Settings) AccountIDs() []vo.AccountID {
 	var out []vo.AccountID
-	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID} {
+	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID, s.WhtPnd3AccountID, s.WhtPnd53AccountID} {
 		if p != nil {
 			out = append(out, *p)
 		}
@@ -55,6 +57,7 @@ func (s Settings) Require(fields ...string) error {
 	set := map[string]bool{
 		"journal_id": s.JournalID != nil, "grir_account_id": s.GRIRAccountID != nil, "ap_account_id": s.APAccountID != nil,
 		"input_vat_account_id": s.InputVatAccountID != nil, "price_variance_account_id": s.PriceVarianceAccountID != nil,
+		"wht_pnd3_account_id": s.WhtPnd3AccountID != nil, "wht_pnd53_account_id": s.WhtPnd53AccountID != nil,
 	}
 	var missing []string
 	for _, f := range fields {
@@ -77,7 +80,8 @@ type SupplierData struct {
 	BranchNo        string // เลขสาขาตามใบกำกับภาษี (00000 = สำนักงานใหญ่)
 	Address         string
 	PaymentTermDays int
-	VatRegistered   bool // จด VAT: ใบสั่งซื้อที่สร้างหลังจากนี้คิด VAT ตามอัตราที่ตั้ง
+	VatRegistered   bool       // จด VAT: ใบสั่งซื้อที่สร้างหลังจากนี้คิด VAT ตามอัตราที่ตั้ง
+	TaxType         vo.TaxType // บุคคลธรรมดา (ภ.ง.ด.3) / นิติบุคคล (ภ.ง.ด.53)
 	Status          vo.Status
 }
 
@@ -144,6 +148,9 @@ func normalizeSupplier(d SupplierData) (SupplierData, error) {
 		return SupplierData{}, domain.ErrInvalidTerm
 	}
 	out.PaymentTermDays = d.PaymentTermDays
+	if out.TaxType, err = vo.ParseTaxType(string(d.TaxType)); err != nil {
+		return SupplierData{}, err
+	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
 		return SupplierData{}, err
 	}
@@ -156,4 +163,73 @@ func EnsureUnused(used bool) error {
 		return domain.ErrInUse
 	}
 	return nil
+}
+
+// WhtAccount คือบัญชีภาษีหัก ณ ที่จ่ายค้างจ่ายตามแบบยื่น และชื่อ field ของค่าตั้ง
+func (s Settings) WhtAccount(t vo.TaxType) (*vo.AccountID, string) {
+	if t == vo.TaxIndividual {
+		return s.WhtPnd3AccountID, "wht_pnd3_account_id"
+	}
+	return s.WhtPnd53AccountID, "wht_pnd53_account_id"
+}
+
+// ---------- ประเภทภาษีหัก ณ ที่จ่าย ----------
+
+type WhtTypeData struct {
+	Code   string
+	Name   string // เช่น ค่าบริการ, ค่าขนส่ง, ค่าเช่า
+	Rate   decimal.Decimal
+	Status vo.Status
+}
+
+// WhtType คือประเภทเงินได้ที่หักภาษี ณ ที่จ่าย พร้อมอัตรา — ใบจ่ายเก็บอัตรา ณ วันจ่ายไว้ในบรรทัด
+type WhtType struct {
+	id        vo.WhtTypeID
+	companyID vo.CompanyID
+	data      WhtTypeData
+}
+
+func NewWhtType(companyID vo.CompanyID, d WhtTypeData) (*WhtType, error) {
+	n, err := normalizeWhtType(d)
+	if err != nil {
+		return nil, err
+	}
+	return &WhtType{id: vo.NewID[vo.WhtTypeID](), companyID: companyID, data: n}, nil
+}
+
+func RehydrateWhtType(id vo.WhtTypeID, companyID vo.CompanyID, d WhtTypeData) *WhtType {
+	return &WhtType{id: id, companyID: companyID, data: d}
+}
+
+func (w *WhtType) ID() vo.WhtTypeID        { return w.id }
+func (w *WhtType) CompanyID() vo.CompanyID { return w.companyID }
+func (w *WhtType) Data() WhtTypeData       { return w.data }
+func (w *WhtType) IsActive() bool          { return w.data.Status == vo.StatusActive }
+
+func (w *WhtType) Update(d WhtTypeData) error {
+	n, err := normalizeWhtType(d)
+	if err != nil {
+		return err
+	}
+	w.data = n
+	return nil
+}
+
+func normalizeWhtType(d WhtTypeData) (WhtTypeData, error) {
+	var err error
+	out := WhtTypeData{}
+	if out.Code, err = vo.NewCode(d.Code); err != nil {
+		return WhtTypeData{}, err
+	}
+	if out.Name, err = vo.NewName(d.Name, 200); err != nil {
+		return WhtTypeData{}, err
+	}
+	if !d.Rate.IsPositive() || d.Rate.GreaterThan(decimal.NewFromInt(100)) || !numeric.FitsScale(d.Rate, 2) {
+		return WhtTypeData{}, domain.ErrInvalidWhtRate
+	}
+	out.Rate = d.Rate
+	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
+		return WhtTypeData{}, err
+	}
+	return out, nil
 }

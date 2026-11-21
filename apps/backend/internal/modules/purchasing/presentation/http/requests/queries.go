@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
@@ -125,4 +126,49 @@ func ParseAging(v url.Values) (dto.AgingFilter, error) {
 		f.AsOf = d
 	}
 	return f, q.err
+}
+
+// GET /withholding-tax-types?q=&status=&sort=code|name&page=&page_size=
+func ParseWhtTypeFilter(v url.Values) (dto.WhtTypeFilter, error) {
+	q := &query{v: v}
+	f := dto.WhtTypeFilter{
+		Search:   q.search(),
+		Statuses: parse(q, func() ([]vo.Status, error) { return listing.ParseList(v, "status", vo.ParseStatus) }),
+		Sort:     q.sort([]string{"code", "name"}, []listing.Sort{{Key: "code"}}),
+		Page:     q.page(),
+	}
+	return f, q.err
+}
+
+// GET /reports?book=withholding-tax&start_date=&end_date=&form=pnd3|pnd53&supplier_id=&sort=&page=&page_size=
+func ParseWithholding(v url.Values) (dto.WithholdingFilter, error) {
+	q := &query{v: v}
+	f := dto.WithholdingFilter{
+		SupplierID: optionalIDParam[vo.SupplierID](q, "supplier_id"),
+		Sort:       q.sort(dto.WithholdingSortKeys, dto.DefaultWithholdingSort), Page: q.page(),
+	}
+	if q.err != nil {
+		return f, q.err
+	}
+	switch form := v.Get("form"); form {
+	case "", "pnd3", "pnd53":
+		f.Form = form
+	default:
+		return f, fmt.Errorf("%w: form must be pnd3 or pnd53", listing.ErrInvalidQuery)
+	}
+	for _, d := range []struct {
+		key string
+		dst *time.Time
+	}{{"start_date", &f.Start}, {"end_date", &f.End}} {
+		raw := v.Get(d.key)
+		t, err := listing.ParseDate(raw)
+		if raw == "" || err != nil {
+			return f, fmt.Errorf("%w: %s is required (YYYY-MM-DD)", listing.ErrInvalidQuery, d.key)
+		}
+		*d.dst = t
+	}
+	if f.Start.After(f.End) {
+		return f, fmt.Errorf("%w: start_date must not be after end_date", listing.ErrInvalidQuery)
+	}
+	return f, nil
 }

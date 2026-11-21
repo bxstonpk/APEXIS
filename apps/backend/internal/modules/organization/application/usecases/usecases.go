@@ -10,6 +10,7 @@ package usecases
 
 import (
 	"context"
+	"time"
 
 	"apexis/backend/internal/modules/organization/application/dto"
 	"apexis/backend/internal/modules/organization/application/ports"
@@ -32,6 +33,9 @@ type Deps struct {
 	ProjectSites  repositories.ProjectSiteRepository
 	Fiscal        repositories.FiscalRepository
 	Dimensions    repositories.DimensionRepository
+	Numbering     repositories.NumberingRepository
+	DocumentTypes *DocumentTypes
+	Clock         func() time.Time // optional
 }
 
 type UseCases struct {
@@ -43,9 +47,13 @@ type UseCases struct {
 	ProjectSites  *ProjectSiteUseCases
 	Fiscal        *FiscalUseCases
 	Lookups       *LookupUseCases
+	Numbering     *NumberingUseCases
 }
 
 func New(d Deps) *UseCases {
+	if d.Clock == nil {
+		d.Clock = func() time.Time { return time.Now().UTC() }
+	}
 	b := base{tx: d.Tx, auth: d.Auth, companies: d.Companies}
 	return &UseCases{
 		Companies: &CompanyUseCases{base: b, members: d.Members},
@@ -67,8 +75,9 @@ func New(d Deps) *UseCases {
 			master: newMaster(b, d.ProjectSites, vo.PermProjectSiteRead, vo.PermProjectSiteManage), repo: d.ProjectSites,
 			branches: d.Branches, costCenters: d.CostCenters,
 		},
-		Fiscal:  &FiscalUseCases{base: b, fiscal: d.Fiscal},
-		Lookups: &LookupUseCases{companies: d.Companies, fiscal: d.Fiscal, dimensions: d.Dimensions},
+		Fiscal:    &FiscalUseCases{base: b, fiscal: d.Fiscal},
+		Lookups:   &LookupUseCases{companies: d.Companies, fiscal: d.Fiscal, dimensions: d.Dimensions},
+		Numbering: &NumberingUseCases{base: b, repo: d.Numbering, types: d.DocumentTypes, now: d.Clock},
 	}
 }
 

@@ -29,6 +29,9 @@ type (
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
 	StockDocumentID uuid.UUID
+	PaymentID       uuid.UUID
+	WhtTypeID       uuid.UUID
+	CashAccountID   uuid.UUID // ทะเบียนเงินสด / ธนาคารของ cashbank
 	AccountID       uuid.UUID
 	JournalID       uuid.UUID
 	EntryID         uuid.UUID
@@ -59,6 +62,11 @@ func (id WarehouseID) String() string { return IDString(id) }
 func (id AccountID) String() string   { return IDString(id) }
 func (id JournalID) String() string   { return IDString(id) }
 func (id EntryID) String() string     { return IDString(id) }
+func (id PaymentID) String() string   { return IDString(id) }
+func (id WhtTypeID) String() string   { return IDString(id) }
+func (id CashAccountID) String() string {
+	return IDString(id)
+}
 
 // ---------- ข้อความ ----------
 
@@ -185,4 +193,65 @@ func parseEnum[T ~string](raw string, allowed []T, invalid error) (T, error) {
 		return T(raw), nil
 	}
 	return "", invalid
+}
+
+// DocType คือชนิดเอกสารของจัดซื้อที่ลงทะเบียนกับ organization เพื่อตั้งรูปแบบเลขที่
+type DocType string
+
+const (
+	DocOrder   DocType = "purchasing.order"
+	DocReceipt DocType = "purchasing.receipt"
+	DocInvoice DocType = "purchasing.invoice"
+	DocPayment DocType = "purchasing.payment"
+)
+
+var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice, DocPayment}
+
+// Prefix คือ prefix เริ่มต้นของเลขที่ (บริษัทเปลี่ยนได้)
+func (t DocType) Prefix() string {
+	switch t {
+	case DocOrder:
+		return "PO"
+	case DocReceipt:
+		return "RC"
+	case DocInvoice:
+		return "PI"
+	default:
+		return "PV"
+	}
+}
+
+func (t DocType) Name() string {
+	switch t {
+	case DocOrder:
+		return "ใบสั่งซื้อ"
+	case DocReceipt:
+		return "ใบรับสินค้า"
+	case DocInvoice:
+		return "ใบแจ้งหนี้ผู้ขาย"
+	default:
+		return "ใบจ่ายชำระ"
+	}
+}
+
+// TaxType ของผู้ขาย — กำหนดแบบยื่นภาษีหัก ณ ที่จ่าย: individual = ภ.ง.ด.3, juristic = ภ.ง.ด.53
+type TaxType string
+
+const (
+	TaxIndividual TaxType = "individual"
+	TaxJuristic   TaxType = "juristic"
+)
+
+var TaxTypes = []TaxType{TaxIndividual, TaxJuristic}
+
+func ParseTaxType(raw string) (TaxType, error) {
+	return parseEnum(raw, TaxTypes, domain.ErrInvalidTaxType)
+}
+
+// Form คือแบบยื่นภาษีหัก ณ ที่จ่าย
+func (t TaxType) Form() string {
+	if t == TaxIndividual {
+		return "pnd3"
+	}
+	return "pnd53"
 }

@@ -1,7 +1,10 @@
 package entities
 
 import (
+	"fmt"
 	"time"
+
+	"github.com/shopspring/decimal"
 
 	domain "apexis/backend/internal/modules/purchasing/domain/errors"
 	"apexis/backend/internal/modules/purchasing/domain/services"
@@ -134,6 +137,7 @@ type InvoiceState struct {
 	Vat               services.VatTerms
 	Lines             []InvoiceLine
 	Totals            services.Amounts
+	Paid              vo.Money // ยอดที่จ่ายชำระแล้ว (ใบจ่ายที่ยังไม่ยกเลิก)
 	Status            vo.DocStatus
 	Posting           Posting
 	Cancellation      *Cancellation
@@ -158,7 +162,7 @@ func NewInvoice(s InvoiceState, paymentTermDays int) (*Invoice, error) {
 	for _, l := range s.Lines {
 		s.Totals = s.Totals.Add(l.Amounts)
 	}
-	s.ID, s.Status, s.Cancellation = vo.NewID[vo.InvoiceID](), vo.DocPosted, nil
+	s.ID, s.Status, s.Cancellation, s.Paid = vo.NewID[vo.InvoiceID](), vo.DocPosted, nil, decimal.Zero
 	return &Invoice{s: s}, nil
 }
 
@@ -193,9 +197,30 @@ func (i *Invoice) SetEntry(id vo.EntryID, no string) {
 	i.s.Posting.EntryID, i.s.Posting.EntryNo = &id, no
 }
 
+// Outstanding คือยอดค้างจ่าย (รวม VAT)
+func (i *Invoice) Outstanding() vo.Money { return i.s.Totals.Gross.Sub(i.s.Paid) }
+
+// Pay: ใบแจ้งหนี้ต้อง posted ของผู้ขายเดียวกัน และจ่ายไม่เกินยอดค้าง
+func (i *Invoice) Pay(supplierID vo.SupplierID, amount vo.Money) error {
+	if i.s.Status != vo.DocPosted || i.s.SupplierID != supplierID {
+		return fmt.Errorf("%w: %s", domain.ErrInvoiceNotPayable, i.s.Posting.DocumentNo)
+	}
+	if amount.GreaterThan(i.Outstanding()) {
+		return fmt.Errorf("%w: %s (outstanding %s)", domain.ErrOverPayment, i.s.Posting.DocumentNo, i.Outstanding())
+	}
+	i.s.Paid = i.s.Paid.Add(amount)
+	return nil
+}
+
+// Unpay กลับยอดจ่าย (ยกเลิกใบจ่าย)
+func (i *Invoice) Unpay(amount vo.Money) { i.s.Paid = i.s.Paid.Sub(amount) }
+
 func (i *Invoice) Cancel(by vo.UserID, at time.Time) error {
 	if i.s.Status != vo.DocPosted {
 		return domain.ErrAlreadyCancelled
+	}
+	if !i.s.Paid.IsZero() {
+		return domain.ErrInvoicePaid
 	}
 	i.s.Status, i.s.Cancellation = vo.DocCancelled, &Cancellation{By: by, At: at}
 	return nil

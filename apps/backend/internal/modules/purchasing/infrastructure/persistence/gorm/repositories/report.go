@@ -102,10 +102,11 @@ type agingRow struct {
 
 // Aging — 1 query: ใบแจ้งหนี้ที่ลงบัญชีถึงวันที่ (ยังไม่ยกเลิก) GROUP BY ผู้ขาย, แยกช่วงอายุด้วย CASE,
 // ยอดรวมทุกผู้ขายด้วย window function, แบ่งหน้าใน DB (+1 COUNT เฉพาะกรณีขอหน้าที่เกินข้อมูล)
-// ยังไม่มีการจ่ายเงิน — ยอดค้าง = ยอดรวม VAT ของใบแจ้งหนี้
+// ยอดค้าง = ยอดรวม VAT ของใบแจ้งหนี้ - ยอดจ่ายถึงวันที่รายงาน (ใบที่จ่ายครบแล้วไม่แสดง)
 func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error) {
-	where := []string{"i.company_id = ?", "i.status = 'posted'", "i.posting_date <= ?"}
-	args := []any{uuidOf(companyID), f.AsOf}
+	where := []string{"i.company_id = ?", "i.status = 'posted'", "i.posting_date <= ?", "i.open_amount <> 0"}
+	// placeholder ของ subquery ยอดจ่าย (บริษัท, ณ วันที่) อยู่ใน FROM ก่อน WHERE
+	args := []any{uuidOf(companyID), f.AsOf, uuidOf(companyID), f.AsOf}
 	if f.SupplierID != nil {
 		where = append(where, "i.supplier_id = ?")
 		args = append(args, uuidOf(*f.SupplierID))
@@ -115,8 +116,17 @@ func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f 
 		where = append(where, "(LOWER(s.code) LIKE ? OR LOWER(s.name) LIKE ?)")
 		args = append(args, p, p)
 	}
-	from := ` FROM purchasing_invoices AS i JOIN purchasing_suppliers AS s ON s.id = i.supplier_id WHERE ` + strings.Join(where, " AND ")
-	bucket := func(cond string) string { return "SUM(CASE WHEN " + cond + " THEN i.total_gross ELSE 0 END)" }
+	// ยอดค้าง ณ วันที่ = ยอดรวม VAT - ยอดที่จ่ายด้วยใบจ่าย (posted) ที่ลงวันที่ไม่เกินวันที่รายงาน
+	from := ` FROM (
+		SELECT inv.company_id, inv.supplier_id, inv.status, inv.posting_date, inv.due_date,
+		       inv.total_gross - COALESCE(pd.amount, 0) AS open_amount
+		  FROM purchasing_invoices AS inv
+		  LEFT JOIN (SELECT pl.invoice_id, SUM(pl.amount) AS amount
+		               FROM purchasing_payment_lines AS pl JOIN purchasing_payments AS p ON p.id = pl.payment_id
+		              WHERE p.company_id = ? AND p.status = 'posted' AND p.payment_date <= ?
+		              GROUP BY pl.invoice_id) AS pd ON pd.invoice_id = inv.id) AS i
+		JOIN purchasing_suppliers AS s ON s.id = i.supplier_id WHERE ` + strings.Join(where, " AND ")
+	bucket := func(cond string) string { return "SUM(CASE WHEN " + cond + " THEN i.open_amount ELSE 0 END)" }
 	// ?::date - due_date = จำนวนวันที่เลยกำหนด
 	overdue := "(CAST(? AS date) - i.due_date)"
 	cols := []struct{ expr, name string }{
@@ -133,12 +143,12 @@ func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f 
 		selects = append(selects, c.expr+" AS "+c.name)
 		selArgs = append(selArgs, f.AsOf)
 	}
-	selects = append(selects, "SUM(i.total_gross) AS amount", "COUNT(*) OVER () AS total")
+	selects = append(selects, "SUM(i.open_amount) AS amount", "COUNT(*) OVER () AS total")
 	for _, c := range cols {
 		selects = append(selects, "SUM("+c.expr+") OVER () AS "+totals[c.name])
 		selArgs = append(selArgs, f.AsOf)
 	}
-	selects = append(selects, "SUM(SUM(i.total_gross)) OVER () AS t_amount")
+	selects = append(selects, "SUM(SUM(i.open_amount)) OVER () AS t_amount")
 
 	query := "SELECT " + strings.Join(selects, ", ") + from +
 		" GROUP BY s.id, s.code, s.name ORDER BY s.code, s.id LIMIT ? OFFSET ?"
@@ -167,4 +177,79 @@ func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f 
 		}
 	}
 	return res, sum, nil
+}
+
+type withholdingRow struct {
+	PaymentDate  time.Time
+	PaymentID    uuid.UUID
+	DocumentNo   string
+	SupplierID   uuid.UUID
+	SupplierCode string
+	SupplierName string
+	TaxID        string
+	BranchNo     string
+	TaxType      string
+	WhtTypeID    uuid.UUID
+	WhtCode      string
+	WhtName      string
+	WhtRate      decimal.Decimal
+	WhtBase      decimal.Decimal
+	Wht          decimal.Decimal
+	Total        int64
+	TotalBase    decimal.Decimal
+	TotalWht     decimal.Decimal
+}
+
+// Withholding — 1 query: บรรทัดใบจ่าย JOIN หัว + ผู้ขาย + ประเภทภาษี, ยอดรวมด้วย window function
+// (+1 COUNT เฉพาะกรณีขอหน้าที่เกินข้อมูล) — ใบจ่ายที่ยกเลิกไม่นับ
+func (r *ReportRepository) Withholding(ctx context.Context, companyID vo.CompanyID, f dto.WithholdingFilter) (listing.Result[dto.WithholdingRow], dto.WithholdingTotals, error) {
+	order, err := database.OrderBy(f.Sort, map[string]string{"date": "p.payment_date", "document_no": "p.document_no", "supplier_code": "s.code"}, "p.id ASC, l.line_no")
+	if err != nil {
+		return listing.Result[dto.WithholdingRow]{}, dto.WithholdingTotals{}, err
+	}
+	base := func() *gorm.DB {
+		q := database.Conn(ctx, r.db).Table("purchasing_payment_lines AS l").
+			Joins("JOIN purchasing_payments AS p ON p.id = l.payment_id").
+			Joins("JOIN purchasing_suppliers AS s ON s.id = p.supplier_id").
+			Joins("JOIN purchasing_wht_types AS w ON w.id = l.wht_type_id").
+			Where("p.company_id = ? AND p.status = 'posted' AND l.wht > 0 AND p.payment_date BETWEEN ? AND ?", uuidOf(companyID), f.Start, f.End)
+		switch f.Form {
+		case "pnd3":
+			q = q.Where("p.tax_type = ?", vo.TaxIndividual)
+		case "pnd53":
+			q = q.Where("p.tax_type = ?", vo.TaxJuristic)
+		}
+		if f.SupplierID != nil {
+			q = q.Where("p.supplier_id = ?", uuidOf(*f.SupplierID))
+		}
+		return q
+	}
+	var rows []withholdingRow
+	err = base().Select(`p.payment_date, p.id AS payment_id, p.document_no, s.id AS supplier_id, s.code AS supplier_code,
+			s.name AS supplier_name, s.tax_id, s.branch_no, p.tax_type, w.id AS wht_type_id, w.code AS wht_code, w.name AS wht_name,
+			l.wht_rate, l.wht_base, l.wht,
+			COUNT(*) OVER () AS total, SUM(l.wht_base) OVER () AS total_base, SUM(l.wht) OVER () AS total_wht`).
+		Order(order).Limit(f.Page.Limit()).Offset(f.Page.Offset()).Scan(&rows).Error
+	if err != nil {
+		return listing.Result[dto.WithholdingRow]{}, dto.WithholdingTotals{}, err
+	}
+	res := listing.Result[dto.WithholdingRow]{Items: make([]dto.WithholdingRow, len(rows)), Page: f.Page}
+	totals := dto.WithholdingTotals{Base: decimal.Zero, Wht: decimal.Zero}
+	for i, x := range rows {
+		res.Items[i] = dto.WithholdingRow{
+			Date: gp.DateUTC(x.PaymentDate), PaymentID: x.PaymentID.String(), DocumentNo: x.DocumentNo,
+			Supplier: dto.Ref{ID: x.SupplierID.String(), Code: x.SupplierCode, Name: x.SupplierName},
+			TaxID:    x.TaxID, BranchNo: x.BranchNo, TaxForm: vo.TaxType(x.TaxType).Form(),
+			WhtType: dto.Ref{ID: x.WhtTypeID.String(), Code: x.WhtCode, Name: x.WhtName},
+			Rate:    x.WhtRate, Base: x.WhtBase, Wht: x.Wht,
+		}
+	}
+	if len(rows) > 0 {
+		res.Total, totals = rows[0].Total, dto.WithholdingTotals{Base: rows[0].TotalBase, Wht: rows[0].TotalWht}
+	} else if f.Page.Offset() > 0 {
+		if err := base().Count(&res.Total).Error; err != nil {
+			return listing.Result[dto.WithholdingRow]{}, dto.WithholdingTotals{}, err
+		}
+	}
+	return res, totals, nil
 }

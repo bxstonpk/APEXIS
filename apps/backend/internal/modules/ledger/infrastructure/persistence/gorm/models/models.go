@@ -35,14 +35,15 @@ type AccountModel struct {
 func (AccountModel) TableName() string { return "ledger_accounts" }
 
 type JournalModel struct {
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey"`
-	CompanyID uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:uq_ledger_journals_code,priority:1,where:deleted_at IS NULL"`
-	Code      string         `gorm:"size:10;not null;uniqueIndex:uq_ledger_journals_code,priority:2,where:deleted_at IS NULL"`
-	Name      string         `gorm:"size:200;not null"`
-	Status    string         `gorm:"size:20;not null;check:chk_ledger_journals_status,status IN ('active','inactive')"`
-	CreatedAt time.Time      `gorm:"not null"`
-	UpdatedAt time.Time      `gorm:"not null"`
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	CompanyID      uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:uq_ledger_journals_code,priority:1,where:deleted_at IS NULL"`
+	Code           string         `gorm:"size:10;not null;uniqueIndex:uq_ledger_journals_code,priority:2,where:deleted_at IS NULL"`
+	Name           string         `gorm:"size:200;not null"`
+	NumberTemplate string         `gorm:"size:60;not null;default:'{prefix}{fy}-{seq:6}'"`
+	Status         string         `gorm:"size:20;not null;check:chk_ledger_journals_status,status IN ('active','inactive')"`
+	CreatedAt      time.Time      `gorm:"not null"`
+	UpdatedAt      time.Time      `gorm:"not null"`
+	DeletedAt      gorm.DeletedAt `gorm:"index"`
 }
 
 func (JournalModel) TableName() string { return "ledger_journals" }
@@ -94,19 +95,32 @@ func (LineModel) TableName() string { return "ledger_journal_lines" }
 
 // หมายเหตุ: gorm อ่าน tag check ได้ field ละ 1 ข้อ — CHECK หลายข้อของตารางจึงกระจายไว้หลาย field
 
-// SequenceModel: เลขที่ล่าสุดของสมุด + ปีบัญชี (เพิ่มด้วย INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
+// SequenceModel: เลขลำดับล่าสุดของสมุด + คีย์ช่วงนับของรูปแบบเลขที่ (เช่น F2026, Y2026M02)
+// (เพิ่มด้วย INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
 type SequenceModel struct {
-	JournalID  uuid.UUID     `gorm:"type:uuid;primaryKey"`
-	Journal    *JournalModel `gorm:"foreignKey:JournalID;constraint:OnDelete:RESTRICT"`
-	FiscalYear int           `gorm:"primaryKey"`
-	CompanyID  uuid.UUID     `gorm:"type:uuid;not null"`
-	LastNo     int64         `gorm:"not null"`
+	JournalID uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	Journal   *JournalModel `gorm:"foreignKey:JournalID;constraint:OnDelete:RESTRICT"`
+	PeriodKey string        `gorm:"size:20;primaryKey"`
+	CompanyID uuid.UUID     `gorm:"type:uuid;not null"`
+	LastNo    int64         `gorm:"not null"`
 }
 
-func (SequenceModel) TableName() string { return "ledger_journal_sequences" }
+func (SequenceModel) TableName() string { return "ledger_number_sequences" }
 
 // AutoMigrate สร้าง/อัปเดตตารางของ ledger (เรียงตาม dependency ของ FK)
 // สำหรับ production แนะนำเปลี่ยนเป็น versioned migration (เช่น goose / golang-migrate)
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(&AccountModel{}, &JournalModel{}, &EntryModel{}, &LineModel{}, &SequenceModel{})
+	if err := db.AutoMigrate(&AccountModel{}, &JournalModel{}, &EntryModel{}, &LineModel{}, &SequenceModel{}); err != nil {
+		return err
+	}
+	// ลำดับเลขแบบเดิม (ต่อปีบัญชี) -> คีย์ช่วงนับของรูปแบบเริ่มต้น "F<ปีบัญชี>"
+	if db.Migrator().HasTable("ledger_journal_sequences") {
+		if err := db.Exec(`INSERT INTO ledger_number_sequences (journal_id, period_key, company_id, last_no)
+			SELECT journal_id, 'F' || fiscal_year, company_id, last_no FROM ledger_journal_sequences
+			ON CONFLICT DO NOTHING`).Error; err != nil {
+			return err
+		}
+		return db.Migrator().DropTable("ledger_journal_sequences")
+	}
+	return nil
 }

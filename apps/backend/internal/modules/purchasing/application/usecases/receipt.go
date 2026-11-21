@@ -74,7 +74,7 @@ func (uc *ReceiptUseCases) Create(ctx context.Context, in dto.Create[dto.Receipt
 		if err := items(found, ids, true); err != nil {
 			return err
 		}
-		no, err := uc.number(ctx, in.CompanyID, "RC", period.FiscalYear)
+		no, err := uc.number(ctx, in.CompanyID, vo.DocReceipt, in.Data.Date, period.FiscalYear)
 		if err != nil {
 			return err
 		}

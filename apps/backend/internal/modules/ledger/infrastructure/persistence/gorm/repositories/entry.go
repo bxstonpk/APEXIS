@@ -35,7 +35,7 @@ func (r *EntryRepository) Create(ctx context.Context, e *entities.Entry) error {
 	m := gp.EntryToModel(e)
 	if err := tx.Omit(clause.Associations).Create(&m).Error; err != nil {
 		if database.IsUniqueViolation(err) {
-			return domain.ErrCodeExists // เลขที่เอกสารซ้ำ — ไม่ควรเกิด (ลำดับเลขถูก lock)
+			return domain.ErrEntryNoUsed // เลขที่ซ้ำ — เกิดได้เมื่อเปลี่ยนรูปแบบเลขที่ของสมุดจนชนเลขเดิม
 		}
 		return err
 	}
@@ -79,7 +79,7 @@ func (r *EntryRepository) UpdateStatus(ctx context.Context, e *entities.Entry) e
 		})
 	if res.Error != nil {
 		if database.IsUniqueViolation(res.Error) {
-			return domain.ErrCodeExists
+			return domain.ErrEntryNoUsed
 		}
 		return res.Error
 	}

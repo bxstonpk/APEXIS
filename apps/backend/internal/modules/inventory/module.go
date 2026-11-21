@@ -31,6 +31,7 @@ import (
 	inventoryhttp "apexis/backend/internal/modules/inventory/presentation/http"
 	"apexis/backend/internal/modules/inventory/presentation/http/handlers"
 	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/numbering"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -43,6 +44,8 @@ type Identity interface {
 
 // Organization คือสิ่งที่ inventory ต้องการจาก organization module (*organization.Module implement)
 type Organization interface {
+	RegisterDocumentTypes(types ...integration.DocumentType)
+	DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error)
 	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
@@ -58,6 +61,7 @@ type Module struct {
 }
 
 func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger) *Module {
+	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
 		Tx:         gp.NewTransactionManager(db),
 		Auth:       services.NewIdentityAuthorizer(identity),
@@ -161,6 +165,15 @@ func (m *Module) PostReceipt(ctx context.Context, companyID, userID, warehouseID
 // CancelDocument ยกเลิกเอกสารสต็อกที่ผ่านแล้ว (คืนต้นทุน FIFO) — ของที่รับเข้าถูกใช้ไปแล้วยกเลิกไม่ได้
 func (m *Module) CancelDocument(ctx context.Context, companyID, userID, documentID uuid.UUID) error {
 	return reject(m.UseCases.Facade.CancelDocument(ctx, vo.CompanyID(companyID), vo.UserID(userID), vo.DocumentID(documentID)))
+}
+
+// DocumentTypes คือชนิดเอกสารของ inventory ที่ตั้งรูปแบบเลขที่ได้ (ลงทะเบียนกับ organization ตอน New)
+func DocumentTypes() []integration.DocumentType {
+	out := make([]integration.DocumentType, len(vo.DocumentTypes))
+	for i, t := range vo.DocumentTypes {
+		out[i] = integration.DocumentType{Key: t.NumberingKey(), Name: t.Name(), DefaultPrefix: t.Prefix()}
+	}
+	return out
 }
 
 // Migrate สร้างตารางของ inventory

@@ -18,6 +18,7 @@ var (
 	ErrInvalidAmount      = errors.New("invalid amount") // detailed
 	ErrInvalidLine        = errors.New("invalid line")   // detailed
 	ErrInvalidDate        = errors.New("invalid date")
+	ErrInvalidNumbering   = errors.New("invalid document number format") // detailed
 )
 
 // ไม่พบ (404)
@@ -30,8 +31,9 @@ var (
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
 var (
-	ErrCodeExists = errors.New("code already exists")
-	ErrInUse      = errors.New("record is referenced by other records")
+	ErrCodeExists  = errors.New("code already exists")
+	ErrEntryNoUsed = errors.New("entry number is already used (check the journal number format)")
+	ErrInUse       = errors.New("record is referenced by other records")
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -69,6 +71,8 @@ var all = []error{
 	ErrAccountNotFound,
 	ErrJournalNotFound,
 	ErrEntryNotFound,
+	ErrInvalidNumbering,
+	ErrEntryNoUsed,
 	ErrDimensionNotFound,
 	ErrCodeExists,
 	ErrInUse,

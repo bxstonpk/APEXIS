@@ -24,6 +24,8 @@ import (
 	"apexis/backend/internal/modules/organization/infrastructure/services"
 	orghttp "apexis/backend/internal/modules/organization/presentation/http"
 	"apexis/backend/internal/modules/organization/presentation/http/handlers"
+	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/numbering"
 )
 
 // Identity คือสิ่งที่ organization ต้องการจาก identity module (*identity.Module implement)
@@ -36,13 +38,15 @@ type Identity interface {
 }
 
 type Module struct {
-	UseCases *usecases.UseCases
-	identity Identity
-	handler  *handlers.Handler
+	UseCases      *usecases.UseCases
+	identity      Identity
+	documentTypes *usecases.DocumentTypes
+	handler       *handlers.Handler
 }
 
 func New(db *gorm.DB, identity Identity) *Module {
 	idn := services.NewIdentity(identity)
+	types := usecases.NewDocumentTypes()
 	uc := usecases.New(usecases.Deps{
 		Tx:            gp.NewTransactionManager(db),
 		Auth:          idn,
@@ -55,8 +59,10 @@ func New(db *gorm.DB, identity Identity) *Module {
 		ProjectSites:  gormrepo.NewProjectSiteRepository(db),
 		Fiscal:        gormrepo.NewFiscalRepository(db),
 		Dimensions:    gormrepo.NewDimensionRepository(db),
+		Numbering:     gormrepo.NewNumberingRepository(db),
+		DocumentTypes: types,
 	})
-	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
+	return &Module{UseCases: uc, identity: identity, documentTypes: types, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
 
 func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
@@ -127,3 +133,14 @@ func ids[T ~[16]byte](in []uuid.UUID) []T {
 
 // Migrate สร้างตารางของ organization
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+
+// RegisterDocumentTypes ลงทะเบียนชนิดเอกสารของ module อื่น (เรียกตอนเริ่มโปรแกรม) — key ซ้ำ = panic
+func (m *Module) RegisterDocumentTypes(types ...integration.DocumentType) {
+	m.documentTypes.Register(types...)
+}
+
+// DocumentFormat คืนรูปแบบเลขที่ของชนิดเอกสาร (ไม่ได้ตั้ง = prefix เริ่มต้น + numbering.DefaultTemplate)
+// module เจ้าของเอกสารออกเลขเอง: format.PeriodKey -> ลำดับถัดไปของตัวเอง -> format.Render
+func (m *Module) DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error) {
+	return m.UseCases.Numbering.Format(ctx, vo.CompanyID(companyID), docType)
+}

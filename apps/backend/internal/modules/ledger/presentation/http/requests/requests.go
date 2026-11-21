@@ -151,10 +151,12 @@ func (r Account) ToData(isCreate bool) (entities.AccountData, error) {
 
 // ---------- journal ----------
 
+// Journal: number_template ไม่ส่ง = "{prefix}{fy}-{seq:6}" (prefix = code) — ดูตัวแปรที่ platform/numbering
 type Journal struct {
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	NumberTemplate string `json:"number_template"`
+	Status         string `json:"status"`
 }
 
 func (r Journal) ToData(isCreate bool) (entities.JournalData, error) {
@@ -165,7 +167,7 @@ func (r Journal) ToData(isCreate bool) (entities.JournalData, error) {
 	if err != nil {
 		return entities.JournalData{}, err
 	}
-	return entities.JournalData{Code: r.Code, Name: r.Name, Status: st}, nil
+	return entities.JournalData{Code: r.Code, Name: r.Name, NumberTemplate: r.NumberTemplate, Status: st}, nil
 }
 
 // ---------- journal entry ----------

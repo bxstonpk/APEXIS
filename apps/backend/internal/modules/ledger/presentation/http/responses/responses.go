@@ -48,14 +48,15 @@ func FromAccount(a dto.Account) Account {
 }
 
 type Journal struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
+	ID             string `json:"id"`
+	Code           string `json:"code"`
+	Name           string `json:"name"`
+	NumberTemplate string `json:"number_template"`
+	Status         string `json:"status"`
 }
 
 func FromJournal(j dto.Journal) Journal {
-	return Journal{ID: j.ID, Code: j.Code, Name: j.Name, Status: j.Status}
+	return Journal{ID: j.ID, Code: j.Code, Name: j.Name, NumberTemplate: j.NumberTemplate, Status: j.Status}
 }
 
 // ---------- journal entry ----------

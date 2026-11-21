@@ -97,11 +97,11 @@ func setup(t *testing.T) api {
 	}
 	for _, tbl := range []string{
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
-		"ledger_journal_lines", "ledger_journal_entries", "ledger_journal_sequences", "ledger_journals", "ledger_accounts",
-		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_document_lines",
+		"ledger_journal_lines", "ledger_journal_entries", "ledger_journal_sequences", "ledger_number_sequences", "ledger_journals", "ledger_accounts",
+		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_number_sequences", "inventory_document_lines",
 		"inventory_documents", "inventory_items", "inventory_warehouses", "inventory_item_categories", "inventory_uoms",
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
-		"organization_departments", "organization_business_units", "organization_branches", "organization_companies",
+		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings", "organization_companies",
 		"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_users",
 	} {
 		if err := db.Exec("DROP TABLE IF EXISTS " + tbl + " CASCADE").Error; err != nil {

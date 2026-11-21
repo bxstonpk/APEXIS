@@ -2,6 +2,8 @@ package usecases
 
 import (
 	"context"
+
+	"apexis/backend/internal/platform/numbering"
 	"fmt"
 	"strings"
 	"time"
@@ -182,12 +184,14 @@ func (uc *EntryUseCases) post(ctx context.Context, a dto.Actor, e *entities.Entr
 	if !period.Open {
 		return domain.ErrPeriodClosed
 	}
-	n, err := uc.journals.NextNumber(ctx, a.CompanyID, d.JournalID, period.FiscalYear)
+	format := journal.NumberFormat()
+	nc := numbering.Context{Date: d.Date, FiscalYear: period.FiscalYear}
+	n, err := uc.journals.NextNumber(ctx, a.CompanyID, d.JournalID, format.PeriodKey(nc))
 	if err != nil {
 		return err
 	}
 	return e.Post(entities.Posting{
-		EntryNo:  fmt.Sprintf("%s%d-%06d", journal.Data().Code, period.FiscalYear, n),
+		EntryNo:  format.Render(nc, n),
 		PeriodID: period.ID, By: a.UserID, At: uc.now(),
 	})
 }

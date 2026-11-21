@@ -139,6 +139,8 @@ type Settings struct {
 	APAccountID            *string  `json:"ap_account_id"`
 	InputVatAccountID      *string  `json:"input_vat_account_id"`
 	PriceVarianceAccountID *string  `json:"price_variance_account_id"`
+	WhtPnd3AccountID       *string  `json:"wht_pnd3_account_id"`
+	WhtPnd53AccountID      *string  `json:"wht_pnd53_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -159,6 +161,8 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 		{"ap_account_id", r.APAccountID, &out.APAccountID},
 		{"input_vat_account_id", r.InputVatAccountID, &out.InputVatAccountID},
 		{"price_variance_account_id", r.PriceVarianceAccountID, &out.PriceVarianceAccountID},
+		{"wht_pnd3_account_id", r.WhtPnd3AccountID, &out.WhtPnd3AccountID},
+		{"wht_pnd53_account_id", r.WhtPnd53AccountID, &out.WhtPnd53AccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -176,11 +180,12 @@ type Supplier struct {
 	Address         string `json:"address"`
 	PaymentTermDays int    `json:"payment_term_days"`
 	VatRegistered   *bool  `json:"vat_registered"`
+	TaxType         string `json:"tax_type"` // individual (ภ.ง.ด.3) / juristic (ภ.ง.ด.53)
 	Status          string `json:"status"`
 }
 
 func (r Supplier) ToData(isCreate bool) (entities.SupplierData, error) {
-	if err := required(map[string]string{"code": r.Code, "name": r.Name}); err != nil {
+	if err := required(map[string]string{"code": r.Code, "name": r.Name, "tax_type": r.TaxType}); err != nil {
 		return entities.SupplierData{}, err
 	}
 	if r.VatRegistered == nil {
@@ -192,7 +197,7 @@ func (r Supplier) ToData(isCreate bool) (entities.SupplierData, error) {
 	}
 	return entities.SupplierData{
 		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address,
-		PaymentTermDays: r.PaymentTermDays, VatRegistered: *r.VatRegistered, Status: st,
+		PaymentTermDays: r.PaymentTermDays, VatRegistered: *r.VatRegistered, TaxType: vo.TaxType(r.TaxType), Status: st,
 	}, nil
 }
 
@@ -363,4 +368,101 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 		OrderID: order, SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: invDate, Date: d,
 		Description: r.Description, Lines: lines,
 	}, nil
+}
+
+// ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่ายชำระ ----------
+
+// WhtType: POST / PUT /withholding-tax-types — rate เป็น % เช่น "3"
+type WhtType struct {
+	Code   string   `json:"code"`
+	Name   string   `json:"name"`
+	Rate   *Decimal `json:"rate"`
+	Status string   `json:"status"`
+}
+
+func (r WhtType) ToData(isCreate bool) (entities.WhtTypeData, error) {
+	if err := required(map[string]string{"code": r.Code, "name": r.Name}); err != nil {
+		return entities.WhtTypeData{}, err
+	}
+	rate, err := r.Rate.required("rate")
+	if err != nil {
+		return entities.WhtTypeData{}, err
+	}
+	st, err := status(r.Status, isCreate)
+	if err != nil {
+		return entities.WhtTypeData{}, err
+	}
+	return entities.WhtTypeData{Code: r.Code, Name: r.Name, Rate: rate, Status: st}, nil
+}
+
+type PaymentLine struct {
+	InvoiceID string   `json:"invoice_id"`
+	Amount    *Decimal `json:"amount"`      // ยอดตัดหนี้ (รวม VAT)
+	WhtTypeID *string  `json:"wht_type_id"` // ไม่ส่ง = ไม่หักภาษี
+}
+
+type PaymentMethod struct {
+	CashAccountID string   `json:"cash_account_id"`
+	Amount        *Decimal `json:"amount"`
+	Reference     string   `json:"reference"` // เลขเช็ค / เลขอ้างอิงการโอน
+}
+
+// Payment: POST /supplier-payments
+type Payment struct {
+	SupplierID  string          `json:"supplier_id"`
+	Date        string          `json:"date"`
+	Description string          `json:"description"`
+	Lines       []PaymentLine   `json:"lines"`
+	Methods     []PaymentMethod `json:"methods"`
+}
+
+func (r Payment) ToInput() (dto.PaymentInput, error) {
+	if err := required(map[string]string{"supplier_id": r.SupplierID, "date": r.Date}); err != nil {
+		return dto.PaymentInput{}, err
+	}
+	supplier, err := id[vo.SupplierID]("supplier_id", r.SupplierID)
+	if err != nil {
+		return dto.PaymentInput{}, err
+	}
+	d, err := date("date", r.Date)
+	if err != nil {
+		return dto.PaymentInput{}, err
+	}
+	out := dto.PaymentInput{SupplierID: supplier, Date: d, Description: r.Description,
+		Lines: make([]dto.PaymentLineInput, len(r.Lines)), Methods: make([]dto.PaymentMethodInput, len(r.Methods))}
+	for i, l := range r.Lines {
+		n := i + 1
+		if l.InvoiceID == "" {
+			return dto.PaymentInput{}, invalid("lines[%d].invoice_id is required", n)
+		}
+		inv, err := id[vo.InvoiceID](fmt.Sprintf("lines[%d].invoice_id", n), l.InvoiceID)
+		if err != nil {
+			return dto.PaymentInput{}, err
+		}
+		amount, err := l.Amount.required(fmt.Sprintf("lines[%d].amount", n))
+		if err != nil {
+			return dto.PaymentInput{}, err
+		}
+		wht, err := optionalID[vo.WhtTypeID](fmt.Sprintf("lines[%d].wht_type_id", n), l.WhtTypeID)
+		if err != nil {
+			return dto.PaymentInput{}, err
+		}
+		out.Lines[i] = dto.PaymentLineInput{InvoiceID: inv, Amount: amount, WhtTypeID: wht}
+	}
+	for i, m := range r.Methods {
+		n := i + 1
+		if m.CashAccountID == "" {
+			return dto.PaymentInput{}, invalid("methods[%d].cash_account_id is required", n)
+		}
+		acc, err := id[vo.CashAccountID](fmt.Sprintf("methods[%d].cash_account_id", n), m.CashAccountID)
+		if err != nil {
+			return dto.PaymentInput{}, err
+		}
+		amount, err := m.Amount.required(fmt.Sprintf("methods[%d].amount", n))
+		if err != nil {
+			return dto.PaymentInput{}, err
+		}
+		out.Methods[i] = dto.PaymentMethodInput{CashAccountID: acc, Amount: amount, Reference: m.Reference}
+	}
+	return out, nil
 }

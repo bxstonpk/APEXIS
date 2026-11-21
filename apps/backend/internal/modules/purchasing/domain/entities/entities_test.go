@@ -22,7 +22,7 @@ var (
 
 func supplier(t *testing.T, vat bool) *Supplier {
 	t.Helper()
-	s, err := NewSupplier(company, SupplierData{Code: "s1", Name: "ผู้ขาย", TaxID: "0105551234567", PaymentTermDays: 30, VatRegistered: vat, Status: vo.StatusActive})
+	s, err := NewSupplier(company, SupplierData{Code: "s1", Name: "ผู้ขาย", TaxID: "0105551234567", PaymentTermDays: 30, VatRegistered: vat, TaxType: vo.TaxJuristic, Status: vo.StatusActive})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,4 +129,69 @@ func TestInvoiceJournalBalances(t *testing.T) {
 	}
 	eq(t, "debit", debit, "117.7")
 	eq(t, "credit", credit, "117.7")
+}
+
+func TestWithholdingOnPreVatAmount(t *testing.T) {
+	// ใบแจ้งหนี้ 1,000 + VAT 70 = 1,070; จ่ายครบ หัก 3% ของ 1,000 = 30
+	base, tax := services.Withholding(d("1070"), d("1000"), d("1070"), d("3"), 2)
+	eq(t, "full base", base, "1000")
+	eq(t, "full tax", tax, "30")
+	// จ่ายครึ่งหนึ่ง 535 -> ฐาน 500, หัก 15
+	base, tax = services.Withholding(d("535"), d("1000"), d("1070"), d("3"), 2)
+	eq(t, "half base", base, "500")
+	eq(t, "half tax", tax, "15")
+}
+
+func TestPaymentRulesAndJournalOneLinePerAccount(t *testing.T) {
+	inv1, inv2 := vo.NewID[vo.InvoiceID](), vo.NewID[vo.InvoiceID]()
+	cash, bank1, bank2 := vo.NewID[vo.CashAccountID](), vo.NewID[vo.CashAccountID](), vo.NewID[vo.CashAccountID]()
+	ap, wht, cashGL, bankGL := vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID]()
+	lines := []PaymentLine{
+		{InvoiceID: inv1, Amount: d("6000"), Wht: d("100")},
+		{InvoiceID: inv2, Amount: d("4100"), Wht: d("0")},
+	}
+	state := func(methods ...PaymentMethod) PaymentState {
+		return PaymentState{CompanyID: company, Date: day, TaxType: vo.TaxJuristic, Lines: lines, Methods: methods}
+	}
+	// ยอดช่องทางจ่ายต้องเท่ากับ 10,100 - 100 = 10,000
+	if _, err := NewPayment(state(PaymentMethod{CashAccountID: cash, GLAccountID: cashGL, Amount: d("10100")})); !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("methods not matching net: %v", err)
+	}
+	// เงินสด 2,000 + ธนาคาร 2 บัญชีที่ผูกผังบัญชีเดียวกัน 3,000 + 5,000 -> บรรทัดธนาคารเหลือ 1 บรรทัด
+	p, err := NewPayment(state(
+		PaymentMethod{CashAccountID: cash, GLAccountID: cashGL, Amount: d("2000")},
+		PaymentMethod{CashAccountID: bank1, GLAccountID: bankGL, Amount: d("3000"), Reference: "CHQ-001"},
+		PaymentMethod{CashAccountID: bank2, GLAccountID: bankGL, Amount: d("5000")},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := p.Journal(ap, wht)
+	if len(j) != 4 || j[0].AccountID != ap || !j[0].Debit.Equal(d("10100")) || j[2].AccountID != bankGL || !j[2].Credit.Equal(d("8000")) ||
+		j[3].AccountID != wht || !j[3].Credit.Equal(d("100")) {
+		t.Fatalf("journal = %+v", j)
+	}
+	dup := lines
+	lines = []PaymentLine{dup[0], dup[0]}
+	if _, err := NewPayment(state(PaymentMethod{CashAccountID: cash, GLAccountID: cashGL, Amount: d("11900")})); !errors.Is(err, domain.ErrInvalidPayment) {
+		t.Fatalf("duplicate invoice: %v", err)
+	}
+}
+
+func TestInvoicePayRules(t *testing.T) {
+	sup := vo.NewID[vo.SupplierID]()
+	inv, _ := NewInvoice(InvoiceState{SupplierID: sup, SupplierInvoiceNo: "X", InvoiceDate: day, Date: day,
+		Lines: []InvoiceLine{{Amounts: services.Amounts{Net: d("100"), Vat: d("7"), Gross: d("107")}}}}, 0)
+	if err := inv.Pay(vo.NewID[vo.SupplierID](), d("1")); !errors.Is(err, domain.ErrInvoiceNotPayable) {
+		t.Fatalf("other supplier: %v", err)
+	}
+	if err := inv.Pay(sup, d("107.01")); !errors.Is(err, domain.ErrOverPayment) {
+		t.Fatalf("over payment: %v", err)
+	}
+	if err := inv.Pay(sup, d("50")); err != nil || !inv.Outstanding().Equal(d("57")) {
+		t.Fatalf("partial payment: %v %s", err, inv.Outstanding())
+	}
+	if err := inv.Cancel(user, day); !errors.Is(err, domain.ErrInvoicePaid) {
+		t.Fatalf("cancel paid invoice: %v", err)
+	}
 }

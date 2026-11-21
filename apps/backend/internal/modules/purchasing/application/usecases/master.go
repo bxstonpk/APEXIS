@@ -62,6 +62,7 @@ func settingsDTO(s entities.Settings) dto.Settings {
 		VatRate: s.VatRate, JournalID: optString(s.JournalID), GRIRAccountID: optString(s.GRIRAccountID),
 		APAccountID: optString(s.APAccountID), InputVatAccountID: optString(s.InputVatAccountID),
 		PriceVarianceAccountID: optString(s.PriceVarianceAccountID),
+		WhtPnd3AccountID:       optString(s.WhtPnd3AccountID), WhtPnd53AccountID: optString(s.WhtPnd53AccountID),
 	}
 }
 

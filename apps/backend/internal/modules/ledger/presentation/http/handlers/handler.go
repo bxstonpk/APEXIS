@@ -36,6 +36,8 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: requests.ErrValidation, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidID, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidCode, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidNumbering, Status: http.StatusBadRequest},
+	{Err: domain.ErrEntryNoUsed, Status: http.StatusConflict},
 	{Err: domain.ErrInvalidName, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidText, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidStatus, Status: http.StatusBadRequest},
@@ -69,7 +71,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrNoFiscalPeriod, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrRangeCrossesYear, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodClosed, Status: http.StatusUnprocessableEntity},
-}, requests.ErrValidation, domain.ErrInvalidAmount, domain.ErrInvalidLine,
+}, requests.ErrValidation, domain.ErrInvalidNumbering, domain.ErrInvalidAmount, domain.ErrInvalidLine,
 	domain.ErrAccountNotFound, domain.ErrDimensionNotFound, domain.ErrAccountNotPostable)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response

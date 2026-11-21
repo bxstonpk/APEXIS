@@ -154,7 +154,7 @@ func ParseDocumentType(raw string) (DocumentType, error) {
 	return parseEnum(raw, DocumentTypes, domain.ErrInvalidDocType)
 }
 
-// Prefix นำหน้าเลขที่เอกสาร เช่น GR2026-000001
+// Prefix คือ prefix เริ่มต้นของเลขที่เอกสาร (บริษัทเปลี่ยนได้ที่ organization) เช่น GR2026-000001
 func (t DocumentType) Prefix() string {
 	switch t {
 	case DocReceipt:
@@ -165,6 +165,23 @@ func (t DocumentType) Prefix() string {
 		return "TR"
 	default:
 		return "AJ"
+	}
+}
+
+// NumberingKey คือชนิดเอกสารที่ลงทะเบียนกับ organization เพื่อตั้งรูปแบบเลขที่ เช่น "inventory.receipt"
+func (t DocumentType) NumberingKey() string { return "inventory." + string(t) }
+
+// Name คือชื่อชนิดเอกสาร (แสดงในหน้าตั้งรูปแบบเลขที่)
+func (t DocumentType) Name() string {
+	switch t {
+	case DocReceipt:
+		return "ใบรับเข้าสินค้า"
+	case DocIssue:
+		return "ใบเบิกสินค้า"
+	case DocTransfer:
+		return "ใบโอนสินค้า"
+	default:
+		return "ใบปรับปรุงสินค้า"
 	}
 }
 

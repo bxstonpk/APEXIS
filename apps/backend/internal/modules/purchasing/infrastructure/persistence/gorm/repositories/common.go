@@ -69,15 +69,15 @@ type SequenceRepository struct{}
 func NewSequenceRepository() *SequenceRepository { return &SequenceRepository{} }
 
 // NextNumber — statement เดียว: INSERT ... ON CONFLICT DO UPDATE ... RETURNING (lock แถวลำดับจน commit)
-func (SequenceRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, prefix string, fiscalYear int) (int64, error) {
+func (SequenceRepository) NextNumber(ctx context.Context, companyID vo.CompanyID, docType vo.DocType, periodKey string) (int64, error) {
 	tx, err := database.TxConn(ctx)
 	if err != nil {
 		return 0, err
 	}
 	var n int64
 	err = tx.Raw(`
-		INSERT INTO purchasing_sequences (company_id, prefix, fiscal_year, last_no) VALUES (?, ?, ?, 1)
-		ON CONFLICT (company_id, prefix, fiscal_year) DO UPDATE SET last_no = purchasing_sequences.last_no + 1
-		RETURNING last_no`, uuidOf(companyID), prefix, fiscalYear).Scan(&n).Error
+		INSERT INTO purchasing_number_sequences (company_id, doc_type, period_key, last_no) VALUES (?, ?, ?, 1)
+		ON CONFLICT (company_id, doc_type, period_key) DO UPDATE SET last_no = purchasing_number_sequences.last_no + 1
+		RETURNING last_no`, uuidOf(companyID), string(docType), periodKey).Scan(&n).Error
 	return n, err
 }

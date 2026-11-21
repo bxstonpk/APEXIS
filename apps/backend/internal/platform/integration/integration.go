@@ -80,3 +80,26 @@ type Receipt struct {
 	DocumentNo string
 	LineValues []decimal.Decimal
 }
+
+// ---------- เลขที่เอกสาร ----------
+
+// DocumentType คือชนิดเอกสารที่ module ลงทะเบียนกับ organization เพื่อให้บริษัทตั้งรูปแบบเลขที่ได้
+//
+//	Key: "<module>.<ชนิด>" เช่น "purchasing.payment" — ไม่เปลี่ยนหลังใช้งานจริง
+type DocumentType struct {
+	Key           string
+	Name          string
+	DefaultPrefix string
+}
+
+// ---------- cashbank ----------
+
+// CashAccount คือทะเบียนเงินสด / บัญชีธนาคาร พร้อมบัญชีแยกประเภทที่ผูกไว้
+type CashAccount struct {
+	ID          uuid.UUID
+	Code        string
+	Name        string
+	Type        string // cash / bank
+	GLAccountID uuid.UUID
+	Active      bool
+}

@@ -174,15 +174,16 @@ type AllocationModel struct {
 
 func (AllocationModel) TableName() string { return "inventory_allocations" }
 
-// SequenceModel: เลขที่ล่าสุดของชนิดเอกสาร + ปีบัญชี (INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
+// SequenceModel: เลขลำดับล่าสุดของชนิดเอกสาร + คีย์ช่วงนับของรูปแบบเลขที่ (เช่น F2026, Y2026M02)
+// (INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
 type SequenceModel struct {
-	CompanyID  uuid.UUID `gorm:"type:uuid;primaryKey"`
-	DocType    string    `gorm:"size:20;primaryKey"`
-	FiscalYear int       `gorm:"primaryKey"`
-	LastNo     int64     `gorm:"not null"`
+	CompanyID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	DocType   string    `gorm:"size:20;primaryKey"`
+	PeriodKey string    `gorm:"size:20;primaryKey"`
+	LastNo    int64     `gorm:"not null"`
 }
 
-func (SequenceModel) TableName() string { return "inventory_sequences" }
+func (SequenceModel) TableName() string { return "inventory_number_sequences" }
 
 // SettingsModel คือค่าตั้งบัญชีสินค้าของบริษัท (1 แถวต่อบริษัท) — แถวนี้ใช้ lock การเปลี่ยนระบบบัญชีด้วย
 type SettingsModel struct {
@@ -234,6 +235,17 @@ func AutoMigrate(db *gorm.DB) error {
 		&SettingsModel{}, &SystemModel{}, &ClosingModel{},
 	); err != nil {
 		return err
+	}
+	// ลำดับเลขแบบเดิม (ต่อปีบัญชี) -> คีย์ช่วงนับของรูปแบบเริ่มต้น "F<ปีบัญชี>"
+	if db.Migrator().HasTable("inventory_sequences") {
+		if err := db.Exec(`INSERT INTO inventory_number_sequences (company_id, doc_type, period_key, last_no)
+			SELECT company_id, doc_type, 'F' || fiscal_year, last_no FROM inventory_sequences
+			ON CONFLICT DO NOTHING`).Error; err != nil {
+			return err
+		}
+		if err := db.Migrator().DropTable("inventory_sequences"); err != nil {
+			return err
+		}
 	}
 	// เอกสารที่ผ่านก่อนมีคอลัมน์ fiscal_year: ปีอยู่ในเลขที่เอกสาร (เช่น GR2026-000001)
 	return db.Exec(`UPDATE inventory_documents SET fiscal_year = substring(document_no from '([0-9]{4})-[0-9]+$')::int

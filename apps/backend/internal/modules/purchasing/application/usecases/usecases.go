@@ -9,7 +9,9 @@ package usecases
 
 import (
 	"context"
+
 	"fmt"
+	"github.com/shopspring/decimal"
 	"time"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
@@ -17,6 +19,8 @@ import (
 	"apexis/backend/internal/modules/purchasing/application/ports/repositories"
 	domain "apexis/backend/internal/modules/purchasing/domain/errors"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
+	"apexis/backend/internal/platform/numbering"
+	"apexis/backend/internal/platform/numeric"
 )
 
 type Deps struct {
@@ -25,6 +29,7 @@ type Deps struct {
 	Org       ports.Organization
 	Ledger    ports.Ledger
 	Inventory ports.Inventory
+	CashBank  ports.CashBank
 	Settings  repositories.SettingsRepository
 	Suppliers repositories.SupplierRepository
 	Sequence  repositories.Sequence
@@ -32,6 +37,8 @@ type Deps struct {
 	Receipts  repositories.ReceiptRepository
 	Invoices  repositories.InvoiceRepository
 	Reports   repositories.ReportRepository
+	WhtTypes  repositories.WhtTypeRepository
+	Payments  repositories.PaymentRepository
 	Clock     func() time.Time // optional
 }
 
@@ -42,6 +49,8 @@ type UseCases struct {
 	Receipts  *ReceiptUseCases
 	Invoices  *InvoiceUseCases
 	Reports   *ReportUseCases
+	WhtTypes  *WhtTypeUseCases
+	Payments  *PaymentUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -56,6 +65,10 @@ func New(d Deps) *UseCases {
 		Receipts:  &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
 		Invoices:  &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders},
 		Reports:   &ReportUseCases{base: b, reports: d.Reports},
+		WhtTypes:  &WhtTypeUseCases{base: b, repo: d.WhtTypes},
+		Payments: &PaymentUseCases{
+			base: b, payments: d.Payments, invoices: d.Invoices, suppliers: d.Suppliers, whtTypes: d.WhtTypes, cashbank: d.CashBank,
+		},
 	}
 }
 
@@ -114,13 +127,18 @@ func (b base) openPeriod(ctx context.Context, companyID vo.CompanyID, date time.
 	return p, nil
 }
 
-// number ออกเลขที่ถัดไป เช่น PO2026-000001
-func (b base) number(ctx context.Context, companyID vo.CompanyID, prefix string, fiscalYear int) (string, error) {
-	n, err := b.seq.NextNumber(ctx, companyID, prefix, fiscalYear)
+// number ออกเลขที่ถัดไปตามรูปแบบที่บริษัทตั้ง (ค่าเริ่มต้น เช่น PO2026-000001)
+func (b base) number(ctx context.Context, companyID vo.CompanyID, t vo.DocType, date time.Time, fiscalYear int) (string, error) {
+	f, err := b.org.DocumentFormat(ctx, companyID, t)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s%d-%06d", prefix, fiscalYear, n), nil
+	nc := numbering.Context{Date: date, FiscalYear: fiscalYear}
+	n, err := b.seq.NextNumber(ctx, companyID, t, f.PeriodKey(nc))
+	if err != nil {
+		return "", err
+	}
+	return f.Render(nc, n), nil
 }
 
 // items โหลดสินค้าจาก inventory — ทุกตัวต้องมีอยู่ (และ active เมื่อ requireActive)
@@ -164,4 +182,11 @@ func (b base) itemRefs(ctx context.Context, companyID vo.CompanyID, refs []*dto.
 		}
 	}
 	return nil
+}
+
+var zero = decimal.Zero
+
+// numericAmount: ยอดเงิน > 0, อยู่ในช่วง NUMERIC(24,6) และทศนิยมไม่เกินที่บริษัทกำหนด
+func numericAmount(v vo.Money, amountDecimals int) bool {
+	return v.IsPositive() && numeric.InRange(v) && numeric.FitsScale(v, amountDecimals)
 }

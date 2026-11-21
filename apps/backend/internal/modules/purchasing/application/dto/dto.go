@@ -126,6 +126,8 @@ type Ref struct {
 }
 
 type Settings struct {
+	WhtPnd3AccountID       *string
+	WhtPnd53AccountID      *string
 	VatRate                vo.Money
 	JournalID              *string
 	GRIRAccountID          *string
@@ -143,6 +145,7 @@ type Supplier struct {
 	Address         string
 	PaymentTermDays int
 	VatRegistered   bool
+	TaxType         string
 	Status          string
 }
 
@@ -232,6 +235,8 @@ type InvoiceSummary struct {
 	InvoiceDate       time.Time
 	DueDate           time.Time
 	Totals            Totals
+	Paid              vo.Money
+	Outstanding       vo.Money
 }
 
 type InvoiceLine struct {
@@ -280,4 +285,120 @@ type Aging struct {
 	AsOf   time.Time
 	Rows   listing.Result[AgingRow]
 	Totals AgingRow // รวมทุกผู้ขายที่ตรงเงื่อนไข (Supplier ว่าง)
+}
+
+// ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่ายชำระ ----------
+
+// WhtTypeFilter: GET /withholding-tax-types?q=&status=&sort=code|name&page=&page_size=
+type WhtTypeFilter struct {
+	Search   string
+	Statuses []vo.Status
+	Sort     []listing.Sort
+	Page     listing.Page
+}
+
+type WhtType struct {
+	ID     string
+	Code   string
+	Name   string
+	Rate   vo.Money
+	Status string
+}
+
+type PaymentLineInput struct {
+	InvoiceID vo.InvoiceID
+	Amount    vo.Money
+	WhtTypeID *vo.WhtTypeID
+}
+
+type PaymentMethodInput struct {
+	CashAccountID vo.CashAccountID
+	Amount        vo.Money
+	Reference     string
+}
+
+type PaymentInput struct {
+	SupplierID  vo.SupplierID
+	Date        time.Time
+	Description string
+	Lines       []PaymentLineInput
+	Methods     []PaymentMethodInput
+}
+
+type PaymentSummary struct {
+	ID          string
+	DocumentNo  string
+	Date        time.Time
+	Supplier    Ref
+	TaxForm     string // pnd3 / pnd53
+	Amount      vo.Money
+	Wht         vo.Money
+	Paid        vo.Money
+	Status      string
+	EntryID     *string
+	EntryNo     string
+	CancelledAt *time.Time
+}
+
+type PaymentLine struct {
+	Invoice Ref // Code = เลขที่ใบแจ้งหนี้ (PI...), Name = เลขที่ใบแจ้งหนี้ของผู้ขาย
+	Amount  vo.Money
+	WhtType *Ref
+	WhtRate vo.Money
+	WhtBase vo.Money
+	Wht     vo.Money
+}
+
+type PaymentMethod struct {
+	CashAccountID string
+	GLAccountID   string
+	Amount        vo.Money
+	Reference     string
+}
+
+type Payment struct {
+	PaymentSummary
+	Description string
+	CreatedBy   string
+	Lines       []PaymentLine
+	Methods     []PaymentMethod
+}
+
+var (
+	WithholdingSortKeys    = []string{"date", "document_no", "supplier_code"}
+	DefaultWithholdingSort = []listing.Sort{{Key: "date"}, {Key: "document_no"}}
+)
+
+// WithholdingFilter: book=withholding-tax — ภาษีหัก ณ ที่จ่ายตามวันที่จ่าย (start_date / end_date)
+type WithholdingFilter struct {
+	Start, End time.Time
+	Form       string // pnd3 / pnd53 / "" = ทั้งหมด
+	SupplierID *vo.SupplierID
+	Sort       []listing.Sort
+	Page       listing.Page
+}
+
+type WithholdingRow struct {
+	Date       time.Time
+	PaymentID  string
+	DocumentNo string
+	Supplier   Ref
+	TaxID      string
+	BranchNo   string
+	TaxForm    string
+	WhtType    Ref
+	Rate       vo.Money
+	Base       vo.Money
+	Wht        vo.Money
+}
+
+type WithholdingTotals struct {
+	Base vo.Money
+	Wht  vo.Money
+}
+
+type Withholding struct {
+	Start, End time.Time
+	Rows       listing.Result[WithholdingRow]
+	Totals     WithholdingTotals
 }

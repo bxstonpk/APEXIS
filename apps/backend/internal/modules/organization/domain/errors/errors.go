@@ -26,6 +26,7 @@ var (
 	ErrInvalidDateRange   = errors.New("end date must not be before start date")
 	ErrInvalidFiscalYear  = errors.New("invalid fiscal year")
 	ErrInvalidFiscalStart = errors.New("fiscal year must start on the first day of a month")
+	ErrInvalidNumbering   = errors.New("invalid document number format") // detailed
 )
 
 // ไม่พบ (404)
@@ -38,6 +39,7 @@ var (
 	ErrProjectSiteNotFound  = errors.New("project site not found")
 	ErrFiscalYearNotFound   = errors.New("fiscal year not found")
 	ErrFiscalPeriodNotFound = errors.New("fiscal period not found")
+	ErrDocumentTypeNotFound = errors.New("document type not found")
 )
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)

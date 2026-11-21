@@ -106,9 +106,9 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
-		"ledger_journal_sequences", "ledger_journal_lines", "ledger_journal_entries", "ledger_journals", "ledger_accounts",
+		"ledger_journal_sequences", "ledger_number_sequences", "ledger_journal_lines", "ledger_journal_entries", "ledger_journals", "ledger_accounts",
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
-		"organization_departments", "organization_business_units", "organization_branches", "organization_companies",
+		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings", "organization_companies",
 		"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_users",
 	} {
 		if err := db.Exec("DROP TABLE IF EXISTS " + tbl + " CASCADE").Error; err != nil {

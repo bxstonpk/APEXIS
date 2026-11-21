@@ -33,9 +33,10 @@ var (
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
 var (
-	ErrCodeExists    = errors.New("code already exists")
-	ErrInUse         = errors.New("record is referenced by other records")
-	ErrClosingExists = errors.New("inventory of this fiscal period is already closed (cancel the existing closing first)")
+	ErrCodeExists     = errors.New("code already exists")
+	ErrInUse          = errors.New("record is referenced by other records")
+	ErrClosingExists  = errors.New("inventory of this fiscal period is already closed (cancel the existing closing first)")
+	ErrDocumentNoUsed = errors.New("document number is already used (check the document number format)")
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -86,6 +87,7 @@ var all = []error{
 	ErrCodeExists,
 	ErrInUse,
 	ErrClosingExists,
+	ErrDocumentNoUsed,
 	ErrCompanyInactive,
 	ErrItemNotStocked,
 	ErrWarehouseInactive,

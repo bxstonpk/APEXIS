@@ -44,7 +44,8 @@ func (r *SettingsRepository) Save(ctx context.Context, companyID vo.CompanyID, s
 	return database.Conn(ctx, r.db).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "company_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id", "updated_at",
+			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id",
+			"wht_pnd3_account_id", "wht_pnd53_account_id", "updated_at",
 		}),
 	}).Create(&m).Error
 }
@@ -71,7 +72,7 @@ func (r *SupplierRepository) Create(ctx context.Context, s *entities.Supplier) e
 func (r *SupplierRepository) Update(ctx context.Context, s *entities.Supplier) error {
 	m := gp.SupplierToModel(s)
 	res := database.Conn(ctx, r.db).Model(&m).Where("company_id = ?", m.CompanyID).
-		Select("code", "name", "tax_id", "branch_no", "address", "payment_term_days", "vat_registered", "status", "updated_at").
+		Select("code", "name", "tax_id", "branch_no", "address", "payment_term_days", "vat_registered", "tax_type", "status", "updated_at").
 		Updates(&m)
 	if res.Error != nil {
 		if database.IsUniqueViolation(res.Error) {
@@ -122,6 +123,7 @@ type supplierRow struct {
 	Address         string
 	PaymentTermDays int
 	VatRegistered   bool
+	TaxType         string
 	Status          string
 	Total           int64
 }
@@ -129,11 +131,11 @@ type supplierRow struct {
 func (r supplierRow) dto() dto.Supplier {
 	return dto.Supplier{
 		ID: r.ID.String(), Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address,
-		PaymentTermDays: r.PaymentTermDays, VatRegistered: r.VatRegistered, Status: r.Status,
+		PaymentTermDays: r.PaymentTermDays, VatRegistered: r.VatRegistered, TaxType: r.TaxType, Status: r.Status,
 	}
 }
 
-const supplierColumns = "s.id, s.code, s.name, s.tax_id, s.branch_no, s.address, s.payment_term_days, s.vat_registered, s.status"
+const supplierColumns = "s.id, s.code, s.name, s.tax_id, s.branch_no, s.address, s.payment_term_days, s.vat_registered, s.tax_type, s.status"
 
 func (r *SupplierRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
 	return database.Conn(ctx, r.db).Table("purchasing_suppliers AS s").Where("s.company_id = ? AND s.deleted_at IS NULL", uuidOf(companyID))
