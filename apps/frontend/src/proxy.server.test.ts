@@ -31,6 +31,14 @@ describe('proxy', () => {
     expect(res.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=;`)
   })
 
+  it('เปิดหน้าในบริษัท -> จำบริษัทล่าสุดใน cookie', () => {
+    const id = '01a1fcd7-77e8-7ef9-a38e-c7a83f5b437d'
+    const res = proxy(req(`/c/${id}/organization/branches`, valid))
+    expect(res.headers.get('set-cookie')).toContain(`apexis_company=${id}`)
+    expect(res.headers.get('set-cookie')).toContain('HttpOnly')
+    expect(proxy(req('/c/not-a-uuid', valid)).headers.get('set-cookie')).toBeNull()
+  })
+
   it('เข้าสู่ระบบแล้ว / หน้า login -> ผ่าน', () => {
     expect(proxy(req('/', valid)).headers.get('x-middleware-next')).toBe('1')
     expect(proxy(req('/login')).headers.get('x-middleware-next')).toBe('1')

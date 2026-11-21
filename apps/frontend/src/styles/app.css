@@ -32,6 +32,19 @@
   --color-info-soft: #eaf1ff;
   --color-info-line: #c5d6fb;
 
+  --color-success: #1d7a46;
+  --color-success-soft: #e6f4ec;
+  --color-neutral-soft: #eef0f4;
+
+  /* สีไอคอนแอปในหน้ารวมแอป (key ตรงกับ src/config/apps.ts) */
+  --color-app-sales: #d2475f;
+  --color-app-purchasing: #2f6fd1;
+  --color-app-inventory: #d27a1f;
+  --color-app-accounting: #13866a;
+  --color-app-cashbank: #1a8fa6;
+  --color-app-organization: #6a55cf;
+  --color-app-users: #4f5b70;
+
   --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px rgb(16 24 40 / 0.08);
 }
 

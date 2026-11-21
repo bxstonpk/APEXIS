@@ -5,7 +5,8 @@ import { SESSION_COOKIE, decodeSession } from '@/lib/server/session'
 /**
  * ด่านหน้าของทุกหน้า (Next.js proxy — เดิมชื่อ middleware)
  * - ยังไม่เข้าสู่ระบบ / session หมดอายุ -> ไปหน้า login พร้อม ?redirect=<หน้าเดิม รวม URL query>
- * - เข้าสู่ระบบแล้วแต่เปิดหน้า login -> ไปหน้าที่ระบุใน redirect (หน้า login ตรวจซ้ำอีกชั้น)
+ * - เข้าสู่ระบบแล้วแต่เปิดหน้า login -> หน้า login พาไปหน้าที่ระบุใน redirect เอง
+ * - เปิดหน้าในบริษัท (/c/{companyId}/...) -> จำ companyId ไว้ใน cookie
  * ไม่ครอบ /api/* (route handler ตอบ 401 เอง) และไฟล์ static
  */
 export function proxy(request: NextRequest) {
@@ -21,8 +22,24 @@ export function proxy(request: NextRequest) {
     if (request.cookies.has(SESSION_COOKIE)) res.cookies.delete(SESSION_COOKIE) // หมดอายุ / เสีย
     return res
   }
-  return NextResponse.next()
+
+  const res = NextResponse.next()
+  // จำบริษัทที่เปิดล่าสุด (/c/{companyId}/...) — หน้า / ใช้พาเข้าบริษัทนี้ทันทีในครั้งถัดไป
+  const companyId = COMPANY_PATH.exec(pathname)?.[1]
+  if (session && companyId && request.cookies.get(COMPANY_COOKIE)?.value !== companyId) {
+    res.cookies.set(COMPANY_COOKIE, companyId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 365,
+    })
+  }
+  return res
 }
+
+const COMPANY_COOKIE = appConfig.cookies.company
+const COMPANY_PATH = /^\/c\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i
 
 export const config = {
   matcher: ['/((?!api/|_next/|brand/|favicon|apple-touch-icon|robots.txt).*)'],

@@ -1,26 +1,21 @@
-import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { Card } from '@/components'
-import { appConfig, format, texts } from '@/config'
-import { LogoutButton } from '@/features/auth'
-import { AuthLayout } from '@/layouts/AuthLayout'
-import { SESSION_COOKIE, decodeSession } from '@/lib/server/session'
+import { appConfig } from '@/config'
+import { companyPath } from '@/config/apps'
+import { backendGet } from '@/lib/server/backend'
+import { getCompanyContext, type CompanySummary } from '@/lib/server/company'
 
-export const metadata: Metadata = { title: texts.home.pageTitle }
+/**
+ * หน้า / — พาไปที่บริษัทที่ควรเปิด:
+ * 1. บริษัทที่เปิดล่าสุด (cookie) ถ้ายังเป็นสมาชิกอยู่
+ * 2. เป็นสมาชิกบริษัทเดียว → บริษัทนั้น
+ * 3. นอกนั้น → หน้าเลือกบริษัท (รวมกรณียังไม่มีบริษัท: สร้างได้จากหน้านั้น)
+ */
+export default async function RootPage() {
+  const last = (await cookies()).get(appConfig.cookies.company)?.value
+  if (last && (await getCompanyContext(last))) redirect(companyPath(last))
 
-/** หน้าหลักชั่วคราวหลังเข้าสู่ระบบ — จะถูกแทนด้วยโครงหน้าระบบ (เมนู / เลือกบริษัท) ในขั้นถัดไป */
-export default async function HomePage() {
-  // proxy.ts กันหน้านี้แล้ว — ตรวจซ้ำเผื่อ cookie หมดอายุระหว่างทาง
-  const session = decodeSession((await cookies()).get(SESSION_COOKIE)?.value)
-  if (!session) redirect(appConfig.routes.login)
-  const { user } = session
-
-  return (
-    <AuthLayout>
-      <Card title={format(texts.home.welcome, { name: user.name })} description={format(texts.home.description, { email: user.email })}>
-        <LogoutButton />
-      </Card>
-    </AuthLayout>
-  )
+  const { data, meta } = await backendGet<CompanySummary[]>('/me/companies', new URLSearchParams({ page_size: '2' }))
+  if (meta?.total === 1 && data[0]) redirect(companyPath(data[0].id))
+  redirect(appConfig.routes.companies)
 }

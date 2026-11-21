@@ -18,6 +18,10 @@ export const appConfig = {
   routes: {
     home: '/',
     login: '/login',
+    /** route handler ที่ลบ cookie แล้วพาไปหน้า login (ใช้เมื่อ backend ตอบ 401 ระหว่าง render ฝั่ง server) */
+    sessionExpired: '/api/session/expired',
+    companies: '/companies',
+    newCompany: '/companies/new',
   },
 
   /** ชื่อ query parameter ที่ใช้พากลับไปหน้าเดิมหลังเข้าสู่ระบบ เช่น /login?redirect=/ledger/reports */
@@ -26,5 +30,10 @@ export const appConfig = {
   /** cookie เก็บ session (HttpOnly — JavaScript ฝั่ง browser อ่านไม่ได้) */
   cookies: {
     session: 'apexis_session',
+    /** บริษัทที่เปิดล่าสุด — เปิดเว็บครั้งถัดไปเข้าบริษัทนี้ทันที */
+    company: 'apexis_company',
   },
+
+  /** ขนาดหน้าเริ่มต้นของหน้ารายการ (backend: ค่าเริ่มต้น 20 สูงสุด 100) */
+  pageSize: 20,
 } as const
