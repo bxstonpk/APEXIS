@@ -176,7 +176,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
 | GET | `/accounts/tree` | `ledger.account:read` | ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส ไม่แบ่งหน้า — 1 คิวรี; หน้าผังบัญชีสร้างต้นไม้จาก `parent` (ผังบัญชีมีหลักร้อยบัญชี จึงส่งทั้งชุด) |
-| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐาน 245 บัญชี + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
+| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐาน 262 บัญชี (245 ตามต้นฉบับ + สินค้าคงเหลือ / ต้นทุนขาย / รายได้จากการขาย ตาม TAS 2) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
 
 | Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
 |---|---|---|---|---|
