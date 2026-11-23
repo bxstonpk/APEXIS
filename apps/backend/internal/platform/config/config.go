@@ -18,6 +18,8 @@ type Config struct {
 	JWTSecret string
 	JWTTTL    time.Duration
 	JWTIssuer string
+	// VatRegistryURL คือ endpoint ค้นหาผู้จด VAT ของกรมสรรพากร (ว่าง = ค่าเริ่มต้นในโค้ด)
+	VatRegistryURL string
 	// InitialAdmin คือผู้ใช้ที่สร้างตอนเริ่มโปรแกรมถ้ายังไม่มี (ว่างทั้งคู่ = ไม่ seed)
 	InitialAdmin InitialAdmin
 }
@@ -43,9 +45,10 @@ func Load() (Config, error) {
 			Name:       env("DATABASE_NAME", ""),
 			SSLMode:    env("DATABASE_SSLMODE", "disable"),
 		},
-		JWTSecret: env("JWT_SECRET", ""),
-		JWTTTL:    ttl,
-		JWTIssuer: env("JWT_ISSUER", "erp-api"),
+		JWTSecret:      env("JWT_SECRET", ""),
+		JWTTTL:         ttl,
+		JWTIssuer:      env("JWT_ISSUER", "erp-api"),
+		VatRegistryURL: env("VAT_REGISTRY_URL", ""),
 		InitialAdmin: InitialAdmin{
 			Email:    strings.TrimSpace(env("INITIAL_ADMIN_USERNAME", "")),
 			Password: env("INITIAL_ADMIN_PASSWORD", ""),
