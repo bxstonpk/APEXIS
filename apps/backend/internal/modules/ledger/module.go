@@ -145,8 +145,13 @@ func (m *Module) JournalUsable(ctx context.Context, companyID, journalID uuid.UU
 	return m.UseCases.Journals.JournalUsable(ctx, vo.CompanyID(companyID), vo.JournalID(journalID))
 }
 
-// Migrate สร้างตารางของ ledger
-func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+// Migrate สร้างตารางของ ledger แล้วเติมบัญชีมาตรฐานที่เพิ่มภายหลังให้บริษัทเดิม
+func Migrate(db *gorm.DB) error {
+	if err := models.AutoMigrate(db); err != nil {
+		return err
+	}
+	return gp.TopUpDefaultChart(db)
+}
 
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {

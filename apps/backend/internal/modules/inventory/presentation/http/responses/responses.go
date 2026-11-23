@@ -263,7 +263,7 @@ type Settings struct {
 	DefaultInventoryAccountID *string         `json:"default_inventory_account_id"`
 	CogsAccountID             *string         `json:"cogs_account_id"`
 	JournalID                 *string         `json:"journal_id"`
-	AccountingSystems         []SystemSetting `json:"accounting_systems"` // ปีที่ไม่ได้ตั้ง = perpetual
+	AccountingSystems         []SystemSetting `json:"accounting_systems"` // ปีที่ไม่ได้ตั้ง = periodic
 }
 
 func FromSettings(s dto.Settings) Settings {

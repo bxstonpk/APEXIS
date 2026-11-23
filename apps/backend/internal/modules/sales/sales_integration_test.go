@@ -153,6 +153,7 @@ func TestSalesFlow(t *testing.T) {
 	itemA := a.expect(a.do("POST", base+"/items", owner, obj{"code": "A", "name": "สินค้า A", "uom_id": pcs, "category_id": fg}), 201, "item A").id()
 	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ติดตั้ง", "type": "service", "uom_id": pcs, "revenue_account_id": acc["4110"]}), 201, "service").id()
 	wh := a.expect(a.do("POST", base+"/warehouses", owner, obj{"code": "WH", "name": "คลัง"}), 201, "warehouse").id()
+	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "perpetual"}), 200, "perpetual 2026 (default = periodic)")
 	a.expect(a.do("POST", base+"/stock-documents", owner, obj{"type": "receipt", "date": "2026-03-01", "warehouse_id": wh, "status": "posted",
 		"lines": []obj{{"item_id": itemA, "quantity": "10", "unit_cost": "60"}}}), 201, "opening stock")
 

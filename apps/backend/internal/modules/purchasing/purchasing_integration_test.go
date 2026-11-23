@@ -166,6 +166,7 @@ func TestPurchasingFlow(t *testing.T) {
 	itemA := a.expect(a.do("POST", base+"/items", owner, obj{"code": "A", "name": "สินค้า A", "uom_id": pcs, "category_id": raw}), 201, "item A").id()
 	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าขนส่ง", "type": "service", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
 	wh := a.expect(a.do("POST", base+"/warehouses", owner, obj{"code": "WH", "name": "คลัง"}), 201, "warehouse").id()
+	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "perpetual"}), 200, "perpetual 2026 (default = periodic)")
 
 	// ---------- ค่าตั้งจัดซื้อ ----------
 	if s := a.expect(a.do("GET", base+"/purchasing-settings", owner, nil), 200, "default settings").data(); s["vat_rate"] != "7" {

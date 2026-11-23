@@ -3,6 +3,8 @@ package ledger_test
 import (
 	"slices"
 	"testing"
+
+	"apexis/backend/internal/modules/ledger"
 )
 
 // ผังบัญชีมาตรฐาน: สร้างได้ครั้งเดียวเมื่อยังไม่มีบัญชี, ต้นไม้เรียงตามรหัส, บัญชีพักไม่เข้างบกำไรขาดทุน
@@ -17,14 +19,14 @@ func TestDefaultChart(t *testing.T) {
 	a.expect(a.do("POST", base+"/journals", owner, obj{"code": "GEN", "name": "สมุดของฉัน"}), 201, "existing GEN")
 
 	res := a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 201, "create defaults").data()
-	if res["accounts"] != float64(245) || res["journals"] != float64(2) {
+	if res["accounts"] != float64(262) || res["journals"] != float64(2) {
 		t.Fatalf("defaults = %v", res)
 	}
 	a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 409, "defaults twice")
 
 	tree := a.expect(a.do("GET", base+"/accounts/tree", owner, nil), 200, "tree").list()
 	codes := field(tree, "code")
-	if len(tree) != 245 || !slices.IsSorted(codes) || codes[0] != "1000000000" {
+	if len(tree) != 262 || !slices.IsSorted(codes) || codes[0] != "1000000000" {
 		t.Fatalf("tree: %d accounts, first %v, sorted %v", len(tree), codes[0], slices.IsSorted(codes))
 	}
 	byCode := map[string]obj{}
@@ -91,5 +93,55 @@ func TestDefaultChart(t *testing.T) {
 	a.expect(a.do("POST", "/api/v1/companies/"+other+"/accounts/defaults", owner, nil), 409, "defaults on existing chart")
 	if d := a.expect(a.do("GET", "/api/v1/companies/"+other+"/accounts/tree", owner, nil), 200, "tree B").list(); len(d) != 1 || d[0]["description"] != "หมวดสินทรัพย์" {
 		t.Fatalf("tree B = %v", d)
+	}
+}
+
+// บริษัทที่สร้างผังมาตรฐานก่อนเพิ่มบัญชีสินค้าคงเหลือ / ต้นทุนขาย ได้รับบัญชีใหม่ตอน migrate — ครั้งเดียว ไม่ทับบัญชีที่ลบเอง
+func TestDefaultChartTopUp(t *testing.T) {
+	a := setup(t)
+	owner := a.user("owner@example.com")
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	base := "/api/v1/companies/" + company
+	a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 201, "create defaults")
+	count := func() int {
+		t.Helper()
+		return len(a.expect(a.do("GET", base+"/accounts/tree", owner, nil), 200, "tree").list())
+	}
+	// จำลองผังรุ่นเดิม (245 บัญชี): ลบรหัสชุดใหม่ออกจริง ลูกก่อนพ่อ
+	newer := "code ~ '^(110505|110506|110507|110508|110509|110504|2102030|405|505)'"
+	if err := a.db.Exec("DELETE FROM ledger_accounts WHERE " + newer + " AND postable").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := a.db.Exec("DELETE FROM ledger_accounts WHERE " + newer).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 245 {
+		t.Fatalf("old chart = %d", n)
+	}
+	if err := ledger.Migrate(a.db); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 262 {
+		t.Fatalf("after top-up = %d", n)
+	}
+	tree := a.expect(a.do("GET", base+"/accounts/tree", owner, nil), 200, "tree").list()
+	for _, acc := range tree {
+		if acc["code"] == "5052000000" && (acc["parent"].(obj)["code"] != "5050000000" || acc["type"] != "expense" || acc["postable"] != true) {
+			t.Fatalf("5052000000 = %v", acc)
+		}
+	}
+	// ผู้ใช้ลบบัญชีใหม่ทิ้ง -> migrate รอบถัดไปไม่สร้างกลับ
+	var id string
+	for _, acc := range tree {
+		if acc["code"] == "5056000000" {
+			id = acc["id"].(string)
+		}
+	}
+	a.expect(a.do("DELETE", base+"/accounts/"+id, owner, nil), 204, "delete new account")
+	if err := ledger.Migrate(a.db); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 261 {
+		t.Fatalf("after delete + migrate = %d", n)
 	}
 }
