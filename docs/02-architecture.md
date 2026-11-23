@@ -186,7 +186,8 @@ module ที่ให้บริการ module อื่นมี public API
 | organization | `CompanySettings`, `FiscalPeriodAt`, `FiscalPeriodRange`, `MissingDimensions`, `RegisterDocumentTypes`, `DocumentFormat` | ทุก module |
 | ledger | `PostEntry`, `ReverseEntry`, `InvalidPostingAccounts`, `JournalUsable`, `AccountBalances` | inventory, purchasing |
 | inventory | `PurchaseItems`, `PurchaseContext` (ระบบบัญชีของปี + บัญชีของสินค้า, lock ค่าตั้ง FOR SHARE), `PostReceipt`, `CancelDocument` | purchasing |
-| cashbank | `CashAccounts` (ทะเบียน + บัญชีแยกประเภทที่ผูกไว้) | purchasing, sales |
+| sales | `SettleReceivables`, `UnsettleReceivables`, `OpenReceivables` (ตัดยอด / คืนยอดใบแจ้งหนี้ขาย + บัญชีลูกหนี้ + ลูกค้า ณ วันเอกสาร) | finance |
+| purchasing | `SettlePayables`, `UnsettlePayables`, `OpenPayables` (ตัดยอด / คืนยอดใบแจ้งหนี้ซื้อ + บัญชีเจ้าหนี้ + ผู้ขาย ณ วันเอกสาร) | finance |
 | inventory (ขาย) | `SalesItems`, `SalesContext` (บัญชีรายได้ / สินค้าคงเหลือ + ระบบบัญชี), `PostIssue` (ใบเบิก FIFO ห้ามติดลบ, คืนต้นทุนต่อบรรทัด), `CancelDocument` | sales |
 
 - ไม่ตรวจสิทธิ์ของผู้ให้บริการ (ผู้เรียกตรวจสิทธิ์ของเอกสารตัวเองแล้ว) แต่บังคับกฎธุรกิจครบ และเข้าร่วม transaction ใน ctx ของผู้เรียก
@@ -213,18 +214,23 @@ POST /goods-receipts
 
 ใบแจ้งหนี้ทำแบบเดียวกัน (ไม่มีขั้น inventory): Dr GR/IR ± ผลต่างราคา + Dr ภาษีซื้อ / Cr เจ้าหนี้
 
-ใบจ่ายชำระ:
+จ่ายเงิน (finance เป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดสินใจ 2026-11-23):
 
 ```text
-POST /supplier-payments
+POST /payments {kind: supplier}
   BEGIN
-    SELECT purchasing_invoices WHERE id IN (...) ORDER BY id FOR UPDATE   ← กันจ่ายเกินเมื่อจ่ายพร้อมกัน
-    ประเภทภาษีหัก ณ ที่จ่าย (IN) / cashbank.CashAccounts (IN)           ← query ละ 1 ครั้ง
-    organization.FiscalPeriodAt / DocumentFormat + ลำดับเลข             ← PV ตามรูปแบบที่ตั้ง
+    finance: สิทธิ์ + บริษัท active, ค่าตั้งการเงิน, ทะเบียนเงิน (IN), ประเภทภาษี (IN)   ← query ละ 1 ครั้ง
+    organization.FiscalPeriodAt / DocumentFormat + ลำดับเลข                           ← PV ตามรูปแบบที่ตั้ง
+    purchasing.SettlePayables                                                         ← lock ใบแจ้งหนี้ FOR UPDATE (เรียง id),
+                                                                                         ตรวจยอดค้าง, บันทึก paid + purchasing_invoice_settlements
+    ภาษีหัก ณ ที่จ่ายจากยอดก่อน VAT ตามสัดส่วน (Net / Gross ที่ purchasing ส่งกลับ)
     ledger.PostEntry  Dr เจ้าหนี้  Cr เงินสด / ธนาคาร  Cr ภาษีหัก ณ ที่จ่ายค้างจ่าย
-    INSERT purchasing_payments (+ lines, methods) ; UPDATE purchasing_invoices.paid_amount FROM (VALUES ...)
+    INSERT finance_payments (+ lines, methods — ผู้ขาย ณ วันจ่ายเก็บติดเอกสาร)
   COMMIT
 ```
+
+- sales / purchasing เก็บประวัติการตัดยอดเอง (`*_invoice_settlements`: วันที่ + เลขที่เอกสารการเงิน) — อายุลูกหนี้ / เจ้าหนี้ ณ วันที่ จึงไม่ต้อง JOIN ตารางของ finance
+- ทิศการพึ่งพา: finance → sales / purchasing (ไม่มีทางกลับ)
 
 ### เลขที่เอกสาร (`platform/numbering`)
 
@@ -234,7 +240,7 @@ POST /supplier-payments
 - ledger ใช้ engine เดียวกันแต่รูปแบบอยู่ที่สมุดรายวัน (`number_template`, prefix = รหัสสมุด)
 - เปลี่ยนรูปแบบจนเลขชนกับเลขเดิม → UNIQUE ของเลขที่ปฏิเสธ (409 `document number is already used`)
 
-### sales → inventory + ledger + cashbank
+### sales → inventory + ledger
 
 ใบส่งของ / ใบกำกับภาษี (รวมใบ) — transaction เดียว:
 

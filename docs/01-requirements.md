@@ -141,7 +141,9 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 - **รายการบัญชีทุกเอกสาร: 1 ผังบัญชี = 1 บรรทัด** (รวมยอดของบรรทัดที่ลงบัญชีเดียวกัน หักกลบเดบิต / เครดิต)
 - ยังไม่ทำ: หนังสือรับรองการหักภาษี (50 ทวิ), ใบลดหนี้ / คืนสินค้า, จ่ายล่วงหน้า, ค่าธรรมเนียมธนาคาร, สกุลเงินต่างประเทศ
 
-## 1.4.4 Functional Requirements — `cashbank` (ทะเบียนเงินสด / บัญชีธนาคาร)
+## 1.4.4 Functional Requirements — `finance` (เดิม `cashbank`)
+
+> ตั้งแต่ 2026-11-23 เงินเข้า-ออกทั้งหมดอยู่ที่ finance: PUR-09 / PUR-10 (ภาษีหัก ณ ที่จ่าย, ใบจ่ายชำระ) และ SAL-07 (ใบเสร็จ) ย้ายมาที่นี่ — ดู [API 4.10](04-api.md#410-endpoint--finance-การเงิน)
 
 | ID | ความต้องการ | กฎธุรกิจ |
 |---|---|---|
@@ -173,7 +175,7 @@ APEXIS เป็น ERP สำหรับองค์กรที่มีห�
 | organization (บัญชี) | `organization.fiscal_period:read`, `organization.fiscal_period:manage` (สร้างปีบัญชี), `organization.fiscal_period:close` (ปิด/เปิดงวด) |
 | inventory | `inventory.{uom,category,item,warehouse}:{read,manage}`, `inventory.document:read`, `inventory.document:manage` (draft), `inventory.document:post` (ผ่าน / ยกเลิก), `inventory.report:read`, `inventory.settings:{read,manage}`, `inventory.closing:read`, `inventory.closing:post` (ปรับปรุงสิ้นงวด / ยกเลิก) |
 | purchasing | `purchasing.{settings,supplier}:{read,manage}` (ประเภทภาษีหัก ณ ที่จ่ายใช้สิทธิ์ settings), `purchasing.order:{read,manage}`, `purchasing.order:approve`, `purchasing.receipt:{read,post}`, `purchasing.invoice:{read,post}`, `purchasing.payment:{read,post}`, `purchasing.report:read` |
-| cashbank | `cashbank.account:{read,manage}` |
+| finance | `finance.cash_account:{read,manage}`, `finance.receipt:{read,post}`, `finance.payment:{read,post}`, `finance.transfer:{read,post}`, `finance.settings:{read,manage}`, `finance.report:read` |
 | sales | `sales.{settings,customer,quotation}:{read,manage}`, `sales.order:{read,manage}`, `sales.order:approve`, `sales.{delivery,invoice,receipt}:{read,post}`, `sales.report:read` |
 | organization (เลขที่) | `organization.numbering:{read,manage}` |
 | ledger | `ledger.account:{read,manage}`, `ledger.journal:{read,manage}`, `ledger.entry:read`, `ledger.entry:manage` (สร้าง / แก้ / ลบ draft), `ledger.entry:post` (ผ่าน / กลับรายการ), `ledger.report:read` |

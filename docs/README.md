@@ -27,9 +27,9 @@ APEXIS คือระบบ ERP แบบ multi-company (หนึ่งผู�
 | Backend — `organization` (บริษัท / นิติบุคคล, สาขา, หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ/ไซต์งาน, ปีบัญชี/งวด 12 งวด) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `ledger` (ผังบัญชี, สมุดรายวัน, รายการบัญชี draft/posted/reversed, งบทดลอง, บัญชีแยกประเภท, งบแสดงฐานะการเงิน, งบกำไรขาดทุน) | ✅ ใช้งานได้, มี unit + integration test |
 | Backend — `inventory` (หน่วยนับ, หมวด, สินค้า, คลัง, เอกสารรับ / เบิก / โอน / ปรับปรุง, ต้นทุน FIFO, ยอดคงเหลือ, stock card, ระบบ perpetual / periodic, ปรับปรุงสิ้นงวด) | ✅ ใช้งานได้, มี unit + integration test |
-| Backend — `purchasing` (ผู้ขาย, ใบสั่งซื้อ + VAT, ใบรับสินค้า, ใบแจ้งหนี้, ใบจ่ายชำระ + ภาษีหัก ณ ที่จ่าย, ค้างรับ, อายุเจ้าหนี้, ภ.ง.ด.3 / 53) | ✅ ใช้งานได้, มี unit + integration test |
-| Backend — `cashbank` (ทะเบียนเงินสด / บัญชีธนาคาร ผูกผังบัญชี) | ✅ ใช้งานได้, มี integration test |
-| Backend — `sales` (ลูกค้า + วงเงิน, ใบเสนอราคา, ใบสั่งขาย, ส่งของ / ใบกำกับภาษี แยกหรือรวมใบ, ใบเสร็จ, อายุลูกหนี้, ภาษีขาย) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — `purchasing` (ผู้ขาย, ใบสั่งซื้อ + VAT, ใบรับสินค้า, ใบแจ้งหนี้, ค้างรับ, อายุเจ้าหนี้) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — `finance` (ทะเบียนเงินสด / ธนาคาร, รับเงิน, จ่ายเงิน + ภาษีหัก ณ ที่จ่าย, โอนเงิน, ภ.ง.ด.3 / 53, ภาษีถูกหัก) | ✅ ใช้งานได้, มี unit + integration test |
+| Backend — `sales` (ลูกค้า + วงเงิน, ใบเสนอราคา, ใบสั่งขาย, ส่งของ / ใบกำกับภาษี แยกหรือรวมใบ, อายุลูกหนี้, ภาษีขาย) | ✅ ใช้งานได้, มี unit + integration test |
 | เลขที่เอกสารตั้งค่าได้ (`platform/numbering`, organization, สมุดรายวัน) | ✅ ใช้งานได้ |
 | Backend — platform (config, database, httpx, listing, numeric, reports) | ✅ ใช้ร่วมกันทุก module |
 | Frontend (`apps/frontend`) — React + Tailwind | 🟡 หน้า login + หน้าหลักชั่วคราว, มี test |
@@ -54,7 +54,7 @@ APEXIS/
 │   │           ├── ledger/
 │   │           ├── inventory/
 │   │           ├── purchasing/
-│   │           ├── cashbank/
+│   │           ├── finance/
 │   │           └── sales/
 │   └── frontend/             # Next.js + Tailwind (ดู 08-frontend.md)
 └── services/                 # (ยังว่าง)

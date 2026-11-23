@@ -105,6 +105,7 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 | POST | `/companies` | login | ผู้สร้างเป็น owner — 201 |
 | GET | `/me/companies` | login | บริษัทที่ตัวเองเป็นสมาชิก `?q=&status=&sort=name\|code&page=&page_size=` |
 | GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, status}` — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
+| GET | `/me/companies/{companyID}/letterhead` | สมาชิก | หัวกระดาษเอกสารพิมพ์ `{name, legal_name_th, legal_name_en, tax_id, address{line, sub_district, district, province, postal_code, country}, phone, email, website}` — ไม่ใช่สมาชิก = 404 |
 | GET | `/companies/{companyID}` | `organization.company:read` | |
 | PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
 
@@ -208,7 +209,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 |---|---|---|
 | `trial-balance` | `start_date`, `end_date` (บังคับ, ปีบัญชีเดียวกัน) | งบทดลอง — ยอดเดบิตเป็นบวก; `prior_years_earnings` + ผลรวม `closing_balance` = 0 |
 | `balance-sheet` | `end_date` (บังคับ = ณ วันที่; `start_date` ไม่ใช้) | งบแสดงฐานะการเงิน — ยอดตามด้านปกติของหมวด, บรรทัดมี `level`, `is_header`; `suspense` / `total_suspense` = บัญชีพักที่ยังมียอด (เดบิตเป็นบวก): `total_assets + total_suspense = total_liabilities_and_equity` |
-| `income-statement` | `start_date`, `end_date` (บังคับ) | งบกำไรขาดทุน |
+| `income-statement` | `start_date`, `end_date` (บังคับ) | งบกำไรขาดทุน — `suspense` / `total_suspense` = ยอดเคลื่อนไหวของบัญชีพักในช่วง (เดบิตเป็นบวก) แสดงแยก **ไม่รวมใน `net_income`** |
 | `general-ledger` | `account_id`, `start_date`, `end_date` (บังคับ), `page`, `page_size` | บัญชีแยกประเภทของบัญชีเดียว — มี `meta` สำหรับแบ่งหน้าบรรทัด; `balance` คือยอดสะสมรวมยอดยกมา |
 
 - response ทุกรายงานมี `data.book` บอกชนิดรายงาน — frontend ใช้เลือกรูปแบบการแสดงผล
@@ -219,6 +220,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 หมวดที่ 6 ของผังมาตรฐาน — พักรายการที่ยังระบุไม่ได้ เช่น เงินเข้าบัญชีธนาคารแต่ยังไม่รู้ว่าเป็นของใคร (พักรับ) แล้วโอนไปบัญชีที่ถูกต้องเมื่อตรวจสอบได้ ให้ยอดตามสมุดเงินฝากตรงกับสมุดบัญชี
 - ยอดสะสมต่อเนื่องแบบบัญชีงบฐานะการเงิน (ไม่เริ่มใหม่ทุกปีบัญชี) และ**ไม่เข้างบกำไรขาดทุน**
 - งบแสดงฐานะการเงินแสดงแยกเป็นส่วน "บัญชีพักรอตรวจสอบ" — ควรเป็นศูนย์; หน้ารายงานเตือนเมื่อยังมียอด
+- งบกำไรขาดทุนแสดงยอดเคลื่อนไหวของบัญชีพักในช่วงเป็นส่วนแยกท้ายงบ (ไม่รวมในกำไรสุทธิ) — งบระหว่างปีเห็นรายการพักชัดเจน, ก่อนปิดงบโอนไปบัญชีที่ถูกต้องจนเป็นศูนย์ (ตัดสินใจ 2026-11-23: บัญชี 6100–6300 คงเป็นบัญชีพัก)
 
 ### Request body (ledger)
 
@@ -295,9 +297,6 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบสั่งซื้อ | `GET`, `POST /purchase-orders`; `GET`, `PUT`, `PATCH`, `DELETE /purchase-orders/{orderID}` | `status, supplier_id, item_id, start_date, end_date`; sort `date\|order_no\|created_at` | `purchasing.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `purchasing.order:approve` |
 | ใบรับสินค้า | `GET`, `POST /goods-receipts`; `GET`, `PATCH /goods-receipts/{receiptID}` | `status, supplier_id, order_id, start_date, end_date` | `purchasing.receipt:read\|post` |
 | ใบแจ้งหนี้ | `GET`, `POST /supplier-invoices`; `GET`, `PATCH /supplier-invoices/{invoiceID}` | เหมือนใบรับสินค้า | `purchasing.invoice:read\|post` |
-| ประเภทภาษีหัก ณ ที่จ่าย | `/withholding-tax-types[/{whtTypeID}]` | `status` | `purchasing.settings:read\|manage` |
-| ใบจ่ายชำระ | `GET`, `POST /supplier-payments`; `GET`, `PATCH /supplier-payments/{paymentID}` | `status, supplier_id, start_date, end_date`; sort `date\|document_no` | `purchasing.payment:read\|post` |
-| ทะเบียนเงินสด / ธนาคาร (cashbank) | `/cash-accounts[/{cashAccountID}]` | `type` (cash,bank), `status` | `cashbank.account:read\|manage` |
 
 - ใบสั่งซื้อ `PATCH` รับ `approved` / `closed` / `cancelled`; ใบรับ / ใบแจ้งหนี้ `PATCH` รับเฉพาะ `cancelled`
 - ใบรับ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที (response มี `entry_no` ของ ledger, ใบรับมี `stock_document_no` ของ inventory)
@@ -319,22 +318,8 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 |---|---|---|
 | `outstanding-purchase-orders` | `supplier_id, item_id, q, sort` (date, order_no, supplier_code, delivery_date), `page, page_size` | บรรทัดใบสั่งซื้อที่ค้างรับ (`to_receive`) หรือค้างแจ้งหนี้ (`to_invoice`) |
 | `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย (หักยอดจ่ายถึงวันที่รายงาน): `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |
-| `withholding-tax` | `start_date, end_date` (บังคับ, ตามวันที่จ่าย), `form` (pnd3 / pnd53), `supplier_id, sort` (date, document_no, supplier_code), `page, page_size` | บรรทัดใบจ่ายที่หักภาษี: ผู้ขาย + เลขผู้เสียภาษี / สาขา, ประเภท, อัตรา, ฐาน, ภาษี; `total_base`, `total_wht` |
 
-```jsonc
-// PUT /document-numberings/purchasing.payment
-{ "prefix": "PV", "template": "{prefix}{yy}{mm}-{seq:5}" }          // → PV2603-00001 (นับใหม่ทุกเดือน)
-// POST /cash-accounts
-{ "code": "BBL", "name": "กรุงเทพ ออมทรัพย์", "type": "bank", "bank_name": "BBL", "account_no": "123-4-56789-0", "gl_account_id": "…" }
-// POST /suppliers — tax_type บังคับ: individual (ภ.ง.ด.3) / juristic (ภ.ง.ด.53)
-// PUT /purchasing-settings — เพิ่ม wht_pnd3_account_id, wht_pnd53_account_id
-// POST /supplier-payments — ยอดรวม methods = ยอดรวม lines - ภาษีหัก ณ ที่จ่าย
-{ "supplier_id": "…", "date": "2026-03-10",
-  "lines": [ { "invoice_id": "…", "amount": "5350", "wht_type_id": "…" }, { "invoice_id": "…", "amount": "2675" } ],
-  "methods": [ { "cash_account_id": "<เงินสด>", "amount": "2000" }, { "cash_account_id": "<ธนาคาร>", "amount": "5875", "reference": "CHQ-001" } ] }
-```
-
-- ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม
+- ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม — ยอดจ่ายมาจากใบสำคัญจ่ายของการเงิน (ดู 4.10)
 
 ## 4.9 Endpoint — sales
 
@@ -346,10 +331,9 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบสั่งขาย | `GET`, `POST /sales-orders`; `GET`, `PUT`, `PATCH`, `DELETE /sales-orders/{orderID}` | เหมือนใบเสนอราคา | `sales.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `sales.order:approve` |
 | ใบส่งของ | `GET`, `POST /deliveries`; `GET`, `PATCH /deliveries/{deliveryID}` | `status, customer_id, order_id, start_date, end_date` | `sales.delivery:read\|post` |
 | ใบแจ้งหนี้ / ใบกำกับภาษี | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | เหมือนใบส่งของ | `sales.invoice:read\|post` |
-| ใบเสร็จรับเงิน | `GET`, `POST /customer-receipts`; `GET`, `PATCH /customer-receipts/{receiptID}` | `status, customer_id, start_date, end_date` | `sales.receipt:read\|post` |
 
 - ใบเสนอราคา `PATCH` รับ `sent` / `accepted` / `rejected`; ใบสั่งขาย `PATCH` รับ `approved` / `closed` / `cancelled` (approved ตอบ `warnings`)
-- ใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`
+- ใบส่งของ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`
 
 ```jsonc
 // POST /sales-orders จากใบเสนอราคา (ไม่ส่ง customer_id / lines)
@@ -357,10 +341,6 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 // POST /sales-invoices — แยกใบ (ไม่เกินที่ส่งแล้ว) หรือรวมใบ with_delivery (ต้องมี warehouse_id เมื่อมีสินค้า stock)
 { "order_id": "…", "date": "2026-03-07", "with_delivery": true, "warehouse_id": "…",
   "lines": [ { "order_line_no": 1, "quantity": "5" }, { "order_line_no": 2, "quantity": "1" } ] }
-// POST /customer-receipts — wht = ภาษีที่ลูกค้าหัก (ไม่ส่ง = 0)
-{ "customer_id": "…", "date": "2026-03-20",
-  "lines": [ { "invoice_id": "…", "amount": "321", "wht": "9" } ],
-  "methods": [ { "cash_account_id": "…", "amount": "312" } ] }
 ```
 
 | `book` (`sales.report:read`) | parameter | ผลลัพธ์ |
@@ -368,6 +348,60 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `outstanding-sales-orders` | `customer_id, item_id, q, sort, page, page_size` | บรรทัดค้างส่ง (`to_deliver`) / ค้างออกบิล (`to_invoice`) |
 | `ar-aging` | `end_date` (บังคับ), `customer_id, q, page, page_size` | ยอดค้างต่อลูกค้า (หักยอดรับถึงวันที่) แยกช่วงอายุ + `totals` |
 | `output-vat` | `start_date, end_date` (บังคับ), `customer_id, sort, page, page_size` | ใบกำกับภาษี: ลูกค้า + เลขผู้เสียภาษี / สาขา, ฐาน (ก่อน VAT), ภาษีขาย + ยอดรวม |
-| `withholding-tax-received` | เหมือน `output-vat` | ใบเสร็จที่ลูกค้าหัก ณ ที่จ่าย: ฐาน (ยอดตัดหนี้), ภาษีถูกหัก + ยอดรวม |
 
 หมวดสินค้า / สินค้า รับ `revenue_account_id` เพิ่ม
+
+## 4.10 Endpoint — finance (การเงิน)
+
+เงินเข้า-ออกทั้งหมดทำผ่านการเงิน (ตัดสินใจ 2026-11-23) — ใบเสร็จรับเงินย้ายมาจาก sales, ใบจ่ายชำระ / ประเภทภาษีหัก ณ ที่จ่าย / ภ.ง.ด. ย้ายมาจาก purchasing, ทะเบียนเงินจาก cashbank
+
+| Resource | Path | Filter เพิ่ม | สิทธิ์ |
+|---|---|---|---|
+| ค่าตั้ง | `GET`, `PUT /finance-settings` | — | `finance.settings:read\|manage` |
+| ทะเบียนเงินสด / ธนาคาร | `/cash-accounts[/{cashAccountID}]` | `type` (cash,bank), `status` | `finance.cash_account:read\|manage` |
+| ประเภทภาษีหัก ณ ที่จ่าย | `/withholding-tax-types[/{whtTypeID}]` | `status` | `finance.settings:read\|manage` |
+| ประเภทภาษีสำหรับหน้าจ่ายเงิน | `GET /payments/wht-types` | (เฉพาะ active) | `finance.payment:read` |
+| รับเงิน | `GET`, `POST /receipts`; `GET`, `PATCH /receipts/{receiptID}` | `kind` (customer,other), `status, party_id, cash_account_id, start_date, end_date`; sort `date\|document_no` | `finance.receipt:read\|post` |
+| ใบแจ้งหนี้ขายค้างรับ | `GET /receipts/open-invoices?customer_id=` | — | `finance.receipt:read` |
+| จ่ายเงิน | `GET`, `POST /payments`; `GET`, `PATCH /payments/{paymentID}` | `kind` (supplier,other) + เหมือนรับเงิน | `finance.payment:read\|post` |
+| ใบแจ้งหนี้ซื้อค้างจ่าย | `GET /payments/open-invoices?supplier_id=` | — | `finance.payment:read` |
+| โอนเงินระหว่างบัญชี | `GET`, `POST /cash-transfers`; `GET`, `PATCH /cash-transfers/{transferID}` | `status, cash_account_id, start_date, end_date` | `finance.transfer:read\|post` |
+
+- เอกสารไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH {"status":"cancelled"}` = กลับรายการ ณ วันที่เดิม (งวดต้องเปิด) และคืนยอดค้างให้ใบแจ้งหนี้
+- เลขที่: `finance.receipt` (RV), `finance.payment` (PV), `finance.transfer` (TF) — ตั้งรูปแบบได้ที่ `document-numberings`
+- สมุดรายวัน: `receipt_journal_id` / `payment_journal_id` / `transfer_journal_id` ของค่าตั้งการเงิน (ไม่ได้ตั้ง = 422 `finance_settings_are_incomplete`)
+- บัญชีลูกหนี้ / เจ้าหนี้มาจากค่าตั้งขาย / จัดซื้อ (เจ้าของบัญชีคุม) — การเงินขอผ่าน `sales.SettleReceivables` / `purchasing.SettlePayables` ใน transaction เดียวกัน; กฎของขาย / จัดซื้อ (เกินยอดค้าง ฯลฯ) ตอบ 422 `rejected`
+- คู่ค้า ณ วันเอกสาร (ชื่อ เลขผู้เสียภาษี สาขา ที่อยู่ ประเภทผู้มีเงินได้) เก็บติดเอกสาร — รายงานภาษีไม่ต้องอ่านทะเบียนข้าม module
+- จ่ายเงินที่หักภาษี ณ ที่จ่ายต้องรู้เลขผู้เสียภาษีและประเภท (`individual` = ภ.ง.ด.3, `juristic` = ภ.ง.ด.53) — ผู้ขายใช้ข้อมูลทะเบียน, จ่ายเงินอื่นกรอกใน `payee`
+
+```jsonc
+// PUT /finance-settings
+{ "receipt_journal_id": "<CRJ>", "payment_journal_id": "<CDJ>", "transfer_journal_id": "<GEN>",
+  "wht_received_account_id": "…", "wht_pnd3_account_id": "…", "wht_pnd53_account_id": "…" }
+// POST /receipts — รับชำระหนี้: wht = ภาษีที่ลูกค้าหัก (ไม่ส่ง = 0); ยอดรวม methods = ยอดรวม lines - wht
+{ "kind": "customer", "customer_id": "…", "date": "2026-03-20",
+  "lines": [ { "invoice_id": "…", "amount": "321", "wht": "9" } ],
+  "methods": [ { "cash_account_id": "…", "amount": "312", "reference": "" } ] }
+// POST /receipts — รับเงินอื่น
+{ "kind": "other", "date": "2026-04-01", "payer": { "name": "ธนาคาร" },
+  "lines": [ { "account_id": "<ดอกเบี้ยรับ>", "description": "ดอกเบี้ย", "amount": "12.50" } ], "methods": [ … ] }
+// POST /payments — จ่ายชำระหนี้: ภาษีคำนวณจากยอดก่อน VAT ตามสัดส่วนที่จ่าย, อัตรา ณ วันจ่าย
+{ "kind": "supplier", "supplier_id": "…", "date": "2026-03-10",
+  "lines": [ { "invoice_id": "…", "amount": "5350", "wht_type_id": "…" }, { "invoice_id": "…", "amount": "2675" } ],
+  "methods": [ { "cash_account_id": "<เงินสด>", "amount": "2000" }, { "cash_account_id": "<ธนาคาร>", "amount": "5875", "reference": "CHQ-001" } ] }
+// POST /payments — จ่ายเงินอื่น หัก ณ ที่จ่าย (ฐาน = ยอดจ่าย)
+{ "kind": "other", "date": "2026-03-12", "payee": { "name": "นาย ก", "tax_id": "1101700000000", "tax_type": "individual" },
+  "lines": [ { "account_id": "<ค่าบริการ>", "amount": "2500", "wht_type_id": "…" } ], "methods": [ { "cash_account_id": "…", "amount": "2425" } ] }
+// POST /cash-transfers
+{ "date": "2026-04-02", "from_cash_account_id": "<เงินสด>", "to_cash_account_id": "<ธนาคาร>", "amount": "500", "reference": "DEP-1" }
+```
+
+| `book` (`finance.report:read`) | parameter | ผลลัพธ์ |
+|---|---|---|
+| `withholding-tax` | `start_date, end_date` (บังคับ), `form` (pnd3 / pnd53), `party_id, sort` (date, document_no, party_name), `page, page_size` | บรรทัดใบจ่ายที่หักภาษี: ผู้รับเงิน (ชื่อ เลขผู้เสียภาษี สาขา ที่อยู่), `tax_form`, ประเภท, อัตรา, ฐาน, ภาษี; `total_base`, `total_wht` |
+| `withholding-tax-received` | `start_date, end_date` (บังคับ), `party_id, sort, page, page_size` | ใบรับที่ลูกค้าหัก ณ ที่จ่าย: ฐาน (ยอดตัดหนี้), ภาษีถูกหัก + ยอดรวม |
+
+### สิทธิ์เดิม
+
+ตอนเริ่มโปรแกรม `identity.RenamePermissions` แปลงสิทธิ์ของบทบาทเดิม (ทำซ้ำได้): `cashbank.account:*` → `finance.cash_account:*`, `sales.receipt:*` → `finance.receipt:*`,
+`purchasing.payment:*` → `finance.payment:*`; ผู้มี `purchasing.settings:*` / `purchasing.report:read` / `sales.report:read` ได้ `finance.settings:*` / `finance.report:read` เพิ่ม
