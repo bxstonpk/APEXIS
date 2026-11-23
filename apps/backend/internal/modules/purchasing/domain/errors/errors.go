@@ -18,20 +18,15 @@ var (
 	ErrInvalidVatRate  = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
 	ErrInvalidLine     = errors.New("invalid line") // detailed
 	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
-	ErrInvalidWhtRate  = errors.New("withholding tax rate must be more than 0 and at most 100 with at most 2 decimal places")
-	ErrInvalidPayment  = errors.New("invalid payment") // detailed
 )
 
 // ไม่พบ (404)
 var (
-	ErrSupplierNotFound    = errors.New("supplier not found")
-	ErrOrderNotFound       = errors.New("purchase order not found")
-	ErrReceiptNotFound     = errors.New("goods receipt not found")
-	ErrInvoiceNotFound     = errors.New("supplier invoice not found")
-	ErrItemNotFound        = errors.New("item not found") // detailed
-	ErrPaymentNotFound     = errors.New("supplier payment not found")
-	ErrWhtTypeNotFound     = errors.New("withholding tax type not found") // detailed
-	ErrCashAccountNotFound = errors.New("cash / bank account not found")  // detailed
+	ErrSupplierNotFound = errors.New("supplier not found")
+	ErrOrderNotFound    = errors.New("purchase order not found")
+	ErrReceiptNotFound  = errors.New("goods receipt not found")
+	ErrInvoiceNotFound  = errors.New("supplier invoice not found")
+	ErrItemNotFound     = errors.New("item not found") // detailed
 )
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
@@ -73,8 +68,7 @@ var ErrForbidden = errors.New("permission denied")
 
 var all = []error{
 	ErrInvalidID, ErrInvalidCode, ErrInvalidName, ErrInvalidText, ErrInvalidStatus, ErrInvalidDate, ErrInvalidTaxID,
-	ErrInvalidBranchNo, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType, ErrInvalidWhtRate, ErrInvalidPayment,
-	ErrPaymentNotFound, ErrWhtTypeNotFound, ErrCashAccountNotFound,
+	ErrInvalidBranchNo, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType,
 	ErrInvoicePaid, ErrOverPayment, ErrInvoiceNotPayable, ErrInactiveRef,
 	ErrSupplierNotFound, ErrOrderNotFound, ErrReceiptNotFound, ErrInvoiceNotFound, ErrItemNotFound,
 	ErrCodeExists, ErrInUse, ErrInvoiceNoExists, ErrDocumentNoUsed,

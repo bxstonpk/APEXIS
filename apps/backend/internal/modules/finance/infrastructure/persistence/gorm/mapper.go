@@ -1,12 +1,12 @@
-// Package gormpersistence คือ adapter ระหว่าง domain กับ gorm ของ cashbank
+// Package gormpersistence คือ adapter ระหว่าง domain กับ gorm ของ finance
 package gormpersistence
 
 import (
 	"github.com/google/uuid"
 
-	"apexis/backend/internal/modules/cashbank/domain/entities"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
-	"apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm/models"
+	"apexis/backend/internal/modules/finance/domain/entities"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
+	"apexis/backend/internal/modules/finance/infrastructure/persistence/gorm/models"
 )
 
 func ToModel(a *entities.CashAccount) models.CashAccountModel {

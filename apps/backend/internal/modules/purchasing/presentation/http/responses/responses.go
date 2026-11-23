@@ -52,15 +52,12 @@ type Settings struct {
 	APAccountID            *string `json:"ap_account_id"`
 	InputVatAccountID      *string `json:"input_vat_account_id"`
 	PriceVarianceAccountID *string `json:"price_variance_account_id"`
-	WhtPnd3AccountID       *string `json:"wht_pnd3_account_id"`
-	WhtPnd53AccountID      *string `json:"wht_pnd53_account_id"`
 }
 
 func FromSettings(s dto.Settings) Settings {
 	return Settings{
 		VatRate: str(s.VatRate), JournalID: s.JournalID, GRIRAccountID: s.GRIRAccountID, APAccountID: s.APAccountID,
 		InputVatAccountID: s.InputVatAccountID, PriceVarianceAccountID: s.PriceVarianceAccountID,
-		WhtPnd3AccountID: s.WhtPnd3AccountID, WhtPnd53AccountID: s.WhtPnd53AccountID,
 	}
 }
 
@@ -358,137 +355,5 @@ func FromAging(book string, a dto.Aging) AgingBody {
 	return AgingBody{
 		Data: Aging{Book: book, AsOf: date(a.AsOf), Rows: rows, Totals: agingAmounts(a.Totals)},
 		Meta: httpx.Meta{Page: a.Rows.Page.Number, PageSize: a.Rows.Page.Size, Total: a.Rows.Total},
-	}
-}
-
-// ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่ายชำระ ----------
-
-type WhtType struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Rate   string `json:"rate"`
-	Status string `json:"status"`
-}
-
-func FromWhtType(w dto.WhtType) WhtType {
-	return WhtType{ID: w.ID, Code: w.Code, Name: w.Name, Rate: str(w.Rate), Status: w.Status}
-}
-
-type PaymentSummary struct {
-	ID          string     `json:"id"`
-	DocumentNo  string     `json:"document_no"`
-	Date        string     `json:"date"`
-	Supplier    Ref        `json:"supplier"`
-	TaxForm     string     `json:"tax_form"` // pnd3 / pnd53
-	Amount      string     `json:"amount"`   // ยอดตัดหนี้
-	Wht         string     `json:"wht"`      // ภาษีหัก ณ ที่จ่าย
-	Paid        string     `json:"paid"`     // จ่ายจริง
-	Status      string     `json:"status"`
-	EntryID     *string    `json:"entry_id"`
-	EntryNo     string     `json:"entry_no"`
-	CancelledAt *time.Time `json:"cancelled_at"`
-}
-
-func FromPaymentSummary(p dto.PaymentSummary) PaymentSummary {
-	return PaymentSummary{
-		ID: p.ID, DocumentNo: p.DocumentNo, Date: date(p.Date), Supplier: ref(p.Supplier), TaxForm: p.TaxForm,
-		Amount: str(p.Amount), Wht: str(p.Wht), Paid: str(p.Paid), Status: p.Status, EntryID: p.EntryID, EntryNo: p.EntryNo,
-		CancelledAt: p.CancelledAt,
-	}
-}
-
-type PaymentInvoice struct {
-	ID                string `json:"id"`
-	DocumentNo        string `json:"document_no"`
-	SupplierInvoiceNo string `json:"supplier_invoice_no"`
-}
-
-type PaymentLine struct {
-	Invoice PaymentInvoice `json:"invoice"`
-	Amount  string         `json:"amount"`
-	WhtType *Ref           `json:"wht_type"`
-	WhtRate string         `json:"wht_rate"`
-	WhtBase string         `json:"wht_base"`
-	Wht     string         `json:"wht"`
-}
-
-type PaymentMethod struct {
-	CashAccountID string `json:"cash_account_id"`
-	GLAccountID   string `json:"gl_account_id"`
-	Amount        string `json:"amount"`
-	Reference     string `json:"reference"`
-}
-
-type Payment struct {
-	PaymentSummary
-	Description string          `json:"description"`
-	CreatedBy   string          `json:"created_by"`
-	Lines       []PaymentLine   `json:"lines"`
-	Methods     []PaymentMethod `json:"methods"`
-}
-
-func FromPayment(p dto.Payment) Payment {
-	out := Payment{
-		PaymentSummary: FromPaymentSummary(p.PaymentSummary), Description: p.Description, CreatedBy: p.CreatedBy,
-		Lines: make([]PaymentLine, len(p.Lines)), Methods: make([]PaymentMethod, len(p.Methods)),
-	}
-	for i, l := range p.Lines {
-		line := PaymentLine{
-			Invoice: PaymentInvoice{ID: l.Invoice.ID, DocumentNo: l.Invoice.Code, SupplierInvoiceNo: l.Invoice.Name},
-			Amount:  str(l.Amount), WhtRate: str(l.WhtRate), WhtBase: str(l.WhtBase), Wht: str(l.Wht),
-		}
-		if l.WhtType != nil {
-			r := ref(*l.WhtType)
-			line.WhtType = &r
-		}
-		out.Lines[i] = line
-	}
-	for i, m := range p.Methods {
-		out.Methods[i] = PaymentMethod{CashAccountID: m.CashAccountID, GLAccountID: m.GLAccountID, Amount: str(m.Amount), Reference: m.Reference}
-	}
-	return out
-}
-
-type WithholdingRow struct {
-	Date       string `json:"date"`
-	PaymentID  string `json:"payment_id"`
-	DocumentNo string `json:"document_no"`
-	Supplier   Ref    `json:"supplier"`
-	TaxID      string `json:"tax_id"`
-	BranchNo   string `json:"branch_no"`
-	TaxForm    string `json:"tax_form"`
-	WhtType    Ref    `json:"wht_type"`
-	Rate       string `json:"rate"`
-	Base       string `json:"base"`
-	Wht        string `json:"wht"`
-}
-
-type Withholding struct {
-	Book      string           `json:"book"`
-	StartDate string           `json:"start_date"`
-	EndDate   string           `json:"end_date"`
-	Rows      []WithholdingRow `json:"rows"`
-	TotalBase string           `json:"total_base"` // รวมทุกแถวที่ตรงเงื่อนไข
-	TotalWht  string           `json:"total_wht"`
-}
-
-type WithholdingBody struct {
-	Data Withholding `json:"data"`
-	Meta httpx.Meta  `json:"meta"`
-}
-
-func FromWithholding(book string, w dto.Withholding) WithholdingBody {
-	rows := make([]WithholdingRow, len(w.Rows.Items))
-	for i, r := range w.Rows.Items {
-		rows[i] = WithholdingRow{
-			Date: date(r.Date), PaymentID: r.PaymentID, DocumentNo: r.DocumentNo, Supplier: ref(r.Supplier), TaxID: r.TaxID,
-			BranchNo: r.BranchNo, TaxForm: r.TaxForm, WhtType: ref(r.WhtType), Rate: str(r.Rate), Base: str(r.Base), Wht: str(r.Wht),
-		}
-	}
-	return WithholdingBody{
-		Data: Withholding{Book: book, StartDate: date(w.Start), EndDate: date(w.End), Rows: rows,
-			TotalBase: str(w.Totals.Base), TotalWht: str(w.Totals.Wht)},
-		Meta: httpx.Meta{Page: w.Rows.Page.Number, PageSize: w.Rows.Page.Size, Total: w.Rows.Total},
 	}
 }

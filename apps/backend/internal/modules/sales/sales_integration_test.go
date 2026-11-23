@@ -12,11 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	"apexis/backend/internal/modules/cashbank"
+	"apexis/backend/internal/modules/finance"
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/reports"
@@ -95,7 +96,7 @@ func setup(t *testing.T) (api, string) {
 	for _, migrate := range []func() error{
 		func() error { return identity.Migrate(db) }, func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) }, func() error { return inventory.Migrate(db) },
-		func() error { return cashbank.Migrate(db) }, func() error { return sales.Migrate(db) },
+		func() error { return finance.Migrate(db) }, func() error { return purchasing.Migrate(db) }, func() error { return sales.Migrate(db) },
 	} {
 		if err := migrate(); err != nil {
 			t.Fatal(err)
@@ -113,14 +114,17 @@ func setup(t *testing.T) (api, string) {
 	led.RegisterRoutes(mux)
 	inv := inventory.New(db, idm, org, led)
 	inv.RegisterRoutes(mux)
-	cb := cashbank.New(db, idm, org, led)
-	cb.RegisterRoutes(mux)
-	sal := sales.New(db, idm, org, led, inv, cb)
+	pur := purchasing.New(db, idm, org, led, inv)
+	sal := sales.New(db, idm, org, led, inv)
 	sal.RegisterRoutes(mux)
+	// ใบเสร็จรับเงินอยู่ที่ finance — ตัดยอดใบแจ้งหนี้ขายผ่าน sales.SettleReceivables
+	fin := finance.New(db, idm, org, led, sal, pur)
+	fin.RegisterRoutes(mux)
 	reg := reports.NewRegistry()
 	led.RegisterReports(reg)
 	inv.RegisterReports(reg)
 	sal.RegisterReports(reg)
+	fin.RegisterReports(reg)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", idm.Authenticate(reg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -154,7 +158,9 @@ func TestSalesFlow(t *testing.T) {
 
 	// ---------- ค่าตั้ง / ลูกค้า / ทะเบียนเงิน ----------
 	a.expect(a.do("PUT", base+"/sales-settings", owner, obj{"vat_registered": true, "vat_rate": "7", "journal_id": sj, "ar_account_id": acc["1130"],
-		"output_vat_account_id": acc["2140"], "cogs_account_id": acc["5100"], "wht_account_id": acc["1170"]}), 200, "settings")
+		"output_vat_account_id": acc["2140"], "cogs_account_id": acc["5100"]}), 200, "settings")
+	rj := a.expect(a.do("POST", base+"/journals", owner, obj{"code": "CRJ", "name": "สมุดรายวันรับ"}), 201, "receipt journal").id()
+	a.expect(a.do("PUT", base+"/finance-settings", owner, obj{"receipt_journal_id": rj, "wht_received_account_id": acc["1170"]}), 200, "finance settings")
 	cust := a.expect(a.do("POST", base+"/customers", owner, obj{"code": "C", "name": "ลูกค้า C", "tax_id": "0105551234567", "payment_term_days": 30,
 		"tax_type": "juristic", "credit_limit": "10000"}), 201, "customer").id()
 	cash := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "CASH", "name": "เงินสด", "type": "cash", "gl_account_id": acc["1101"]}), 201, "cash").id()
@@ -244,13 +250,14 @@ func TestSalesFlow(t *testing.T) {
 
 	// ---------- รับเงิน: IV1 321 (ถูกหัก 9) + IV2 1,000 / เงินสด 312 + ธนาคาร 1,000 ----------
 	receipt := func(methods ...obj) obj {
-		return obj{"customer_id": cust, "date": "2026-03-20", "lines": []obj{
+		return obj{"kind": "customer", "customer_id": cust, "date": "2026-03-20", "lines": []obj{
 			{"invoice_id": iv1["id"], "amount": "321", "wht": "9"}, {"invoice_id": iv2["id"], "amount": "1000"},
 		}, "methods": methods}
 	}
-	a.expect(a.do("POST", base+"/customer-receipts", owner, receipt(obj{"cash_account_id": cash, "amount": "1321"})), 400, "methods must equal amount - wht")
-	rv := a.expect(a.do("POST", base+"/customer-receipts", owner, receipt(obj{"cash_account_id": cash, "amount": "312"}, obj{"cash_account_id": bank, "amount": "1000"})), 201, "receipt").data()
-	if rv["document_no"] != "RV2026-000001" || rv["received"] != "1312" || rv["wht"] != "9" {
+	a.expect(a.do("POST", base+"/receipts", owner, receipt(obj{"cash_account_id": cash, "amount": "1321"})), 400, "methods must equal amount - wht")
+	rv := a.expect(a.do("POST", base+"/receipts", owner, receipt(obj{"cash_account_id": cash, "amount": "312"}, obj{"cash_account_id": bank, "amount": "1000"})), 201, "receipt").data()
+	if rv["document_no"] != "RV2026-000001" || rv["net"] != "1312" || rv["wht"] != "9" || rv["party"].(obj)["code"] != "C" ||
+		objs(rv["lines"])[0]["invoice"].(obj)["code"] != iv1["document_no"] {
 		t.Fatalf("receipt = %v", rv)
 	}
 	want = map[string]string{"1101": "312/0", "1102": "1000/0", "1170": "9/0", "1130": "0/1321"}
@@ -279,7 +286,7 @@ func TestSalesFlow(t *testing.T) {
 	if r := book("output-vat&start_date=2026-03-01&end_date=2026-03-31"); len(objs(r["rows"])) != 2 || r["total_base"] != "1800" || r["total_tax"] != "126" {
 		t.Fatalf("output VAT = %v", r)
 	}
-	if r := book("withholding-tax-received&start_date=2026-03-01&end_date=2026-03-31"); r["total_tax"] != "9" {
+	if r := book("withholding-tax-received&start_date=2026-03-01&end_date=2026-03-31"); r["total_wht"] != "9" || objs(r["rows"])[0]["party"].(obj)["tax_id"] != "0105551234567" {
 		t.Fatalf("WHT received = %v", r)
 	}
 	if r := book("outstanding-sales-orders"); len(r["rows"].([]any)) != 0 {
@@ -288,7 +295,10 @@ func TestSalesFlow(t *testing.T) {
 	a.expect(a.do("GET", base+"/reports?book=output-vat&start_date=2026-03-31&end_date=2026-03-01", owner, nil), 400, "bad date range")
 
 	// ---------- ยกเลิกย้อนลำดับ: ใบเสร็จ -> บิลรวมใบ (คืนสต็อก, ใบสั่งขายเปิดกลับ) ----------
-	a.expect(a.do("PATCH", base+"/customer-receipts/"+rv["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel receipt")
+	a.expect(a.do("PATCH", base+"/receipts/"+rv["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel receipt")
+	if r := book("ar-aging&end_date=2026-03-31"); r["totals"].(obj)["total"] != "1926" {
+		t.Fatalf("AR aging after cancelling the receipt = %v", r)
+	}
 	a.expect(a.do("PATCH", base+"/deliveries/"+do["id"].(string), owner, obj{"status": "cancelled"}), 422, "cancel invoiced delivery")
 	a.expect(a.do("PATCH", base+"/sales-invoices/"+iv2["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel combined invoice")
 	if v := book("stock-on-hand&end_date=2026-03-31"); v["total_value"] != "420" {

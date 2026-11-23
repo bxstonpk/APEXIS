@@ -1,4 +1,4 @@
-// Package repositories คือ implementation ของ cashbank/application/ports/repositories ด้วย gorm
+// Package repositories คือ implementation ของ finance/application/ports/repositories ด้วย gorm
 package repositories
 
 import (
@@ -8,13 +8,13 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"apexis/backend/internal/modules/cashbank/application/dto"
-	ports "apexis/backend/internal/modules/cashbank/application/ports/repositories"
-	"apexis/backend/internal/modules/cashbank/domain/entities"
-	domain "apexis/backend/internal/modules/cashbank/domain/errors"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
-	gp "apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm/models"
+	"apexis/backend/internal/modules/finance/application/dto"
+	ports "apexis/backend/internal/modules/finance/application/ports/repositories"
+	"apexis/backend/internal/modules/finance/domain/entities"
+	domain "apexis/backend/internal/modules/finance/domain/errors"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
+	gp "apexis/backend/internal/modules/finance/infrastructure/persistence/gorm"
+	"apexis/backend/internal/modules/finance/infrastructure/persistence/gorm/models"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/listing"
 )
@@ -121,7 +121,7 @@ func (r row) dto() dto.CashAccount {
 const columns = "a.id, a.code, a.name, a.type, a.bank_name, a.bank_branch, a.account_no, a.gl_account_id, a.status"
 
 func (r *CashAccountRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
-	return database.Conn(ctx, r.db).Table("cashbank_accounts AS a").Where("a.company_id = ? AND a.deleted_at IS NULL", uuid.UUID(companyID))
+	return database.Conn(ctx, r.db).Table("finance_cash_accounts AS a").Where("a.company_id = ? AND a.deleted_at IS NULL", uuid.UUID(companyID))
 }
 
 func (r *CashAccountRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.CashAccountID) (dto.CashAccount, error) {

@@ -43,7 +43,7 @@ func (r *SettingsRepository) Save(ctx context.Context, companyID vo.CompanyID, s
 	return database.Conn(ctx, r.db).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "company_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"vat_registered", "vat_rate", "journal_id", "ar_account_id", "output_vat_account_id",
-			"revenue_account_id", "cogs_account_id", "wht_account_id", "updated_at"}),
+			"revenue_account_id", "cogs_account_id", "updated_at"}),
 	}).Create(&m).Error
 }
 
@@ -106,13 +106,13 @@ func (r *CustomerRepository) FindByID(ctx context.Context, companyID vo.CompanyI
 	return gp.CustomerToEntity(m), nil
 }
 
-// InUse: มีใบเสนอราคา / ใบสั่งขาย / ใบเสร็จของลูกค้านี้ — query เดียว
+// InUse: มีใบเสนอราคา / ใบสั่งขาย / ใบแจ้งหนี้ของลูกค้านี้ — query เดียว
 func (r *CustomerRepository) InUse(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) (bool, error) {
 	c, i := uuidOf(companyID), uuidOf(id)
 	return exists(ctx, r.db, []string{
 		"SELECT 1 FROM sales_quotations WHERE company_id = ? AND customer_id = ?",
 		"SELECT 1 FROM sales_orders WHERE company_id = ? AND customer_id = ?",
-		"SELECT 1 FROM sales_receipts WHERE company_id = ? AND customer_id = ?",
+		"SELECT 1 FROM sales_invoices WHERE company_id = ? AND customer_id = ?",
 	}, c, i, c, i, c, i)
 }
 

@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"apexis/backend/internal/modules/cashbank/application/ports"
+	"apexis/backend/internal/modules/finance/application/ports"
 	"apexis/backend/internal/platform/database"
 )
 

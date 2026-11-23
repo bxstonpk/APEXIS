@@ -142,7 +142,6 @@ type Settings struct {
 	OutputVatAccountID *string  `json:"output_vat_account_id"`
 	RevenueAccountID   *string  `json:"revenue_account_id"`
 	CogsAccountID      *string  `json:"cogs_account_id"`
-	WhtAccountID       *string  `json:"wht_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -164,7 +163,6 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 	}{
 		{"ar_account_id", r.ARAccountID, &out.ARAccountID}, {"output_vat_account_id", r.OutputVatAccountID, &out.OutputVatAccountID},
 		{"revenue_account_id", r.RevenueAccountID, &out.RevenueAccountID}, {"cogs_account_id", r.CogsAccountID, &out.CogsAccountID},
-		{"wht_account_id", r.WhtAccountID, &out.WhtAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -399,72 +397,6 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 	}
 	return dto.InvoiceInput{OrderID: in.OrderID, Date: in.Date, WithDelivery: r.WithDelivery, WarehouseID: in.WarehouseID,
 		Reference: in.Reference, Description: in.Description, Lines: in.Lines}, nil
-}
-
-type ReceiptLine struct {
-	InvoiceID string   `json:"invoice_id"`
-	Amount    *Decimal `json:"amount"` // ยอดตัดหนี้ (รวม VAT)
-	Wht       *Decimal `json:"wht"`    // ภาษีที่ลูกค้าหัก ณ ที่จ่าย (ไม่ส่ง = 0)
-}
-
-type ReceiptMethod struct {
-	CashAccountID string   `json:"cash_account_id"`
-	Amount        *Decimal `json:"amount"`
-	Reference     string   `json:"reference"`
-}
-
-// Receipt: POST /customer-receipts — ยอดรวม methods = ยอดรวม lines.amount - lines.wht
-type Receipt struct {
-	CustomerID  string          `json:"customer_id"`
-	Date        string          `json:"date"`
-	Description string          `json:"description"`
-	Lines       []ReceiptLine   `json:"lines"`
-	Methods     []ReceiptMethod `json:"methods"`
-}
-
-func (r Receipt) ToInput() (dto.ReceiptInput, error) {
-	if err := required(map[string]string{"customer_id": r.CustomerID, "date": r.Date}); err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	customer, err := id[vo.CustomerID]("customer_id", r.CustomerID)
-	if err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	d, err := date("date", r.Date)
-	if err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	out := dto.ReceiptInput{CustomerID: customer, Date: d, Description: r.Description,
-		Lines: make([]dto.ReceiptLineInput, len(r.Lines)), Methods: make([]dto.ReceiptMethodInput, len(r.Methods))}
-	for i, l := range r.Lines {
-		n := i + 1
-		inv, err := id[vo.InvoiceID](fmt.Sprintf("lines[%d].invoice_id", n), l.InvoiceID)
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		amount, err := l.Amount.required(fmt.Sprintf("lines[%d].amount", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		wht, err := l.Wht.orZero(fmt.Sprintf("lines[%d].wht", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		out.Lines[i] = dto.ReceiptLineInput{InvoiceID: inv, Amount: amount, Wht: wht}
-	}
-	for i, m := range r.Methods {
-		n := i + 1
-		acc, err := id[vo.CashAccountID](fmt.Sprintf("methods[%d].cash_account_id", n), m.CashAccountID)
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		amount, err := m.Amount.required(fmt.Sprintf("methods[%d].amount", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		out.Methods[i] = dto.ReceiptMethodInput{CashAccountID: acc, Amount: amount, Reference: m.Reference}
-	}
-	return out, nil
 }
 
 // ---------- URL query ----------

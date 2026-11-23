@@ -29,9 +29,6 @@ type (
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
 	StockDocumentID uuid.UUID
-	PaymentID       uuid.UUID
-	WhtTypeID       uuid.UUID
-	CashAccountID   uuid.UUID // ทะเบียนเงินสด / ธนาคารของ cashbank
 	AccountID       uuid.UUID
 	JournalID       uuid.UUID
 	EntryID         uuid.UUID
@@ -62,11 +59,6 @@ func (id WarehouseID) String() string { return IDString(id) }
 func (id AccountID) String() string   { return IDString(id) }
 func (id JournalID) String() string   { return IDString(id) }
 func (id EntryID) String() string     { return IDString(id) }
-func (id PaymentID) String() string   { return IDString(id) }
-func (id WhtTypeID) String() string   { return IDString(id) }
-func (id CashAccountID) String() string {
-	return IDString(id)
-}
 
 // ---------- ข้อความ ----------
 
@@ -202,10 +194,9 @@ const (
 	DocOrder   DocType = "purchasing.order"
 	DocReceipt DocType = "purchasing.receipt"
 	DocInvoice DocType = "purchasing.invoice"
-	DocPayment DocType = "purchasing.payment"
 )
 
-var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice, DocPayment}
+var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice}
 
 // Prefix คือ prefix เริ่มต้นของเลขที่ (บริษัทเปลี่ยนได้)
 func (t DocType) Prefix() string {

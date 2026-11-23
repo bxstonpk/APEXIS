@@ -33,7 +33,6 @@ type Settings struct {
 	OutputVatAccountID *vo.AccountID // ภาษีขาย
 	RevenueAccountID   *vo.AccountID // รายได้ค่าเริ่มต้น (เมื่อสินค้า / หมวดไม่ได้ตั้ง)
 	CogsAccountID      *vo.AccountID // ต้นทุนขาย (perpetual)
-	WhtAccountID       *vo.AccountID // ภาษีถูกหัก ณ ที่จ่าย
 }
 
 func DefaultSettings() Settings { return Settings{VatRegistered: true, VatRate: decimal.NewFromInt(7)} }
@@ -47,7 +46,7 @@ func NewSettings(s Settings) (Settings, error) {
 
 func (s Settings) AccountIDs() []vo.AccountID {
 	var out []vo.AccountID
-	for _, p := range []*vo.AccountID{s.ARAccountID, s.OutputVatAccountID, s.RevenueAccountID, s.CogsAccountID, s.WhtAccountID} {
+	for _, p := range []*vo.AccountID{s.ARAccountID, s.OutputVatAccountID, s.RevenueAccountID, s.CogsAccountID} {
 		if p != nil {
 			out = append(out, *p)
 		}
@@ -59,7 +58,7 @@ func (s Settings) AccountIDs() []vo.AccountID {
 func (s Settings) Require(fields ...string) error {
 	set := map[string]bool{
 		"journal_id": s.JournalID != nil, "ar_account_id": s.ARAccountID != nil, "output_vat_account_id": s.OutputVatAccountID != nil,
-		"revenue_account_id": s.RevenueAccountID != nil, "cogs_account_id": s.CogsAccountID != nil, "wht_account_id": s.WhtAccountID != nil,
+		"revenue_account_id": s.RevenueAccountID != nil, "cogs_account_id": s.CogsAccountID != nil,
 	}
 	var missing []string
 	for _, f := range fields {

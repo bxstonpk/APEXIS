@@ -4,6 +4,8 @@ package dto
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
 )
@@ -126,8 +128,6 @@ type Ref struct {
 }
 
 type Settings struct {
-	WhtPnd3AccountID       *string
-	WhtPnd53AccountID      *string
 	VatRate                vo.Money
 	JournalID              *string
 	GRIRAccountID          *string
@@ -287,118 +287,52 @@ type Aging struct {
 	Totals AgingRow // รวมทุกผู้ขายที่ตรงเงื่อนไข (Supplier ว่าง)
 }
 
-// ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่ายชำระ ----------
+// ---------- การตัดยอดใบแจ้งหนี้ (เรียกโดย finance) ----------
 
-// WhtTypeFilter: GET /withholding-tax-types?q=&status=&sort=code|name&page=&page_size=
-type WhtTypeFilter struct {
-	Search   string
-	Statuses []vo.Status
-	Sort     []listing.Sort
-	Page     listing.Page
+// SettlementDoc คือเอกสารจ่ายเงินของ finance ที่ตัดยอด
+type SettlementDoc struct {
+	ID   uuid.UUID
+	No   string
+	Date time.Time
 }
 
-type WhtType struct {
-	ID     string
-	Code   string
-	Name   string
-	Rate   vo.Money
-	Status string
-}
-
-type PaymentLineInput struct {
+type SettlementLine struct {
 	InvoiceID vo.InvoiceID
 	Amount    vo.Money
-	WhtTypeID *vo.WhtTypeID
 }
 
-type PaymentMethodInput struct {
-	CashAccountID vo.CashAccountID
-	Amount        vo.Money
-	Reference     string
+type SettledInvoice struct {
+	ID                vo.InvoiceID
+	DocumentNo        string
+	SupplierInvoiceNo string
+	Net               vo.Money
+	Gross             vo.Money
 }
 
-type PaymentInput struct {
-	SupplierID  vo.SupplierID
-	Date        time.Time
-	Description string
-	Lines       []PaymentLineInput
-	Methods     []PaymentMethodInput
+type SettlementParty struct {
+	ID       vo.SupplierID
+	Code     string
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+	TaxType  vo.TaxType
 }
 
-type PaymentSummary struct {
-	ID          string
-	DocumentNo  string
-	Date        time.Time
-	Supplier    Ref
-	TaxForm     string // pnd3 / pnd53
-	Amount      vo.Money
-	Wht         vo.Money
-	Paid        vo.Money
-	Status      string
-	EntryID     *string
-	EntryNo     string
-	CancelledAt *time.Time
+// SettlementResult: ผู้ขาย ณ วันจ่าย + บัญชีเจ้าหนี้ (ค่าตั้งจัดซื้อ) + ใบแจ้งหนี้ตามลำดับที่ส่งมา
+type SettlementResult struct {
+	Supplier    SettlementParty
+	APAccountID vo.AccountID
+	Invoices    []SettledInvoice
 }
 
-type PaymentLine struct {
-	Invoice Ref // Code = เลขที่ใบแจ้งหนี้ (PI...), Name = เลขที่ใบแจ้งหนี้ของผู้ขาย
-	Amount  vo.Money
-	WhtType *Ref
-	WhtRate vo.Money
-	WhtBase vo.Money
-	Wht     vo.Money
-}
-
-type PaymentMethod struct {
-	CashAccountID string
-	GLAccountID   string
-	Amount        vo.Money
-	Reference     string
-}
-
-type Payment struct {
-	PaymentSummary
-	Description string
-	CreatedBy   string
-	Lines       []PaymentLine
-	Methods     []PaymentMethod
-}
-
-var (
-	WithholdingSortKeys    = []string{"date", "document_no", "supplier_code"}
-	DefaultWithholdingSort = []listing.Sort{{Key: "date"}, {Key: "document_no"}}
-)
-
-// WithholdingFilter: book=withholding-tax — ภาษีหัก ณ ที่จ่ายตามวันที่จ่าย (start_date / end_date)
-type WithholdingFilter struct {
-	Start, End time.Time
-	Form       string // pnd3 / pnd53 / "" = ทั้งหมด
-	SupplierID *vo.SupplierID
-	Sort       []listing.Sort
-	Page       listing.Page
-}
-
-type WithholdingRow struct {
-	Date       time.Time
-	PaymentID  string
-	DocumentNo string
-	Supplier   Ref
-	TaxID      string
-	BranchNo   string
-	TaxForm    string
-	WhtType    Ref
-	Rate       vo.Money
-	Base       vo.Money
-	Wht        vo.Money
-}
-
-type WithholdingTotals struct {
-	Base vo.Money
-	Wht  vo.Money
-}
-
-type Withholding struct {
-	Start, End time.Time
-	Rows       listing.Result[WithholdingRow]
-	Totals     WithholdingTotals
+type OpenInvoice struct {
+	ID                string
+	DocumentNo        string
+	SupplierInvoiceNo string
+	Date              time.Time
+	DueDate           time.Time
+	Net               vo.Money
+	Gross             vo.Money
+	Outstanding       vo.Money
 }

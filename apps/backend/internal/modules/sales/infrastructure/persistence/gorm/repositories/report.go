@@ -115,10 +115,10 @@ func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f 
 		SELECT inv.company_id, inv.customer_id, inv.status, inv.doc_date, inv.due_date,
 		       inv.total_gross - COALESCE(rc.amount, 0) AS open_amount
 		  FROM sales_invoices AS inv
-		  LEFT JOIN (SELECT rl.invoice_id, SUM(rl.amount) AS amount
-		               FROM sales_receipt_lines AS rl JOIN sales_receipts AS r ON r.id = rl.receipt_id
-		              WHERE r.company_id = ? AND r.status = 'posted' AND r.doc_date <= ?
-		              GROUP BY rl.invoice_id) AS rc ON rc.invoice_id = inv.id) AS i
+		  LEFT JOIN (SELECT st.invoice_id, SUM(st.amount) AS amount
+		               FROM sales_invoice_settlements AS st
+		              WHERE st.company_id = ? AND st.status = 'posted' AND st.settled_on <= ?
+		              GROUP BY st.invoice_id) AS rc ON rc.invoice_id = inv.id) AS i
 		JOIN sales_customers AS c ON c.id = i.customer_id WHERE ` + strings.Join(where, " AND ")
 	bucket := func(cond string) string { return "SUM(CASE WHEN " + cond + " THEN i.open_amount ELSE 0 END)" }
 	overdue := "(CAST(? AS date) - i.due_date)"
@@ -229,18 +229,4 @@ func (r *ReportRepository) OutputVat(ctx context.Context, companyID vo.CompanyID
 	}
 	return r.taxReport(base, `d.doc_date, d.id AS document_id, d.document_no, `+taxCustomer+`, d.total_net AS base, d.total_vat AS tax,
 		COUNT(*) OVER () AS total, SUM(d.total_net) OVER () AS total_base, SUM(d.total_vat) OVER () AS total_tax`, f)
-}
-
-// WithholdingReceived: ใบเสร็จ (ยังไม่ยกเลิก) ที่ลูกค้าหักภาษี — ต่อใบเสร็จ: ฐาน = ยอดตัดหนี้, ภาษี = ยอดที่ถูกหัก
-func (r *ReportRepository) WithholdingReceived(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error) {
-	base := func() *gorm.DB {
-		q := database.Conn(ctx, r.db).Table("sales_receipts AS d").Joins("JOIN sales_customers AS c ON c.id = d.customer_id").
-			Where("d.company_id = ? AND d.status = 'posted' AND d.total_wht > 0 AND d.doc_date BETWEEN ? AND ?", uuidOf(companyID), f.Start, f.End)
-		if f.CustomerID != nil {
-			q = q.Where("d.customer_id = ?", uuidOf(*f.CustomerID))
-		}
-		return q
-	}
-	return r.taxReport(base, `d.doc_date, d.id AS document_id, d.document_no, `+taxCustomer+`, d.total_amount AS base, d.total_wht AS tax,
-		COUNT(*) OVER () AS total, SUM(d.total_amount) OVER () AS total_base, SUM(d.total_wht) OVER () AS total_tax`, f)
 }

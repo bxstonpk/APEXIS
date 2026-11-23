@@ -1,4 +1,4 @@
-// Package requests คือ JSON / URL query ขาเข้าของ cashbank
+// Package requests คือ JSON / URL query ขาเข้าของ finance
 package requests
 
 import (
@@ -8,13 +8,16 @@ import (
 	"slices"
 	"strings"
 
-	"apexis/backend/internal/modules/cashbank/application/dto"
-	"apexis/backend/internal/modules/cashbank/domain/entities"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
+	"apexis/backend/internal/modules/finance/application/dto"
+	"apexis/backend/internal/modules/finance/domain/entities"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
 )
 
 var ErrValidation = errors.New("validation failed")
+
+// Invalid: error ข้อมูลขาเข้าไม่ถูกต้อง (400) — ใช้จาก handler ได้
+func Invalid(format string, args ...any) error { return invalid(format, args...) }
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrValidation}, args...)...)

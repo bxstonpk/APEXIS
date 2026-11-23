@@ -70,13 +70,12 @@ type Settings struct {
 	OutputVatAccountID *string `json:"output_vat_account_id"`
 	RevenueAccountID   *string `json:"revenue_account_id"`
 	CogsAccountID      *string `json:"cogs_account_id"`
-	WhtAccountID       *string `json:"wht_account_id"`
 }
 
 func FromSettings(s dto.Settings) Settings {
 	return Settings{
 		VatRegistered: s.VatRegistered, VatRate: str(s.VatRate), JournalID: s.JournalID, ARAccountID: s.ARAccountID,
-		OutputVatAccountID: s.OutputVatAccountID, RevenueAccountID: s.RevenueAccountID, CogsAccountID: s.CogsAccountID, WhtAccountID: s.WhtAccountID,
+		OutputVatAccountID: s.OutputVatAccountID, RevenueAccountID: s.RevenueAccountID, CogsAccountID: s.CogsAccountID,
 	}
 }
 
@@ -303,54 +302,6 @@ func FromInvoice(i dto.Invoice) Invoice {
 			OrderLineNo: l.OrderLineNo, Item: ref(l.Item), Quantity: str(l.Quantity), UnitPrice: str(l.UnitPrice),
 			Amounts: totals(l.Amounts), RevenueAccountID: l.RevenueAccountID, Cost: str(l.Cost),
 		}
-	}
-	return out
-}
-
-type ReceiptSummary struct {
-	PostedSummary
-	Amount   string `json:"amount"`   // ตัดหนี้
-	Wht      string `json:"wht"`      // ถูกหัก ณ ที่จ่าย
-	Received string `json:"received"` // รับจริง
-}
-
-func FromReceiptSummary(r dto.ReceiptSummary) ReceiptSummary {
-	return ReceiptSummary{PostedSummary: FromPostedSummary(r.PostedSummary), Amount: str(r.Amount), Wht: str(r.Wht), Received: str(r.Received)}
-}
-
-type ReceiptInvoice struct {
-	ID         string `json:"id"`
-	DocumentNo string `json:"document_no"`
-}
-
-type ReceiptLineOut struct {
-	Invoice ReceiptInvoice `json:"invoice"`
-	Amount  string         `json:"amount"`
-	Wht     string         `json:"wht"`
-}
-
-type ReceiptMethod struct {
-	CashAccountID string `json:"cash_account_id"`
-	GLAccountID   string `json:"gl_account_id"`
-	Amount        string `json:"amount"`
-	Reference     string `json:"reference"`
-}
-
-type Receipt struct {
-	ReceiptSummary
-	Description string           `json:"description"`
-	Lines       []ReceiptLineOut `json:"lines"`
-	Methods     []ReceiptMethod  `json:"methods"`
-}
-
-func FromReceipt(r dto.Receipt) Receipt {
-	out := Receipt{ReceiptSummary: FromReceiptSummary(r.ReceiptSummary), Description: r.Description,
-		Lines: make([]ReceiptLineOut, len(r.Lines)), Methods: make([]ReceiptMethod, len(r.Methods))}
-	for i, l := range r.Lines {
-		out.Lines[i] = ReceiptLineOut{Invoice: ReceiptInvoice{ID: l.Invoice.ID, DocumentNo: l.Invoice.Code}, Amount: str(l.Amount), Wht: str(l.Wht)}
-	}
-	for i, m := range r.Methods {
-		out.Methods[i] = ReceiptMethod{CashAccountID: m.CashAccountID, GLAccountID: m.GLAccountID, Amount: str(m.Amount), Reference: m.Reference}
 	}
 	return out
 }

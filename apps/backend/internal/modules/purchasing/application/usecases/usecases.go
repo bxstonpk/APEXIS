@@ -24,33 +24,30 @@ import (
 )
 
 type Deps struct {
-	Tx        ports.TransactionManager
-	Auth      ports.Authorizer
-	Org       ports.Organization
-	Ledger    ports.Ledger
-	Inventory ports.Inventory
-	CashBank  ports.CashBank
-	Settings  repositories.SettingsRepository
-	Suppliers repositories.SupplierRepository
-	Sequence  repositories.Sequence
-	Orders    repositories.OrderRepository
-	Receipts  repositories.ReceiptRepository
-	Invoices  repositories.InvoiceRepository
-	Reports   repositories.ReportRepository
-	WhtTypes  repositories.WhtTypeRepository
-	Payments  repositories.PaymentRepository
-	Clock     func() time.Time // optional
+	Tx          ports.TransactionManager
+	Auth        ports.Authorizer
+	Org         ports.Organization
+	Ledger      ports.Ledger
+	Inventory   ports.Inventory
+	Settings    repositories.SettingsRepository
+	Suppliers   repositories.SupplierRepository
+	Sequence    repositories.Sequence
+	Orders      repositories.OrderRepository
+	Receipts    repositories.ReceiptRepository
+	Invoices    repositories.InvoiceRepository
+	Reports     repositories.ReportRepository
+	Settlements repositories.SettlementRepository
+	Clock       func() time.Time // optional
 }
 
 type UseCases struct {
-	Settings  *SettingsUseCases
-	Suppliers *SupplierUseCases
-	Orders    *OrderUseCases
-	Receipts  *ReceiptUseCases
-	Invoices  *InvoiceUseCases
-	Reports   *ReportUseCases
-	WhtTypes  *WhtTypeUseCases
-	Payments  *PaymentUseCases
+	Settings    *SettingsUseCases
+	Suppliers   *SupplierUseCases
+	Orders      *OrderUseCases
+	Receipts    *ReceiptUseCases
+	Invoices    *InvoiceUseCases
+	Reports     *ReportUseCases
+	Settlements *SettlementUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -59,16 +56,13 @@ func New(d Deps) *UseCases {
 	}
 	b := base{tx: d.Tx, auth: d.Auth, org: d.Org, ledger: d.Ledger, inventory: d.Inventory, settings: d.Settings, seq: d.Sequence, now: d.Clock}
 	return &UseCases{
-		Settings:  &SettingsUseCases{base: b},
-		Suppliers: &SupplierUseCases{base: b, repo: d.Suppliers},
-		Orders:    &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers},
-		Receipts:  &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
-		Invoices:  &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders},
-		Reports:   &ReportUseCases{base: b, reports: d.Reports},
-		WhtTypes:  &WhtTypeUseCases{base: b, repo: d.WhtTypes},
-		Payments: &PaymentUseCases{
-			base: b, payments: d.Payments, invoices: d.Invoices, suppliers: d.Suppliers, whtTypes: d.WhtTypes, cashbank: d.CashBank,
-		},
+		Settings:    &SettingsUseCases{base: b},
+		Suppliers:   &SupplierUseCases{base: b, repo: d.Suppliers},
+		Orders:      &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers},
+		Receipts:    &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
+		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders},
+		Reports:     &ReportUseCases{base: b, reports: d.Reports},
+		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, suppliers: d.Suppliers, settlements: d.Settlements},
 	}
 }
 

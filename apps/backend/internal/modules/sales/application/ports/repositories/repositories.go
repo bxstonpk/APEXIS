@@ -6,6 +6,8 @@ package repositories
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"apexis/backend/internal/modules/sales/application/dto"
 	"apexis/backend/internal/modules/sales/domain/entities"
 	vo "apexis/backend/internal/modules/sales/domain/value_objects"
@@ -65,19 +67,21 @@ type InvoiceRepository interface {
 	Create(ctx context.Context, i *entities.Invoice) error
 	UpdateStatus(ctx context.Context, i *entities.Invoice) error
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (*entities.Invoice, error)
-	// LockForReceipt: หัวใบแจ้งหนี้ (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
-	LockForReceipt(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
+	// LockForSettlement: หัวใบแจ้งหนี้ (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
+	LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
 	SaveReceived(ctx context.Context, invoices []*entities.Invoice) error
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error)
+	// Open: ใบแจ้งหนี้ที่ยังค้างรับของลูกค้า เรียงวันครบกำหนด — query เดียว
+	Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error)
 }
 
-type ReceiptRepository interface {
-	Create(ctx context.Context, r *entities.Receipt) error
-	UpdateStatus(ctx context.Context, r *entities.Receipt) error
-	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (*entities.Receipt, error)
-	Get(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (dto.Receipt, error)
-	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.ReceiptSummary], error)
+// SettlementRepository: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance (ใช้คำนวณอายุลูกหนี้ ณ วันที่)
+type SettlementRepository interface {
+	Create(ctx context.Context, companyID vo.CompanyID, doc dto.SettlementDoc, lines []dto.SettlementLine) error
+	// LockDocument: รายการที่ยังมีผลของเอกสาร (FOR UPDATE) — ว่าง = ไม่พบ / ยกเลิกแล้ว
+	LockDocument(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) ([]dto.SettlementLine, error)
+	Cancel(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
 }
 
 type ReportRepository interface {
@@ -85,6 +89,4 @@ type ReportRepository interface {
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
 	// OutputVat: ใบแจ้งหนี้ (ยังไม่ยกเลิก) ในช่วงวันที่ — ฐาน = ยอดก่อน VAT, ภาษี = VAT
 	OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
-	// WithholdingReceived: บรรทัดใบเสร็จ (ยังไม่ยกเลิก) ที่ลูกค้าหักภาษีไว้
-	WithholdingReceived(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
 }

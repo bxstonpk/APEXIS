@@ -17,7 +17,7 @@ import (
 // ---------- ID ----------
 //
 // CompanyID / UserID / FiscalPeriodID ของ organization / identity; ItemID / WarehouseID / StockDocumentID ของ inventory;
-// AccountID / JournalID / EntryID ของ ledger; CashAccountID ของ cashbank
+// AccountID / JournalID / EntryID ของ ledger
 type (
 	CompanyID       uuid.UUID
 	UserID          uuid.UUID
@@ -27,11 +27,9 @@ type (
 	OrderID         uuid.UUID
 	DeliveryID      uuid.UUID
 	InvoiceID       uuid.UUID
-	ReceiptID       uuid.UUID
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
 	StockDocumentID uuid.UUID
-	CashAccountID   uuid.UUID
 	AccountID       uuid.UUID
 	JournalID       uuid.UUID
 	EntryID         uuid.UUID
@@ -51,17 +49,15 @@ func ParseID[T anyID](s string) (T, error) {
 
 func IDString[T anyID](id T) string { return uuid.UUID(id).String() }
 
-func (id CustomerID) String() string    { return IDString(id) }
-func (id QuotationID) String() string   { return IDString(id) }
-func (id OrderID) String() string       { return IDString(id) }
-func (id DeliveryID) String() string    { return IDString(id) }
-func (id InvoiceID) String() string     { return IDString(id) }
-func (id ReceiptID) String() string     { return IDString(id) }
-func (id ItemID) String() string        { return IDString(id) }
-func (id CashAccountID) String() string { return IDString(id) }
-func (id AccountID) String() string     { return IDString(id) }
-func (id JournalID) String() string     { return IDString(id) }
-func (id EntryID) String() string       { return IDString(id) }
+func (id CustomerID) String() string  { return IDString(id) }
+func (id QuotationID) String() string { return IDString(id) }
+func (id OrderID) String() string     { return IDString(id) }
+func (id DeliveryID) String() string  { return IDString(id) }
+func (id InvoiceID) String() string   { return IDString(id) }
+func (id ItemID) String() string      { return IDString(id) }
+func (id AccountID) String() string   { return IDString(id) }
+func (id JournalID) String() string   { return IDString(id) }
+func (id EntryID) String() string     { return IDString(id) }
 
 // ---------- ข้อความ ----------
 
@@ -220,19 +216,18 @@ const (
 	DocOrder     DocType = "sales.order"
 	DocDelivery  DocType = "sales.delivery"
 	DocInvoice   DocType = "sales.invoice" // ใบแจ้งหนี้ / ใบกำกับภาษี (รวมแบบส่งของพร้อมออกบิล)
-	DocReceipt   DocType = "sales.receipt"
 )
 
-var DocTypes = []DocType{DocQuotation, DocOrder, DocDelivery, DocInvoice, DocReceipt}
+var DocTypes = []DocType{DocQuotation, DocOrder, DocDelivery, DocInvoice}
 
 func (t DocType) Prefix() string {
-	return map[DocType]string{DocQuotation: "QT", DocOrder: "SO", DocDelivery: "DO", DocInvoice: "IV", DocReceipt: "RV"}[t]
+	return map[DocType]string{DocQuotation: "QT", DocOrder: "SO", DocDelivery: "DO", DocInvoice: "IV"}[t]
 }
 
 func (t DocType) Name() string {
 	return map[DocType]string{
 		DocQuotation: "ใบเสนอราคา", DocOrder: "ใบสั่งขาย", DocDelivery: "ใบส่งของ",
-		DocInvoice: "ใบแจ้งหนี้ / ใบกำกับภาษี", DocReceipt: "ใบเสร็จรับเงิน",
+		DocInvoice: "ใบแจ้งหนี้ / ใบกำกับภาษี",
 	}[t]
 }
 
@@ -254,8 +249,6 @@ const (
 	PermDeliveryPost    Permission = "sales.delivery:post"
 	PermInvoiceRead     Permission = "sales.invoice:read"
 	PermInvoicePost     Permission = "sales.invoice:post"
-	PermReceiptRead     Permission = "sales.receipt:read"
-	PermReceiptPost     Permission = "sales.receipt:post"
 	PermReportRead      Permission = "sales.report:read"
 )
 
@@ -276,7 +269,5 @@ var AllPermissions = []Permission{
 	PermDeliveryPost,
 	PermInvoiceRead,
 	PermInvoicePost,
-	PermReceiptRead,
-	PermReceiptPost,
 	PermReportRead,
 }

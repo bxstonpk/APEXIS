@@ -1,8 +1,17 @@
-// Package cashbank คือทะเบียนเงินสด / บัญชีธนาคาร — แต่ละรายการผูกกับผังบัญชีของ ledger
-// เอกสารรับ / จ่ายเงินของ module อื่น (จัดซื้อ, ขาย) เลือกทะเบียนนี้แล้วลงบัญชีที่ผูกไว้
+// Package finance คือการเงิน: ทะเบียนเงินสด / ธนาคาร และเอกสารเงินเข้า-ออกทั้งหมดของบริษัท
 //
-// พึ่งพา identity (สิทธิ์), organization (สถานะบริษัท), ledger (ตรวจบัญชี) ผ่าน interface เท่านั้น
-package cashbank
+//   - รับเงิน: รับชำระหนี้ลูกค้า (ตัดยอดใบแจ้งหนี้ขาย + ภาษีถูกหัก ณ ที่จ่าย) หรือรับเงินอื่น (ระบุบัญชีเอง)
+//   - จ่ายเงิน: จ่ายชำระหนี้ผู้ขาย (ตัดยอดใบแจ้งหนี้ซื้อ + ภาษีหัก ณ ที่จ่าย ภ.ง.ด.3 / 53) หรือจ่ายเงินอื่น
+//   - โอนเงินระหว่างบัญชี, ประเภทภาษีหัก ณ ที่จ่าย, รายงานภาษีหัก ณ ที่จ่าย / ภาษีถูกหัก
+//
+// การลงบัญชี (ตามทะเบียนเงินที่ผูกผังบัญชีไว้ — 1 ผังบัญชี = 1 บรรทัด):
+//   - รับชำระหนี้: Dr เงินสด / ธนาคาร + Dr ภาษีถูกหัก ณ ที่จ่าย / Cr ลูกหนี้ (ค่าตั้งขาย)
+//   - จ่ายชำระหนี้: Dr เจ้าหนี้ (ค่าตั้งจัดซื้อ) / Cr เงินสด / ธนาคาร + Cr ภาษีหัก ณ ที่จ่ายค้างจ่าย
+//   - โอนเงิน: Dr ปลายทาง / Cr ต้นทาง
+//
+// พึ่งพา module อื่นผ่าน interface เท่านั้น (ทั้งหมดอยู่ใน transaction เดียวกัน):
+// identity (สิทธิ์), organization (บริษัท / งวด / เลขที่), ledger (ลงบัญชี), sales / purchasing (ตัดยอดใบแจ้งหนี้)
+package finance
 
 import (
 	"context"
@@ -11,14 +20,15 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"apexis/backend/internal/modules/cashbank/application/usecases"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
-	gp "apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm/models"
-	gormrepo "apexis/backend/internal/modules/cashbank/infrastructure/persistence/gorm/repositories"
-	"apexis/backend/internal/modules/cashbank/infrastructure/services"
-	"apexis/backend/internal/modules/cashbank/presentation/http/handlers"
+	"apexis/backend/internal/modules/finance/application/usecases"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
+	gp "apexis/backend/internal/modules/finance/infrastructure/persistence/gorm"
+	"apexis/backend/internal/modules/finance/infrastructure/persistence/gorm/models"
+	gormrepo "apexis/backend/internal/modules/finance/infrastructure/persistence/gorm/repositories"
+	"apexis/backend/internal/modules/finance/infrastructure/services"
+	"apexis/backend/internal/modules/finance/presentation/http/handlers"
 	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/reports"
 )
 
 type Identity interface {
@@ -27,9 +37,13 @@ type Identity interface {
 	Authorize(ctx context.Context, userID, companyID uuid.UUID, permission string) (bool, error)
 }
 
+// Organization / Ledger / Receivables / Payables คือ public API ของ *organization.Module, *ledger.Module,
+// *sales.Module (ลูกหนี้) และ *purchasing.Module (เจ้าหนี้)
 type (
 	Organization = services.OrganizationAccess
 	Ledger       = services.LedgerAccess
+	Receivables  = services.ReceivablesAccess
+	Payables     = services.PayablesAccess
 )
 
 type Module struct {
@@ -38,13 +52,23 @@ type Module struct {
 	handler  *handlers.Handler
 }
 
-func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger) *Module {
+func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receivables Receivables, payables Payables) *Module {
+	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
-		Tx:       gp.NewTransactionManager(db),
-		Auth:     services.NewAuthorizer(identity),
-		Org:      services.NewOrganization(org),
-		Ledger:   services.NewLedger(ledger),
-		Accounts: gormrepo.NewCashAccountRepository(db),
+		Tx:          gp.NewTransactionManager(db),
+		Auth:        services.NewAuthorizer(identity),
+		Org:         services.NewOrganization(org),
+		Ledger:      services.NewLedger(ledger),
+		Receivables: services.NewReceivables(receivables),
+		Payables:    services.NewPayables(payables),
+		Accounts:    gormrepo.NewCashAccountRepository(db),
+		Settings:    gormrepo.NewSettingsRepository(db),
+		WhtTypes:    gormrepo.NewWhtTypeRepository(db),
+		Sequence:    gormrepo.NewSequenceRepository(),
+		Receipts:    gormrepo.NewReceiptRepository(db),
+		Payments:    gormrepo.NewPaymentRepository(db),
+		Transfers:   gormrepo.NewTransferRepository(db),
+		Reports:     gormrepo.NewReportRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -53,25 +77,16 @@ func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
 	handlers.RegisterRoutes(mux, m.handler, m.identity.Authenticate)
 }
 
-// CashAccounts คืนทะเบียนเงินสด / ธนาคารตาม id (ไม่ตรวจสิทธิ์; ที่ไม่พบหรือถูกลบจะไม่อยู่ใน map)
-func (m *Module) CashAccounts(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.CashAccount, error) {
-	in := make([]vo.CashAccountID, len(ids))
-	for i, id := range ids {
-		in[i] = vo.CashAccountID(id)
+// RegisterReports ลงทะเบียน book ของ finance กับ GET /reports?book=
+func (m *Module) RegisterReports(reg *reports.Registry) { handlers.RegisterReports(reg, m.handler) }
+
+// DocumentTypes คือชนิดเอกสารของการเงินที่ตั้งรูปแบบเลขที่ได้ (ลงทะเบียนกับ organization ตอน New)
+func DocumentTypes() []integration.DocumentType {
+	out := make([]integration.DocumentType, len(vo.DocTypes))
+	for i, t := range vo.DocTypes {
+		out[i] = integration.DocumentType{Key: string(t), Name: t.Name(), DefaultPrefix: t.Prefix()}
 	}
-	found, err := m.UseCases.Accounts.Lookup(ctx, vo.CompanyID(companyID), in)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[uuid.UUID]integration.CashAccount, len(found))
-	for _, a := range found {
-		d := a.Data()
-		out[uuid.UUID(a.ID())] = integration.CashAccount{
-			ID: uuid.UUID(a.ID()), Code: d.Code, Name: d.Name, Type: string(d.Type),
-			GLAccountID: uuid.UUID(d.GLAccountID), Active: d.Status == vo.StatusActive,
-		}
-	}
-	return out, nil
+	return out
 }
 
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
@@ -84,3 +99,9 @@ func (m *Module) Permissions() []string {
 	}
 	return out
 }
+
+// PermissionMigration คือการแปลงสิทธิ์เดิมของบทบาท (main.go ส่งให้ identity ทำตอนเริ่มโปรแกรม — ทำซ้ำได้)
+type PermissionMigration = vo.PermissionMigration
+
+// PermissionMigrations: สิทธิ์รับ / จ่ายเงินเดิมของ sales / purchasing / cashbank -> finance
+func PermissionMigrations() []PermissionMigration { return vo.PermissionMigrations }

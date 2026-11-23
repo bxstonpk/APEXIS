@@ -1,0 +1,239 @@
+package responses
+
+import (
+	"time"
+
+	"apexis/backend/internal/modules/finance/application/dto"
+	"apexis/backend/internal/platform/httpx"
+	"apexis/backend/internal/platform/listing"
+)
+
+func str(v interface{ String() string }) string { return v.String() }
+
+func date(t time.Time) string { return t.Format("2006-01-02") }
+
+type Ref struct {
+	ID   string `json:"id"`
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+func ref(r dto.Ref) Ref { return Ref(r) }
+
+func optRef(r *dto.Ref) *Ref {
+	if r == nil {
+		return nil
+	}
+	x := ref(*r)
+	return &x
+}
+
+type Party struct {
+	ID       *string `json:"id"`
+	Code     string  `json:"code"`
+	Name     string  `json:"name"`
+	TaxID    string  `json:"tax_id"`
+	BranchNo string  `json:"branch_no"`
+	Address  string  `json:"address"`
+	TaxType  string  `json:"tax_type"`
+}
+
+func party(p dto.Party) Party { return Party(p) }
+
+type Method struct {
+	CashAccount Ref    `json:"cash_account"`
+	GLAccountID string `json:"gl_account_id"`
+	Amount      string `json:"amount"`
+	Reference   string `json:"reference"`
+}
+
+func methods(ms []dto.Method) []Method {
+	out := make([]Method, len(ms))
+	for i, m := range ms {
+		out[i] = Method{CashAccount: ref(m.CashAccount), GLAccountID: m.GLAccountID, Amount: str(m.Amount), Reference: m.Reference}
+	}
+	return out
+}
+
+// DocumentSummary: net = รับจริง (ใบรับ) / จ่ายจริง (ใบจ่าย)
+type DocumentSummary struct {
+	ID          string     `json:"id"`
+	DocumentNo  string     `json:"document_no"`
+	Date        string     `json:"date"`
+	Kind        string     `json:"kind"`
+	Party       Party      `json:"party"`
+	Amount      string     `json:"amount"`
+	Wht         string     `json:"wht"`
+	Net         string     `json:"net"`
+	Status      string     `json:"status"`
+	EntryID     *string    `json:"entry_id"`
+	EntryNo     string     `json:"entry_no"`
+	CancelledAt *time.Time `json:"cancelled_at"`
+	Description string     `json:"description"`
+}
+
+func FromSummary(d dto.DocumentSummary) DocumentSummary {
+	return DocumentSummary{
+		ID: d.ID, DocumentNo: d.DocumentNo, Date: date(d.Date), Kind: d.Kind, Party: party(d.Party),
+		Amount: str(d.Amount), Wht: str(d.Wht), Net: str(d.Net), Status: d.Status, EntryID: d.EntryID, EntryNo: d.EntryNo,
+		CancelledAt: d.CancelledAt, Description: d.Description,
+	}
+}
+
+type ReceiptLine struct {
+	Invoice     *Ref    `json:"invoice"` // code = เลขที่ใบแจ้งหนี้
+	AccountID   *string `json:"account_id"`
+	Description string  `json:"description"`
+	Amount      string  `json:"amount"`
+	Wht         string  `json:"wht"`
+}
+
+type Receipt struct {
+	DocumentSummary
+	CreatedBy string        `json:"created_by"`
+	Lines     []ReceiptLine `json:"lines"`
+	Methods   []Method      `json:"methods"`
+}
+
+func FromReceipt(r dto.Receipt) Receipt {
+	out := Receipt{DocumentSummary: FromSummary(r.DocumentSummary), CreatedBy: r.CreatedBy, Lines: make([]ReceiptLine, len(r.Lines)), Methods: methods(r.Methods)}
+	for i, l := range r.Lines {
+		out.Lines[i] = ReceiptLine{Invoice: optRef(l.Invoice), AccountID: l.AccountID, Description: l.Description, Amount: str(l.Amount), Wht: str(l.Wht)}
+	}
+	return out
+}
+
+type PaymentLine struct {
+	Invoice     *Ref    `json:"invoice"` // code = เลขที่ใบแจ้งหนี้, name = เลขที่ของผู้ขาย
+	AccountID   *string `json:"account_id"`
+	Description string  `json:"description"`
+	Amount      string  `json:"amount"`
+	WhtType     *Ref    `json:"wht_type"`
+	WhtRate     string  `json:"wht_rate"`
+	WhtBase     string  `json:"wht_base"`
+	Wht         string  `json:"wht"`
+}
+
+type Payment struct {
+	DocumentSummary
+	CreatedBy string        `json:"created_by"`
+	Lines     []PaymentLine `json:"lines"`
+	Methods   []Method      `json:"methods"`
+}
+
+func FromPayment(p dto.Payment) Payment {
+	out := Payment{DocumentSummary: FromSummary(p.DocumentSummary), CreatedBy: p.CreatedBy, Lines: make([]PaymentLine, len(p.Lines)), Methods: methods(p.Methods)}
+	for i, l := range p.Lines {
+		out.Lines[i] = PaymentLine{Invoice: optRef(l.Invoice), AccountID: l.AccountID, Description: l.Description, Amount: str(l.Amount),
+			WhtType: optRef(l.WhtType), WhtRate: str(l.WhtRate), WhtBase: str(l.WhtBase), Wht: str(l.Wht)}
+	}
+	return out
+}
+
+type Transfer struct {
+	ID          string     `json:"id"`
+	DocumentNo  string     `json:"document_no"`
+	Date        string     `json:"date"`
+	From        Ref        `json:"from"`
+	To          Ref        `json:"to"`
+	Amount      string     `json:"amount"`
+	Reference   string     `json:"reference"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	EntryID     *string    `json:"entry_id"`
+	EntryNo     string     `json:"entry_no"`
+	CancelledAt *time.Time `json:"cancelled_at"`
+}
+
+func FromTransfer(t dto.Transfer) Transfer {
+	return Transfer{ID: t.ID, DocumentNo: t.DocumentNo, Date: date(t.Date), From: ref(t.From), To: ref(t.To), Amount: str(t.Amount),
+		Reference: t.Reference, Description: t.Description, Status: t.Status, EntryID: t.EntryID, EntryNo: t.EntryNo, CancelledAt: t.CancelledAt}
+}
+
+type WhtType struct {
+	ID     string `json:"id"`
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Rate   string `json:"rate"`
+	Status string `json:"status"`
+}
+
+func FromWhtType(w dto.WhtType) WhtType {
+	return WhtType{ID: w.ID, Code: w.Code, Name: w.Name, Rate: str(w.Rate), Status: w.Status}
+}
+
+type Settings struct {
+	ReceiptJournalID     *string `json:"receipt_journal_id"`
+	PaymentJournalID     *string `json:"payment_journal_id"`
+	TransferJournalID    *string `json:"transfer_journal_id"`
+	WhtReceivedAccountID *string `json:"wht_received_account_id"`
+	WhtPnd3AccountID     *string `json:"wht_pnd3_account_id"`
+	WhtPnd53AccountID    *string `json:"wht_pnd53_account_id"`
+}
+
+func FromSettings(s dto.Settings) Settings { return Settings(s) }
+
+type OpenInvoice struct {
+	ID          string `json:"id"`
+	DocumentNo  string `json:"document_no"`
+	PartnerRef  string `json:"partner_ref"` // เลขที่ใบแจ้งหนี้ของผู้ขาย
+	Date        string `json:"date"`
+	DueDate     string `json:"due_date"`
+	Net         string `json:"net"` // ยอดก่อน VAT
+	Gross       string `json:"gross"`
+	Outstanding string `json:"outstanding"`
+}
+
+func FromOpenInvoices(rows []dto.OpenInvoice) []OpenInvoice {
+	out := make([]OpenInvoice, len(rows))
+	for i, r := range rows {
+		out[i] = OpenInvoice{ID: r.ID, DocumentNo: r.DocumentNo, PartnerRef: r.PartnerRef, Date: date(r.Date), DueDate: date(r.DueDate),
+			Net: str(r.Net), Gross: str(r.Gross), Outstanding: str(r.Outstanding)}
+	}
+	return out
+}
+
+// ---------- รายงาน ----------
+
+type WithholdingRow struct {
+	Date       string `json:"date"`
+	DocumentID string `json:"document_id"`
+	DocumentNo string `json:"document_no"`
+	Party      Party  `json:"party"`
+	TaxForm    string `json:"tax_form"` // pnd3 / pnd53 (ภาษีที่จ่าย)
+	WhtType    *Ref   `json:"wht_type"`
+	Rate       string `json:"rate"`
+	Base       string `json:"base"`
+	Wht        string `json:"wht"`
+}
+
+type Withholding struct {
+	Book      string           `json:"book"`
+	StartDate string           `json:"start_date"`
+	EndDate   string           `json:"end_date"`
+	Rows      []WithholdingRow `json:"rows"`
+	TotalBase string           `json:"total_base"`
+	TotalWht  string           `json:"total_wht"`
+}
+
+// WithholdingBody: {"data": {...}, "meta": {...}} — meta คือการแบ่งหน้าของ rows
+type WithholdingBody struct {
+	Data Withholding `json:"data"`
+	Meta httpx.Meta  `json:"meta"`
+}
+
+func FromWithholding(book string, w dto.Withholding) WithholdingBody {
+	rows := make([]WithholdingRow, len(w.Rows.Items))
+	for i, r := range w.Rows.Items {
+		rows[i] = WithholdingRow{Date: date(r.Date), DocumentID: r.DocumentID, DocumentNo: r.DocumentNo, Party: party(r.Party), TaxForm: r.TaxForm,
+			WhtType: optRef(r.WhtType), Rate: str(r.Rate), Base: str(r.Base), Wht: str(r.Wht)}
+	}
+	return WithholdingBody{
+		Data: Withholding{Book: book, StartDate: date(w.Start), EndDate: date(w.End), Rows: rows, TotalBase: str(w.Totals.Base), TotalWht: str(w.Totals.Wht)},
+		Meta: meta(w.Rows),
+	}
+}
+
+func meta[T any](r listing.Result[T]) httpx.Meta {
+	return httpx.Meta{Page: r.Page.Number, PageSize: r.Page.Size, Total: r.Total}
+}

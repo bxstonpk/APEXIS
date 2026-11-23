@@ -52,8 +52,6 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidVatRate, Status: badRequest},
 	{Err: domain.ErrInvalidLine, Status: badRequest},
 	{Err: domain.ErrInvalidTaxType, Status: badRequest},
-	{Err: domain.ErrInvalidWhtRate, Status: badRequest},
-	{Err: domain.ErrInvalidPayment, Status: badRequest},
 	{Err: errUnauthenticated, Status: http.StatusUnauthorized},
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
 	{Err: domain.ErrSupplierNotFound, Status: notFound},
@@ -61,9 +59,6 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrReceiptNotFound, Status: notFound},
 	{Err: domain.ErrInvoiceNotFound, Status: notFound},
 	{Err: domain.ErrItemNotFound, Status: notFound},
-	{Err: domain.ErrPaymentNotFound, Status: notFound},
-	{Err: domain.ErrWhtTypeNotFound, Status: notFound},
-	{Err: domain.ErrCashAccountNotFound, Status: notFound},
 	{Err: domain.ErrCodeExists, Status: conflict},
 	{Err: domain.ErrInUse, Status: conflict},
 	{Err: domain.ErrInvoiceNoExists, Status: conflict},
@@ -94,7 +89,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: integration.ErrRejected, Status: rejected},
 }, requests.ErrValidation, domain.ErrInvalidLine, domain.ErrItemNotFound, domain.ErrItemInactive, domain.ErrOverReceipt,
 	domain.ErrOverInvoice, domain.ErrReceiptInvoiced, domain.ErrSettingsMissing, domain.ErrAccountInvalid, integration.ErrRejected,
-	domain.ErrInvalidPayment, domain.ErrWhtTypeNotFound, domain.ErrCashAccountNotFound, domain.ErrOverPayment,
+	domain.ErrOverPayment,
 	domain.ErrInvoiceNotPayable, domain.ErrInactiveRef)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response (fn คืน body ที่ห่อ envelope แล้ว หรือ nil สำหรับ 204)

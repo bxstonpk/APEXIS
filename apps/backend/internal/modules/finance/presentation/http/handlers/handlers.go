@@ -1,4 +1,4 @@
-// Package handlers คือ HTTP handler ของ cashbank — ไม่มี business logic
+// Package handlers คือ HTTP handler ของ finance — ไม่มี business logic
 package handlers
 
 import (
@@ -8,13 +8,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"apexis/backend/internal/modules/cashbank/application/dto"
-	"apexis/backend/internal/modules/cashbank/application/usecases"
-	domain "apexis/backend/internal/modules/cashbank/domain/errors"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
-	"apexis/backend/internal/modules/cashbank/presentation/http/requests"
-	"apexis/backend/internal/modules/cashbank/presentation/http/responses"
+	"apexis/backend/internal/modules/finance/application/dto"
+	"apexis/backend/internal/modules/finance/application/usecases"
+	domain "apexis/backend/internal/modules/finance/domain/errors"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
+	"apexis/backend/internal/modules/finance/presentation/http/requests"
+	"apexis/backend/internal/modules/finance/presentation/http/responses"
 	"apexis/backend/internal/platform/httpx"
+	"apexis/backend/internal/platform/integration"
+	"apexis/backend/internal/platform/listing"
 )
 
 type CurrentUser func(ctx context.Context) (uuid.UUID, bool)
@@ -44,9 +46,33 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
 	{Err: domain.ErrCashAccountNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
+	{Err: domain.ErrInvalidDate, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidKind, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidTaxType, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidWhtRate, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidReceipt, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidPayment, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidTransfer, Status: http.StatusBadRequest},
+	{Err: listing.ErrInvalidQuery, Status: http.StatusBadRequest},
+	{Err: domain.ErrReceiptNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrPaymentNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrTransferNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrWhtTypeNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrDocumentNoUsed, Status: http.StatusConflict},
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrAccountInvalid, Status: http.StatusUnprocessableEntity},
-}, requests.ErrValidation)
+	{Err: domain.ErrJournalInvalid, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrSettingsMissing, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrInactiveRef, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrAlreadyCancelled, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrNoFiscalPeriod, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrPeriodClosed, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrPayeeTaxIDRequired, Status: http.StatusUnprocessableEntity},
+	// กฎของ sales / purchasing / ledger (ยอดค้าง, ค่าตั้งบัญชีคุม, งวด) — ข้อความมาจาก module นั้น
+	{Err: integration.ErrRejected, Status: http.StatusUnprocessableEntity},
+}, requests.ErrValidation, listing.ErrInvalidQuery, integration.ErrRejected, domain.ErrInvalidReceipt, domain.ErrInvalidPayment,
+	domain.ErrInvalidTransfer, domain.ErrCashAccountNotFound, domain.ErrWhtTypeNotFound, domain.ErrAccountInvalid, domain.ErrSettingsMissing,
+	domain.ErrInactiveRef)
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {
 	userID, ok := h.currentUser(r.Context())
@@ -146,15 +172,4 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil, h.uc.Accounts.Delete(r.Context(), in)
 	})
-}
-
-// RegisterRoutes ผูก route ของ cashbank — ทุก route ต้อง Authenticate, สิทธิ์ตรวจใน use case
-func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handler) http.Handler) {
-	const base = "/api/v1/companies/{companyID}/cash-accounts"
-	handle := func(pattern string, fn http.HandlerFunc) { mux.Handle(pattern, authenticate(fn)) }
-	handle("GET "+base, h.List)
-	handle("POST "+base, h.Create)
-	handle("GET "+base+"/{cashAccountID}", h.Get)
-	handle("PUT "+base+"/{cashAccountID}", h.Update)
-	handle("DELETE "+base+"/{cashAccountID}", h.Delete)
 }

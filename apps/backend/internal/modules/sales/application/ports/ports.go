@@ -85,14 +85,3 @@ type Ledger interface {
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
 }
-
-type CashAccount struct {
-	ID          vo.CashAccountID
-	Code        string
-	GLAccountID vo.AccountID
-	Active      bool
-}
-
-type CashBank interface {
-	CashAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.CashAccountID) (map[vo.CashAccountID]CashAccount, error)
-}

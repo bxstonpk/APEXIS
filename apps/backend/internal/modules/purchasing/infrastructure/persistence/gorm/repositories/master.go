@@ -44,8 +44,7 @@ func (r *SettingsRepository) Save(ctx context.Context, companyID vo.CompanyID, s
 	return database.Conn(ctx, r.db).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "company_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id",
-			"wht_pnd3_account_id", "wht_pnd53_account_id", "updated_at",
+			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id", "updated_at",
 		}),
 	}).Create(&m).Error
 }

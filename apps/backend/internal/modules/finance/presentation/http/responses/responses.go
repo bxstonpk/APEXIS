@@ -1,7 +1,7 @@
-// Package responses คือ JSON ขาออกของ cashbank
+// Package responses คือ JSON ขาออกของ finance
 package responses
 
-import "apexis/backend/internal/modules/cashbank/application/dto"
+import "apexis/backend/internal/modules/finance/application/dto"
 
 type CashAccount struct {
 	ID          string `json:"id"`

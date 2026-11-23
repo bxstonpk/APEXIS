@@ -225,8 +225,8 @@ func (r *InvoiceRepository) Create(ctx context.Context, inv *entities.Invoice) e
 	return tx.Create(&m.Lines).Error
 }
 
-// LockForPayment — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
-func (r *InvoiceRepository) LockForPayment(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
+// LockForSettlement — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
+func (r *InvoiceRepository) LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}

@@ -48,7 +48,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 	return models.SettingsModel{
 		CompanyID: uuid.UUID(companyID), VatRegistered: s.VatRegistered, VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		ARAccountID: OptUUID(s.ARAccountID), OutputVatAccountID: OptUUID(s.OutputVatAccountID), RevenueAccountID: OptUUID(s.RevenueAccountID),
-		CogsAccountID: OptUUID(s.CogsAccountID), WhtAccountID: OptUUID(s.WhtAccountID),
+		CogsAccountID: OptUUID(s.CogsAccountID),
 	}
 }
 
@@ -57,7 +57,6 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRegistered: m.VatRegistered, VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		ARAccountID: OptID[vo.AccountID](m.ARAccountID), OutputVatAccountID: OptID[vo.AccountID](m.OutputVatAccountID),
 		RevenueAccountID: OptID[vo.AccountID](m.RevenueAccountID), CogsAccountID: OptID[vo.AccountID](m.CogsAccountID),
-		WhtAccountID: OptID[vo.AccountID](m.WhtAccountID),
 	}
 }
 
@@ -324,41 +323,4 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 		}
 	}
 	return entities.RehydrateInvoice(s)
-}
-
-func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
-	s := r.State()
-	m := models.ReceiptModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
-		PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
-		TotalAmount: s.Totals.Amount, TotalWht: s.Totals.Wht, TotalReceived: s.Totals.Received,
-	}
-	for i, l := range s.Lines {
-		m.Lines = append(m.Lines, models.ReceiptLineModel{ReceiptID: m.ID, LineNo: i + 1, InvoiceID: uuid.UUID(l.InvoiceID), Amount: l.Amount, Wht: l.Wht})
-	}
-	for i, x := range s.Methods {
-		m.Methods = append(m.Methods, models.ReceiptMethodModel{
-			ReceiptID: m.ID, LineNo: i + 1, CashAccountID: uuid.UUID(x.CashAccountID), GLAccountID: uuid.UUID(x.GLAccountID),
-			Amount: x.Amount, Reference: x.Reference,
-		})
-	}
-	return m
-}
-
-func ReceiptToEntity(m models.ReceiptModel) *entities.Receipt {
-	s := entities.ReceiptState{
-		ID: vo.ReceiptID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), CustomerID: vo.CustomerID(m.PostedModel.CustomerID), Date: DateUTC(m.DocDate),
-		Description: m.PostedModel.Description, Totals: entities.ReceiptTotals{Amount: m.TotalAmount, Wht: m.TotalWht, Received: m.TotalReceived},
-		Status: vo.DocStatus(m.PostedModel.Status), Posting: postingOf(m.DocumentNo, m.PostedModel), Cancellation: cancellationOf(m.PostedModel),
-		Lines: make([]entities.ReceiptLine, len(m.Lines)), Methods: make([]entities.ReceiptMethod, len(m.Methods)),
-	}
-	for i, l := range m.Lines {
-		s.Lines[i] = entities.ReceiptLine{InvoiceID: vo.InvoiceID(l.InvoiceID), Amount: l.Amount, Wht: l.Wht}
-	}
-	for i, x := range m.Methods {
-		s.Methods[i] = entities.ReceiptMethod{
-			CashAccountID: vo.CashAccountID(x.CashAccountID), GLAccountID: vo.AccountID(x.GLAccountID), Amount: x.Amount, Reference: x.Reference,
-		}
-	}
-	return entities.RehydrateReceipt(s)
 }

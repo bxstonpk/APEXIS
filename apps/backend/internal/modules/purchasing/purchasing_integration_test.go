@@ -12,7 +12,6 @@ import (
 	"os"
 	"testing"
 
-	"apexis/backend/internal/modules/cashbank"
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
@@ -92,7 +91,7 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
-		"purchasing_payment_methods", "purchasing_payment_lines", "purchasing_payments", "purchasing_wht_types", "cashbank_accounts",
+		"purchasing_invoice_settlements",
 		"purchasing_invoice_lines", "purchasing_invoices", "purchasing_receipt_lines", "purchasing_receipts",
 		"purchasing_order_lines", "purchasing_orders", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
@@ -112,7 +111,6 @@ func setup(t *testing.T) api {
 		func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) },
 		func() error { return inventory.Migrate(db) },
-		func() error { return cashbank.Migrate(db) },
 		func() error { return purchasing.Migrate(db) },
 	} {
 		if err := migrate(); err != nil {
@@ -131,9 +129,7 @@ func setup(t *testing.T) api {
 	led.RegisterRoutes(mux)
 	inv := inventory.New(db, idm, org, led)
 	inv.RegisterRoutes(mux)
-	cb := cashbank.New(db, idm, org, led)
-	cb.RegisterRoutes(mux)
-	pur := purchasing.New(db, idm, org, led, inv, cb)
+	pur := purchasing.New(db, idm, org, led, inv)
 	pur.RegisterRoutes(mux)
 	reg := reports.NewRegistry()
 	led.RegisterReports(reg)

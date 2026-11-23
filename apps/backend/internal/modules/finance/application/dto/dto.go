@@ -1,8 +1,8 @@
-// Package dto คือ input / filter / read model ของ cashbank
+// Package dto คือ input / filter / read model ของ finance
 package dto
 
 import (
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
 )
 
@@ -40,4 +40,10 @@ type CashAccount struct {
 	AccountNo   string
 	GLAccountID string
 	Status      string
+}
+
+// ByDoc คือ input แบบ actor + id ของเอกสาร / ข้อมูลอื่นที่ไม่ใช่ทะเบียนเงิน
+type ByDoc[ID any] struct {
+	Actor
+	ID ID
 }

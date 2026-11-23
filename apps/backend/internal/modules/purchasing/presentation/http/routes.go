@@ -41,23 +41,11 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("GET "+base+"/supplier-invoices/{invoiceID}", h.GetInvoice)
 	handle("PATCH "+base+"/supplier-invoices/{invoiceID}", h.CancelInvoice)
 
-	// ภาษีหัก ณ ที่จ่าย (สิทธิ์ค่าตั้งจัดซื้อ)
-	handle("GET "+base+"/withholding-tax-types", h.ListWhtTypes)
-	handle("POST "+base+"/withholding-tax-types", h.CreateWhtType)
-	handle("GET "+base+"/withholding-tax-types/{whtTypeID}", h.GetWhtType)
-	handle("PUT "+base+"/withholding-tax-types/{whtTypeID}", h.UpdateWhtType)
-	handle("DELETE "+base+"/withholding-tax-types/{whtTypeID}", h.DeleteWhtType)
-
-	// ใบจ่ายชำระ: สร้าง = ลงบัญชีทันที -> (PATCH status=cancelled) -> cancelled
-	handle("GET "+base+"/supplier-payments", h.ListPayments)
-	handle("POST "+base+"/supplier-payments", h.CreatePayment)
-	handle("GET "+base+"/supplier-payments/{paymentID}", h.GetPayment)
-	handle("PATCH "+base+"/supplier-payments/{paymentID}", h.CancelPayment)
+	// ใบจ่ายชำระ / ประเภทภาษีหัก ณ ที่จ่าย / ภ.ง.ด.3, 53 อยู่ที่ finance — ตัดยอดใบแจ้งหนี้ผ่าน Module.SettlePayables
 }
 
 // RegisterReports ลงทะเบียนรายงานของ purchasing กับ GET /reports?book=
 func RegisterReports(reg *reports.Registry, h *handlers.Handler) {
 	reg.Register(handlers.BookOutstandingOrders, nethttp.HandlerFunc(h.OutstandingOrders))
 	reg.Register(handlers.BookAPAging, nethttp.HandlerFunc(h.APAging))
-	reg.Register(handlers.BookWithholding, nethttp.HandlerFunc(h.WithholdingTax))
 }

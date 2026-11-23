@@ -1,9 +1,9 @@
-// Package entities คือ entity ของ cashbank
+// Package entities คือ entity ของ finance
 package entities
 
 import (
-	domain "apexis/backend/internal/modules/cashbank/domain/errors"
-	vo "apexis/backend/internal/modules/cashbank/domain/value_objects"
+	domain "apexis/backend/internal/modules/finance/domain/errors"
+	vo "apexis/backend/internal/modules/finance/domain/value_objects"
 )
 
 type CashAccountData struct {

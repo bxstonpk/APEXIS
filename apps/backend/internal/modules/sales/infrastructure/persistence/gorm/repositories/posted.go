@@ -256,8 +256,8 @@ func (r *InvoiceRepository) FindForUpdate(ctx context.Context, companyID vo.Comp
 	return gp.InvoiceToEntity(m), nil
 }
 
-// LockForReceipt — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
-func (r *InvoiceRepository) LockForReceipt(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
+// LockForSettlement — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
+func (r *InvoiceRepository) LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -360,101 +360,67 @@ func (r *InvoiceRepository) List(ctx context.Context, companyID vo.CompanyID, f 
 	return toResult(rows, total, f.Page, InvoiceRow.summary), err
 }
 
-// ---------- ใบเสร็จรับเงิน ----------
-
-var _ ports.ReceiptRepository = (*ReceiptRepository)(nil)
-
-type ReceiptRepository struct{ db *gorm.DB }
-
-func NewReceiptRepository(db *gorm.DB) *ReceiptRepository { return &ReceiptRepository{db: db} }
-
-var receiptTable = postedTable{table: "sales_receipts"}
-
-func (r *ReceiptRepository) Create(ctx context.Context, rc *entities.Receipt) error {
-	m := gp.ReceiptToModel(rc)
-	return createDoc(ctx, &m, &m.Lines, &m.Methods)
-}
-
-func (r *ReceiptRepository) UpdateStatus(ctx context.Context, rc *entities.Receipt) error {
-	m := gp.ReceiptToModel(rc)
-	return updateStatus(ctx, r.db, &models.ReceiptModel{}, m.CompanyID, m.ID, m.PostedModel.Status, m.PostedModel.CancelledBy, m.PostedModel.CancelledAt, domain.ErrReceiptNotFound)
-}
-
-func (r *ReceiptRepository) FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (*entities.Receipt, error) {
-	m, err := lockHeader[models.ReceiptModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrReceiptNotFound)
-	if err != nil {
-		return nil, err
-	}
-	db := database.Conn(ctx, r.db)
-	if err := db.Where("receipt_id = ?", m.ID).Order("line_no").Find(&m.Lines).Error; err != nil {
-		return nil, err
-	}
-	if err := db.Where("receipt_id = ?", m.ID).Order("line_no").Find(&m.Methods).Error; err != nil {
-		return nil, err
-	}
-	return gp.ReceiptToEntity(m), nil
-}
-
-type ReceiptRow struct {
-	PostedRow
-	TotalAmount   decimal.Decimal
-	TotalWht      decimal.Decimal
-	TotalReceived decimal.Decimal
-}
-
-func (r ReceiptRow) summary() dto.ReceiptSummary {
-	return dto.ReceiptSummary{PostedSummary: r.PostedRow.summary(), Amount: r.TotalAmount, Wht: r.TotalWht, Received: r.TotalReceived}
-}
-
-const receiptExtra = "d.total_amount, d.total_wht, d.total_received"
-
-// Get — 3 query: หัว, บรรทัด (JOIN ใบแจ้งหนี้), ช่องทางรับเงิน
-func (r *ReceiptRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (dto.Receipt, error) {
+// Open — 1 query: ใบแจ้งหนี้ที่ยังไม่ยกเลิกและยอดรับ < ยอดรวม (index: company_id + customer_id)
+func (r *InvoiceRepository) Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error) {
 	var rows []struct {
-		ReceiptRow
-		Description string
+		ID             uuid.UUID
+		DocumentNo     string
+		DocDate        time.Time
+		DueDate        time.Time
+		TotalNet       decimal.Decimal
+		TotalGross     decimal.Decimal
+		ReceivedAmount decimal.Decimal
 	}
-	err := receiptTable.base(ctx, r.db, companyID).Select(receiptTable.columns(receiptExtra+", d.description")).
-		Where("d.id = ?", uuidOf(id)).Limit(1).Scan(&rows).Error
-	if err != nil {
-		return dto.Receipt{}, err
+	err := database.Conn(ctx, r.db).Table("sales_invoices").
+		Select("id, document_no, doc_date, due_date, total_net, total_gross, received_amount").
+		Where("company_id = ? AND customer_id = ? AND status = 'posted' AND received_amount < total_gross", uuidOf(companyID), uuidOf(customerID)).
+		Order("due_date, document_no").Limit(500).Scan(&rows).Error
+	out := make([]dto.OpenInvoice, len(rows))
+	for i, x := range rows {
+		out[i] = dto.OpenInvoice{ID: x.ID.String(), DocumentNo: x.DocumentNo, Date: gp.DateUTC(x.DocDate), DueDate: gp.DateUTC(x.DueDate),
+			Net: x.TotalNet, Gross: x.TotalGross, Outstanding: x.TotalGross.Sub(x.ReceivedAmount)}
 	}
-	if len(rows) == 0 {
-		return dto.Receipt{}, domain.ErrReceiptNotFound
-	}
-	h := rows[0]
-	db := database.Conn(ctx, r.db)
-	var lines []struct {
-		InvoiceID  uuid.UUID
-		DocumentNo string
-		Amount     decimal.Decimal
-		Wht        decimal.Decimal
-	}
-	if err := db.Table("sales_receipt_lines AS l").Joins("JOIN sales_invoices AS i ON i.id = l.invoice_id").
-		Select("l.invoice_id, i.document_no, l.amount, l.wht").Where("l.receipt_id = ?", h.ID).Order("l.line_no").Scan(&lines).Error; err != nil {
-		return dto.Receipt{}, err
-	}
-	var methods []models.ReceiptMethodModel
-	if err := db.Where("receipt_id = ?", h.ID).Order("line_no").Find(&methods).Error; err != nil {
-		return dto.Receipt{}, err
-	}
-	out := dto.Receipt{ReceiptSummary: h.ReceiptRow.summary(), Description: h.Description,
-		Lines: make([]dto.ReceiptLine, len(lines)), Methods: make([]dto.ReceiptMethod, len(methods))}
-	for i, l := range lines {
-		out.Lines[i] = dto.ReceiptLine{Invoice: dto.Ref{ID: l.InvoiceID.String(), Code: l.DocumentNo}, Amount: l.Amount, Wht: l.Wht}
-	}
-	for i, m := range methods {
-		out.Methods[i] = dto.ReceiptMethod{CashAccountID: m.CashAccountID.String(), GLAccountID: m.GLAccountID.String(), Amount: m.Amount, Reference: m.Reference}
-	}
-	return out, nil
+	return out, err
 }
 
-func (r *ReceiptRepository) List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.ReceiptSummary], error) {
-	order, err := receiptTable.order(f.Sort)
-	if err != nil {
-		return listing.Result[dto.ReceiptSummary]{}, err
+// ---------- ประวัติการตัดยอด (เอกสารรับเงินของ finance) ----------
+
+var _ ports.SettlementRepository = (*SettlementRepository)(nil)
+
+type SettlementRepository struct{ db *gorm.DB }
+
+func NewSettlementRepository(db *gorm.DB) *SettlementRepository { return &SettlementRepository{db: db} }
+
+// Create — INSERT แบบ batch statement เดียว
+func (r *SettlementRepository) Create(ctx context.Context, companyID vo.CompanyID, doc dto.SettlementDoc, lines []dto.SettlementLine) error {
+	if len(lines) == 0 {
+		return nil
 	}
-	rows, total, err := database.FetchPage(receiptTable.filtered(ctx, r.db, companyID, f, "d.description"), receiptTable.columns(receiptExtra), order, f.Page,
-		func(r ReceiptRow) int64 { return r.Total })
-	return toResult(rows, total, f.Page, ReceiptRow.summary), err
+	now := time.Now().UTC()
+	ms := make([]models.SettlementModel, len(lines))
+	for i, l := range lines {
+		ms[i] = models.SettlementModel{
+			ID: uuid.Must(uuid.NewV7()), CompanyID: uuidOf(companyID), DocumentID: doc.ID, DocumentNo: doc.No, SettledOn: doc.Date,
+			InvoiceID: uuidOf(l.InvoiceID), Amount: l.Amount, Status: "posted", CreatedAt: now,
+		}
+	}
+	return database.Conn(ctx, r.db).Omit(clause.Associations).Create(&ms).Error
+}
+
+// LockDocument — 1 query (FOR UPDATE): ยอดที่ยังมีผลของเอกสาร
+func (r *SettlementRepository) LockDocument(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) ([]dto.SettlementLine, error) {
+	var ms []models.SettlementModel
+	err := database.Conn(ctx, r.db).Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("company_id = ? AND document_id = ? AND status = 'posted'", uuidOf(companyID), documentID).Order("id").Find(&ms).Error
+	out := make([]dto.SettlementLine, len(ms))
+	for i, m := range ms {
+		out[i] = dto.SettlementLine{InvoiceID: vo.InvoiceID(m.InvoiceID), Amount: m.Amount}
+	}
+	return out, err
+}
+
+func (r *SettlementRepository) Cancel(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error {
+	return database.Conn(ctx, r.db).Model(&models.SettlementModel{}).
+		Where("company_id = ? AND document_id = ? AND status = 'posted'", uuidOf(companyID), documentID).
+		Update("status", "cancelled").Error
 }
