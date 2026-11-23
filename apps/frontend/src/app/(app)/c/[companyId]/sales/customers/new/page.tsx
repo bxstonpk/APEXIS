@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { texts } from '@/config'
 import { FormPage, NoPermission } from '@/features/organization/pages'
+import { vatRegistrantsApi } from '@/features/partners/thaiAddress'
 import { CustomerForm } from '@/features/sales/Forms'
 import { perms, salesApi, salesPage } from '@/features/sales/types'
 import { can } from '@/lib/permissions'
@@ -17,7 +18,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   const path = salesPage(companyId, 'customers')
   return (
     <FormPage crumb={{ app: texts.apps.sales.name, label: t.heading, href: path }} title={t.newTitle}>
-      <CustomerForm apiPath={salesApi.customers(companyId)} listHref={path} canManage />
+      <CustomerForm apiPath={salesApi.customers(companyId)} lookupApi={vatRegistrantsApi(companyId)} customersPath={salesPage(companyId, 'customers')} listHref={path} canManage />
     </FormPage>
   )
 }

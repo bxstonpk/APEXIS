@@ -41,6 +41,7 @@ export const apps: readonly AppDefinition[] = [
     icon: ShoppingCart,
     tone: 'bg-app-sales',
     menu: [
+      { path: 'dashboard', permission: 'sales.report:read' },
       { path: 'quotations', permission: 'sales.quotation:read' },
       { path: 'orders', permission: 'sales.order:read' },
       { path: 'deliveries', permission: 'sales.delivery:read' },
@@ -55,6 +56,7 @@ export const apps: readonly AppDefinition[] = [
     icon: ShoppingBag,
     tone: 'bg-app-purchasing',
     menu: [
+      { path: 'dashboard', permission: 'purchasing.report:read' },
       { path: 'orders', permission: 'purchasing.order:read' },
       { path: 'receipts', permission: 'purchasing.receipt:read' },
       { path: 'invoices', permission: 'purchasing.invoice:read' },
@@ -68,6 +70,7 @@ export const apps: readonly AppDefinition[] = [
     icon: Package,
     tone: 'bg-app-inventory',
     menu: [
+      { path: 'dashboard', permission: 'inventory.report:read' },
       { path: 'documents', permission: 'inventory.document:read' },
       { path: 'items', permission: 'inventory.item:read' },
       { path: 'categories', permission: 'inventory.category:read' },
@@ -83,6 +86,7 @@ export const apps: readonly AppDefinition[] = [
     icon: BookOpenCheck,
     tone: 'bg-app-accounting',
     menu: [
+      { path: 'dashboard', permission: 'ledger.report:read' },
       { path: 'entries', permission: 'ledger.entry:read' },
       { path: 'accounts', permission: 'ledger.account:read' },
       { path: 'journals', permission: 'ledger.journal:read' },
@@ -94,6 +98,7 @@ export const apps: readonly AppDefinition[] = [
     icon: Landmark,
     tone: 'bg-app-finance',
     menu: [
+      { path: 'dashboard', permission: 'finance.report:read' },
       { path: 'receipts', permission: 'finance.receipt:read' },
       { path: 'payments', permission: 'finance.payment:read' },
       { path: 'transfers', permission: 'finance.transfer:read' },

@@ -1,4 +1,5 @@
 import { companyPath } from '@/config/apps'
+import type { ThaiAddress } from '@/features/partners/thaiAddress'
 
 /** ตรงกับ backend sales responses — จำนวนเงิน / จำนวนเป็น string */
 export type Ref = { id: string; code: string; name: string }
@@ -11,11 +12,16 @@ export type Customer = {
   tax_id: string
   branch_no: string
   address: string
+  address_detail: ThaiAddress
   payment_term_days: number
   tax_type: 'juristic' | 'individual'
   credit_limit: string | null
   status: 'active' | 'inactive'
+  /** สาขาเพิ่มเติม — มีเฉพาะ GET รายตัว */
+  branches?: PartyBranch[]
 }
+
+export type PartyBranch = { branch_no: string; name: string; address: string; address_detail: ThaiAddress }
 
 export type SalesSettings = {
   vat_registered: boolean
@@ -32,6 +38,7 @@ export type SalesDocSummary = {
   document_no: string | null
   date: string
   customer: Ref
+  customer_branch_no: string
   reference: string
   vat_rate: string
   price_includes_vat: boolean
@@ -89,6 +96,8 @@ export type Delivery = PostedSummary & {
 export type InvoiceSummary = PostedSummary & { with_delivery: boolean; due_date: string; totals: Totals; received_amount: string; outstanding: string }
 
 export type Invoice = InvoiceSummary & {
+  /** ผู้ซื้อตามใบกำกับภาษี ณ วันออก */
+  bill_to: { name: string; tax_id: string; branch_no: string; address: string }
   warehouse_id: string | null
   stock_document_no: string
   vat_rate: string

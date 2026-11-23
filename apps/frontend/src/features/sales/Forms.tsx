@@ -6,6 +6,10 @@ import { format, texts } from '@/config'
 import { normalizeAmount, toUnits } from '@/features/accounting/money'
 import { FormActions, FormBar, FormNotices, FormSection, StatusSelect } from '@/features/forms/FormParts'
 import { orNull, useResourceForm } from '@/features/forms/useResourceForm'
+import { BranchesEditor, branchErrors, branchesFrom, branchesPayload, newBranch, type BranchDraft } from '@/features/partners/BranchesEditor'
+import { cleanAddress, type ThaiAddress, type VatRegistrant } from '@/features/partners/thaiAddress'
+import { ThaiAddressFields } from '@/features/partners/ThaiAddressFields'
+import { isTaxId, VatLookup } from '@/features/partners/VatLookup'
 import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 import { focusFirstInvalid, normalizeCode, requiredMessage, type FieldErrors } from '@/lib/validation'
@@ -13,7 +17,26 @@ import type { Customer, Ref, SalesSettings } from './types'
 
 // ---------------------------------------------------------------- ลูกค้า
 
-export function CustomerForm({ apiPath, listHref, canManage, item }: { apiPath: string; listHref: string; canManage: boolean; item?: Customer }) {
+/**
+ * ลูกค้า — เริ่มจากเลขผู้เสียภาษี: ผู้จด VAT ดึงชื่อ / สาขา / ที่อยู่จากกรมสรรพากร (ฟอร์มใหม่ดึงเองเมื่อครบ 13 หลัก)
+ * ไม่พบ = กรอกเอง; ที่อยู่เก็บแยกช่องตามแบบสรรพากร
+ */
+export function CustomerForm({
+  apiPath,
+  lookupApi,
+  customersPath,
+  listHref,
+  canManage,
+  item,
+}: {
+  apiPath: string
+  lookupApi: string
+  /** path หน้าลูกค้า (ลิงก์ไปรหัสเดิมเมื่อเลขผู้เสียภาษีซ้ำ) */
+  customersPath: string
+  listHref: string
+  canManage: boolean
+  item?: Customer
+}) {
   const t = texts.sales.customers
   const f = t.fields
   const readOnly = !canManage
@@ -23,66 +46,75 @@ export function CustomerForm({ apiPath, listHref, canManage, item }: { apiPath: 
     name: item?.name ?? '',
     tax_id: item?.tax_id ?? '',
     branch_no: item?.branch_no ?? '00000',
-    address: item?.address ?? '',
     payment_term_days: String(item?.payment_term_days ?? 30),
     tax_type: item?.tax_type ?? 'juristic',
     credit_limit: item?.credit_limit ?? '',
     status: item?.status ?? 'active',
   })
-  const [errors, setErrors] = useState<FieldErrors<'code' | 'name' | 'tax_id' | 'branch_no' | 'term' | 'credit'>>({})
+  const [address, setAddress] = useState<ThaiAddress>(() => cleanAddress(item?.address_detail))
+  const [branches, setBranches] = useState<BranchDraft[]>(() => branchesFrom(item?.branches))
+  const [branchErrs, setBranchErrs] = useState<Record<number, string>>({})
+  const [errors, setErrors] = useState<FieldErrors<'code' | 'name' | 'tax_id' | 'branch_no' | 'term' | 'credit' | 'postal'>>({})
   const set = (k: keyof typeof v, val: string) => setV((s) => ({ ...s, [k]: val }))
+
+  function apply(r: VatRegistrant) {
+    setV((s) => ({ ...s, name: r.name, branch_no: r.branch_no, tax_type: r.tax_type }))
+    setAddress(cleanAddress(r.address_detail))
+    setBranches((bs) => bs.filter((b) => b.branch_no !== r.branch_no))
+    setErrors({})
+  }
+
+  function addBranch(r: VatRegistrant) {
+    setBranches((bs) => [...bs, newBranch({ branch_no: r.branch_no, name: r.branch_name, address: cleanAddress(r.address_detail) })])
+  }
 
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const errs: typeof errors = {}
     if (!v.code) errs.code = requiredMessage(f.code)
     if (!v.name.trim()) errs.name = requiredMessage(f.name)
-    if (v.tax_id && !/^\d{13}$/.test(v.tax_id)) errs.tax_id = texts.validation.taxId
+    if (v.tax_id && !isTaxId(v.tax_id)) errs.tax_id = texts.validation.taxId
     if (v.branch_no && !/^\d{5}$/.test(v.branch_no)) errs.branch_no = texts.validation.taxBranchNo
+    const addr = cleanAddress(address)
+    if (addr.postal_code && !/^\d{5}$/.test(addr.postal_code)) errs.postal = texts.validation.postalCode
     const term = Number(v.payment_term_days)
     if (!/^\d+$/.test(v.payment_term_days) || term > 365) errs.term = requiredMessage(f.term)
     const credit = v.credit_limit.trim() ? normalizeAmount(v.credit_limit) : null
     if (v.credit_limit.trim() && (credit === null || toUnits(credit) < 0n)) errs.credit = t.creditHint
+    const bErrs = branchErrors(branches, v.branch_no)
     setErrors(errs)
+    setBranchErrs(bErrs)
     if (readOnly) return
-    if (Object.keys(errs).length) return focusFirstInvalid(e.currentTarget)
+    if (Object.keys(errs).length || Object.keys(bErrs).length) return focusFirstInvalid(e.currentTarget)
     form.save({
       code: v.code,
       name: v.name.trim(),
       tax_id: v.tax_id,
       branch_no: v.branch_no,
-      address: v.address.trim(),
+      address_detail: addr,
       payment_term_days: term,
       tax_type: v.tax_type,
       credit_limit: credit,
       status: v.status,
+      branches: branchesPayload(branches),
     })
   }
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
-        <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
-        <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
-        {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
-      </FormSection>
       <FormSection title={t.sections.tax} description={t.sections.taxHint}>
-        <SelectField
-          label={f.taxType}
-          value={v.tax_type}
-          disabled={readOnly}
-          options={Object.entries(t.taxTypes).map(([value, label]) => ({ value, label }))}
-          onChange={(e) => set('tax_type', e.target.value)}
-        />
-        <TextField
-          label={f.taxId}
-          value={v.tax_id}
-          maxLength={13}
-          inputMode="numeric"
-          disabled={readOnly}
+        <VatLookup
+          source={lookupApi}
+          taxId={v.tax_id}
+          onTaxIdChange={(id) => set('tax_id', id)}
+          onApply={apply}
+          onAddBranch={addBranch}
+          addedBranches={[v.branch_no, ...branches.map((b) => b.branch_no)]}
+          owner={{ source: apiPath, path: customersPath, selfId: item?.id }}
           error={errors.tax_id}
-          onChange={(e) => set('tax_id', e.target.value.replace(/\D/g, ''))}
+          disabled={readOnly}
+          autoFetch={!item}
         />
         <TextField
           label={f.branchNo}
@@ -94,17 +126,24 @@ export function CustomerForm({ apiPath, listHref, canManage, item }: { apiPath: 
           error={errors.branch_no}
           onChange={(e) => set('branch_no', e.target.value.replace(/\D/g, ''))}
         />
-        <label className="flex flex-col gap-1.5 sm:col-span-2">
-          <span className="text-sm font-medium">{f.address}</span>
-          <textarea
-            value={v.address}
-            maxLength={500}
-            rows={3}
-            disabled={readOnly}
-            onChange={(e) => set('address', e.target.value)}
-            className="rounded-(--radius-control) border border-line-strong bg-surface px-3 py-2 text-base outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:bg-subtle disabled:text-ink-muted sm:text-sm"
-          />
-        </label>
+        <SelectField
+          label={f.taxType}
+          value={v.tax_type}
+          disabled={readOnly}
+          options={Object.entries(t.taxTypes).map(([value, label]) => ({ value, label }))}
+          onChange={(e) => set('tax_type', e.target.value)}
+        />
+      </FormSection>
+      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+        <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
+        <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
+        {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
+      </FormSection>
+      <FormSection title={texts.partners.address.section} description={texts.partners.address.sectionHint}>
+        <ThaiAddressFields value={address} onChange={setAddress} disabled={readOnly} postalError={errors.postal} />
+      </FormSection>
+      <FormSection title={texts.partners.branches.section} description={texts.partners.branches.sectionHint}>
+        <BranchesEditor value={branches} onChange={setBranches} errors={branchErrs} disabled={readOnly} />
       </FormSection>
       <FormSection title={t.sections.credit}>
         <TextField

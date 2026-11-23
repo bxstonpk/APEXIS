@@ -21,7 +21,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
       <SalesDocForm
         kind="order"
         apiPath={salesApi.orders(companyId)}
-        customersApi={salesApi.customers(companyId)}
+        partiesApi={salesApi.customers(companyId)}
         itemsApi={salesApi.items(companyId)}
         docsPath={path}
         listHref={path}

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { format, texts } from '@/config'
 import { FormPage, loadItem } from '@/features/organization/pages'
+import { vatRegistrantsApi } from '@/features/partners/thaiAddress'
 import { CustomerForm } from '@/features/sales/Forms'
 import { CUSTOMER_QUERY_KEYS, perms, salesApi, salesPage, type Customer } from '@/features/sales/types'
 import { can } from '@/lib/permissions'
@@ -23,7 +24,7 @@ export default async function Page({ params, searchParams }: Props) {
   const c = res.item
   return (
     <FormPage crumb={{ app: texts.apps.sales.name, label: t.heading, href: listHref }} title={format(t.editTitle, { code: c.code })} description={c.name}>
-      <CustomerForm apiPath={salesApi.customers(companyId)} listHref={listHref} item={c} canManage={can(ctx.permissions, perms.customerManage)} />
+      <CustomerForm apiPath={salesApi.customers(companyId)} lookupApi={vatRegistrantsApi(companyId)} customersPath={salesPage(companyId, 'customers')} listHref={listHref} item={c} canManage={can(ctx.permissions, perms.customerManage)} />
     </FormPage>
   )
 }

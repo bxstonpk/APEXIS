@@ -57,6 +57,18 @@
   --color-app-organization: #5b48b8;
   --color-app-users: #475467;
 
+  /* shadcn/ui token (ใช้กับ components/ui) — ผูกกับสีของ APEXIS; accent ของ shadcn ไม่ใช้ (APEXIS accent = ส้มโลโก้) */
+  --color-background: #f5f6f8;
+  --color-foreground: #161b26;
+  --color-card: #ffffff;
+  --color-card-foreground: #161b26;
+  --color-muted: #f0f2f5;
+  --color-muted-foreground: #5a6376;
+  --color-border: #e4e7ec;
+  /* สีกราฟ (dataviz: ช่อง 1–2 ของ palette อ้างอิง — ผ่านตัวตรวจ CVD / ความต่างสี / contrast บนพื้นขาว) */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+
   --radius-control: 6px;
   --radius-panel: 10px;
 
@@ -104,7 +116,7 @@
   }
 }
 
-/* เอกสารพิมพ์ (ใบเสนอราคา / ใบกำกับภาษี / ใบเสร็จ): A4 แนวตั้ง, พื้นหลังขาว, สีตามจริง */
+/* รายงาน (พิมพ์จากหน้ารายงาน): A4 แนวตั้ง ขอบ 12mm */
 @media print {
   @page {
     size: A4 portrait;
@@ -115,5 +127,54 @@
     background: #fff !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+}
+
+/*
+ * แผ่นเอกสาร A4 (ใบเสนอราคา / ใบกำกับภาษี / ใบเสร็จ) — เห็นบนจอเท่ากับที่พิมพ์
+ * จอ: 210 x 297mm พร้อมขอบใน 12mm; จอแคบกว่า A4 ย่อทั้งแผ่นด้วย zoom (ไม่ยุบเลย์เอาต์ ไม่ต้องเลื่อนซ้าย-ขวา)
+ * พิมพ์: หน้า a4doc ขอบ 12mm ทุกหน้า, แผ่นสูงอย่างน้อย 1 หน้า (ช่องลงนามชิดล่าง)
+ */
+@page a4doc {
+  size: A4 portrait;
+  margin: 12mm;
+}
+.a4-sheet {
+  page: a4doc;
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm;
+}
+@media screen and (max-width: 859px) {
+  .a4-sheet {
+    zoom: 0.9;
+  }
+}
+@media screen and (max-width: 767px) {
+  .a4-sheet {
+    zoom: 0.76;
+  }
+}
+@media screen and (max-width: 639px) {
+  .a4-sheet {
+    zoom: 0.56;
+  }
+}
+@media screen and (max-width: 479px) {
+  .a4-sheet {
+    zoom: 0.46;
+  }
+}
+@media screen and (max-width: 399px) {
+  .a4-sheet {
+    zoom: 0.42;
+  }
+}
+@media print {
+  .a4-sheet {
+    width: auto;
+    min-height: 272mm;
+    padding: 0;
   }
 }

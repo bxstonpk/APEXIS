@@ -8,7 +8,8 @@ import type { Letterhead } from './types'
 /**
  * เอกสารพิมพ์ A4 (server) — หัวกระดาษบริษัท, ชื่อเอกสาร, ผู้ซื้อ, ตารางรายการ, ยอดรวม + จำนวนเงินตัวอักษร, ช่องลงนาม
  * ใช้กับใบเสนอราคา / ใบแจ้งหนี้ / ใบกำกับภาษี (ม.86/4: ชื่อ ที่อยู่ เลขผู้เสียภาษี และสาขาของผู้ขาย-ผู้ซื้อ) / ใบเสร็จรับเงิน
- * บนจอแสดงเป็นแผ่นกระดาษกว้าง 210mm; ตอนพิมพ์ใช้ @page A4 ใน app.css
+ * แผ่น A4 จริง (.a4-sheet ใน app.css): จอ = 210×297mm (มือถือย่อทั้งแผ่น), พิมพ์ = @page a4doc ขอบ 12mm ทุกหน้า
+ * ช่องลงนามชิดล่างของหน้า; เอกสารยาวเกิน 1 หน้าไหลต่อหน้าถัดไปพร้อมขอบกระดาษ
  */
 
 export type PrintParty = { label: string; name: string; taxId?: string; branchNo?: string; address?: string }
@@ -56,9 +57,9 @@ export function PrintDocument({
   const legal = letterhead.legal_name_th || letterhead.name
   const contact = [letterhead.phone && `โทร ${letterhead.phone}`, letterhead.email, letterhead.website].filter(Boolean).join(' · ')
   return (
-    <article className="mx-auto w-full max-w-[210mm] bg-white p-6 text-[13px] leading-snug text-neutral-900 shadow-card sm:p-[12mm] print:max-w-none print:p-0 print:text-[11.5px] print:shadow-none">
+    <article className="a4-sheet mx-auto flex flex-col bg-white text-[12.5px] leading-snug text-neutral-900 shadow-card print:shadow-none">
       {/* หัวกระดาษ */}
-      <header className="flex flex-col gap-4 border-b-2 border-neutral-800 pb-4 sm:flex-row sm:items-start sm:justify-between print:flex-row">
+      <header className="flex items-start justify-between gap-4 border-b-2 border-neutral-800 pb-4">
         <div className="min-w-0">
           <p className="text-[17px] font-bold">{legal}</p>
           {letterhead.legal_name_en && <p className="text-neutral-600">{letterhead.legal_name_en}</p>}
@@ -70,14 +71,14 @@ export function PrintDocument({
           )}
           {contact && <p className="text-neutral-600">{contact}</p>}
         </div>
-        <div className="shrink-0 text-left sm:text-right print:text-right">
+        <div className="shrink-0 text-right">
           <h1 className="text-[20px] font-bold tracking-tight">{title}</h1>
           <p className="mt-0.5 inline-block rounded border border-neutral-500 px-2 text-[12px]">{p.original}</p>
         </div>
       </header>
 
       {/* ผู้ซื้อ + ข้อมูลเอกสาร */}
-      <section className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] print:grid-cols-[1fr_auto]">
+      <section className="mt-4 grid grid-cols-[1fr_auto] gap-4">
         <div className="rounded border border-neutral-400 p-3">
           <p className="text-[12px] text-neutral-600">{party.label}</p>
           <p className="font-semibold">{party.name}</p>
@@ -147,7 +148,7 @@ export function PrintDocument({
       </table>
 
       {/* ยอดรวม */}
-      <section className="mt-3 grid break-inside-avoid gap-3 sm:grid-cols-[1fr_18rem] print:grid-cols-[1fr_18rem]">
+      <section className="mt-3 grid break-inside-avoid grid-cols-[1fr_18rem] gap-3">
         <div className="flex flex-col gap-2">
           <p className="rounded bg-neutral-100 px-3 py-2 text-center font-semibold">({bahtText(amountInWords)})</p>
           {note && <div className="text-[12px] text-neutral-700">{note}</div>}
@@ -163,7 +164,7 @@ export function PrintDocument({
       </section>
 
       {/* ลงนาม */}
-      <footer className="mt-14 grid break-inside-avoid gap-8 sm:grid-cols-2 print:grid-cols-2">
+      <footer className="mt-auto grid break-inside-avoid grid-cols-2 gap-8 pt-14">
         {signatures.map((s) => (
           <div key={s} className="text-center">
             <div className="mx-auto h-10 w-56 border-b border-dotted border-neutral-600" />

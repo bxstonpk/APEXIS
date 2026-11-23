@@ -21,6 +21,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   const q = res.item
   if (!q.document_no || !letterhead) return <Alert tone="error">{p.unavailable}</Alert>
   const customer = await loadCustomer(companyId, q.customer.id)
+  const branch = customer?.branches?.find((b) => b.branch_no === q.customer_branch_no)
   return (
     <>
       <PrintToolbar backHref={`${salesPage(companyId, 'quotations')}/${q.id}`} />
@@ -33,7 +34,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
           [p.validUntil, printDate(q.valid_until)],
           [p.reference, q.reference],
         ]}
-        party={{ label: p.customer, name: q.customer.name, taxId: customer?.tax_id, branchNo: customer?.branch_no, address: customer?.address }}
+        party={{ label: p.customer, name: customer?.name ?? q.customer.name, taxId: customer?.tax_id, branchNo: q.customer_branch_no || customer?.branch_no, address: branch ? branch.address : customer?.address }}
         lines={q.lines.map((l) => ({ description: l.item.name, detail: l.description, quantity: l.quantity, unitPrice: l.unit_price, amount: q.price_includes_vat ? l.amounts.gross : l.amounts.net }))}
         totals={[
           { label: p.subtotal, value: q.totals.net },

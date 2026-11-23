@@ -33,6 +33,7 @@ function order(lines: [string, string, string][]): Order {
     document_no: 'SO2026-000001',
     date: '2026-11-01',
     customer: { id: 'cu1', code: 'C001', name: 'ลูกค้า ก' },
+    customer_branch_no: '00000',
     reference: '',
     vat_rate: '7',
     price_includes_vat: false,
@@ -125,22 +126,77 @@ describe('DocActions', () => {
 })
 
 describe('CustomerForm', () => {
-  it('ตรวจเลขผู้เสียภาษี 13 หลักก่อนส่ง และส่งวงเงินว่าง = null', async () => {
-    const fetch = vi.fn(async () => json(201, { data: { id: 'cu1' } }))
+  const registrant = {
+    tax_id: '0745569002816',
+    branch_no: '00000',
+    branch_name: 'บริษัท ตัวอย่าง จำกัด',
+    name: 'บริษัท ตัวอย่าง จำกัด',
+    tax_type: 'juristic',
+    phone: '',
+    vat_registered_on: '21/09/2569',
+    address: 'เลขที่ 72/7 หมู่ที่ 3 ตำบลท่าทราย อำเภอเมืองสมุทรสาคร จังหวัดสมุทรสาคร 74000',
+    address_detail: { house_no: '72/7', moo: '3', sub_district: 'ท่าทราย', district: 'เมืองสมุทรสาคร', province: 'สมุทรสาคร', postal_code: '74000' },
+  }
+
+  it('กรอกเลขครบ 13 หลัก = ดึงข้อมูลจากกรมสรรพากรเอง แล้วส่งที่อยู่แยกช่อง', async () => {
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('vat-registrants')) return json(200, { data: [registrant] })
+      if (init?.method === 'POST') return json(201, { data: { id: 'cu1' } })
+      return json(200, { data: [] })
+    })
     vi.stubGlobal('fetch', fetch)
-    const f = t.customers.fields
-    render(<CustomerForm apiPath="/companies/c1/customers" listHref="/c/c1/sales/customers" canManage />)
-    await userEvent.type(screen.getByLabelText(new RegExp(`^${f.code}`)), 'c001')
-    await userEvent.type(screen.getByLabelText(new RegExp(`^${f.name}`)), 'ลูกค้า ก')
-    await userEvent.type(screen.getByLabelText(f.taxId), '12345')
+    render(<CustomerForm apiPath="/companies/c1/customers" lookupApi="/companies/c1/vat-registrants" customersPath="/c/c1/sales/customers" listHref="/c/c1/sales/customers" canManage />)
+    await userEvent.type(screen.getByLabelText(texts.partners.lookup.taxId), '0745569002816')
+    expect(await screen.findByText(/เติมข้อมูลจากกรมสรรพากรแล้ว/)).toBeInTheDocument()
+    expect(screen.getByLabelText(t.customers.fields.name, { exact: true })).toHaveValue('บริษัท ตัวอย่าง จำกัด')
+    expect(screen.getByText(registrant.address)).toBeInTheDocument() // ตัวอย่างที่อยู่ที่จะพิมพ์
+
+    await userEvent.type(screen.getByLabelText(t.customers.fields.code, { exact: true }), 'c001')
+    await userEvent.click(screen.getByRole('button', { name: texts.common.save }))
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!
+    const body = JSON.parse(String(post[1]!.body))
+    expect(body).toMatchObject({
+      code: 'C001',
+      tax_id: '0745569002816',
+      branch_no: '00000',
+      credit_limit: null,
+      address_detail: { house_no: '72/7', moo: '3', soi: '', province: 'สมุทรสาคร', postal_code: '74000' },
+    })
+    expect(body).not.toHaveProperty('address')
+  })
+
+  it('ไม่พบในฐานข้อมูลผู้จด VAT = แจ้งให้กรอกเอง; เลขไม่ครบ 13 หลัก = ไม่ส่ง', async () => {
+    const fetch = vi.fn(async (url: string) =>
+      url.includes('vat-registrants')
+        ? json(404, { error: { code: 'vat_registrant_not_found', message: 'x' } })
+        : url.includes('?q=')
+          ? json(200, { data: [] })
+          : json(201, { data: { id: 'cu1' } }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    render(<CustomerForm apiPath="/companies/c1/customers" lookupApi="/companies/c1/vat-registrants" customersPath="/c/c1/sales/customers" listHref="/c/c1/sales/customers" canManage />)
+    const taxId = screen.getByLabelText(texts.partners.lookup.taxId)
+    await userEvent.type(taxId, '12345')
+    expect(screen.getByRole('button', { name: texts.partners.lookup.button })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: texts.common.save }))
     expect(screen.getByText(texts.validation.taxId)).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
 
-    await userEvent.type(screen.getByLabelText(f.taxId), '67890123')
-    await userEvent.click(screen.getByRole('button', { name: texts.common.save }))
-    const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body))
-    expect(body).toMatchObject({ code: 'C001', tax_id: '1234567890123', branch_no: '00000', payment_term_days: 30, credit_limit: null })
+    await userEvent.type(taxId, '67890123')
+    expect(await screen.findByText(texts.partners.lookup.notFound)).toBeInTheDocument()
+  })
+})
+
+describe('CustomerForm: เลขผู้เสียภาษีซ้ำ', () => {
+  it('เลขนี้มีรหัสอยู่แล้ว = แจ้งพร้อมลิงก์ไปรหัสเดิม และไม่ดึงข้อมูลกรมสรรพากร', async () => {
+    const fetch = vi.fn(async (url: string) =>
+      url.includes('?q=') ? json(200, { data: [{ id: 'old', code: 'C001', name: 'บริษัท เดิม จำกัด', tax_id: '0745569002816' }] }) : json(200, { data: [] }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    render(<CustomerForm apiPath="/companies/c1/customers" lookupApi="/companies/c1/vat-registrants" customersPath="/c/c1/sales/customers" listHref="/l" canManage />)
+    await userEvent.type(screen.getByLabelText(texts.partners.lookup.taxId), '0745569002816')
+    expect(await screen.findByRole('link', { name: 'เปิดรหัส C001' })).toHaveAttribute('href', '/c/c1/sales/customers/old')
+    expect(fetch.mock.calls.some(([u]) => String(u).includes('vat-registrants'))).toBe(false)
   })
 })
 

@@ -2,8 +2,8 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useRef, useState, type FormEvent } from 'react'
-import { Alert, Button, ButtonLink, ReferenceSelect, TextField } from '@/components'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Alert, Button, ButtonLink, ReferenceSelect, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
 import { formatAmount, normalizeAmount, toUnits } from '@/features/accounting/money'
 import { FormBar, FormSection } from '@/features/forms/FormParts'
@@ -12,11 +12,13 @@ import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 import { focusFirstInvalid, requiredMessage } from '@/lib/validation'
 import { lineAmounts, sumAmounts } from './calc'
+import type { PurchaseOrder } from '@/features/purchasing/types'
 import type { Order, Quotation, Ref } from './types'
 
 /**
- * ฟอร์มใบเสนอราคา / ใบสั่งขาย (สร้าง / แก้ร่าง) — ตารางสินค้า + ยอดรวมแสดงสด (สูตรเดียวกับ backend)
- * VAT ใช้ค่าตั้งขายที่โหลดจาก server; ไม่มีสิทธิ์ดูค่าตั้ง = แสดงยอดก่อน VAT และบอกว่า VAT คำนวณตอนบันทึก
+ * ฟอร์มใบเสนอราคา / ใบสั่งขาย / ใบสั่งซื้อ (สร้าง / แก้ร่าง) — ตารางสินค้า + ยอดรวมแสดงสด (สูตรเดียวกับ backend)
+ * คู่ค้า = ลูกค้า (ขาย) หรือผู้ขาย (ซื้อ); เลือกแล้วโหลดรายละเอียด 1 คำขอเพื่อรู้สาขา (และการจด VAT ของผู้ขาย)
+ * VAT: ขาย = ค่าตั้งขาย; ซื้อ = อัตราจากค่าตั้งจัดซื้อเมื่อผู้ขายจด VAT; ไม่มีสิทธิ์ดูค่าตั้ง = แสดงยอดก่อน VAT และบอกว่าคำนวณตอนบันทึก
  */
 
 type Line = { key: number; item: Ref | null; description: string; quantity: string; unitPrice: string }
@@ -35,29 +37,63 @@ export type Vat = { registered: boolean; rate: string } | null
 export function SalesDocForm({
   kind,
   apiPath,
-  customersApi,
+  partiesApi,
   itemsApi,
   docsPath,
   listHref,
   vat,
   doc,
 }: {
-  kind: 'quotation' | 'order'
+  kind: 'quotation' | 'order' | 'purchase-order'
   apiPath: string
-  customersApi: string
+  /** API ของคู่ค้า: ลูกค้า (ขาย) / ผู้ขาย (ซื้อ) */
+  partiesApi: string
   itemsApi: string
   docsPath: string
   listHref: string
   vat: Vat
-  doc?: Quotation | Order
+  doc?: Quotation | Order | PurchaseOrder
 }) {
   const t = texts.sales
   const tl = t.lines
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
+  const purchase = kind === 'purchase-order'
+  const tp = texts.purchasing.orders
   const quotation = kind === 'quotation' ? (doc as Quotation | undefined) : undefined
-  const order = kind === 'order' ? (doc as Order | undefined) : undefined
-  const [customer, setCustomer] = useState<Ref | null>(doc?.customer ?? null)
+  const order = kind === 'quotation' ? undefined : (doc as Order | PurchaseOrder | undefined)
+  const po = purchase ? (doc as PurchaseOrder | undefined) : undefined
+  const so = purchase ? undefined : (doc as Quotation | Order | undefined)
+  const [customer, setCustomer] = useState<Ref | null>(po?.supplier ?? so?.customer ?? null)
+  // สาขาคู่ค้า: โหลดรายละเอียดคู่ค้าที่เลือก (1 คำขอต่อการเปลี่ยน) — มีสาขาเดียวไม่ต้องแสดงช่องเลือก
+  const [branchNo, setBranchNo] = useState(po?.supplier_branch_no ?? so?.customer_branch_no ?? '')
+  const [branchOptions, setBranchOptions] = useState<{ value: string; label: string }[]>([])
+  // ผู้ขายจด VAT หรือไม่ (null = ยังไม่รู้ / ไม่ใช่ใบสั่งซื้อ)
+  const [partyVat, setPartyVat] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!customer) {
+      setBranchOptions([])
+      setPartyVat(null)
+      return
+    }
+    let live = true
+    apiRequest<{ branch_no: string; vat_registered?: boolean; branches?: { branch_no: string; name: string }[] }>(`${partiesApi}/${customer.id}`)
+      .then((c) => {
+        if (!live) return
+        setPartyVat(c.vat_registered ?? null)
+        const main = c.branch_no === '00000' ? texts.sales.print.headOffice : texts.partners.branches.main
+        const opts = [
+          { value: c.branch_no, label: `${c.branch_no} ${main}` },
+          ...(c.branches ?? []).map((b) => ({ value: b.branch_no, label: `${b.branch_no} ${b.name}`.trim() })),
+        ]
+        setBranchOptions(opts)
+        setBranchNo((cur) => (opts.some((o) => o.value === cur) ? cur : c.branch_no))
+      })
+      .catch(() => live && setBranchOptions([]))
+    return () => {
+      live = false
+    }
+  }, [customer, partiesApi])
   const [head, setHead] = useState({
     date: doc?.date ?? today(),
     second: quotation?.valid_until ?? order?.delivery_date ?? (kind === 'quotation' && !doc ? addDays(today(), 30) : ''),
@@ -72,11 +108,11 @@ export function SalesDocForm({
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const rate = doc ? doc.vat_rate : vat?.registered ? vat.rate : '0'
-  const vatKnown = !!doc || vat !== null
+  const rate = doc ? doc.vat_rate : purchase ? (partyVat && vat ? vat.rate : '0') : vat?.registered ? vat.rate : '0'
+  const vatKnown = !!doc || (vat !== null && (!purchase || partyVat !== null))
   const amounts = lines.map((l) => lineAmounts(l.quantity, l.unitPrice, vatKnown ? rate : '0', head.inclusive))
   const total = sumAmounts(amounts)
-  const canInclude = doc ? true : vat?.registered !== false
+  const canInclude = doc ? true : purchase ? partyVat !== false : vat?.registered !== false
 
   const up = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
 
@@ -84,7 +120,7 @@ export function SalesDocForm({
     e.preventDefault()
     setFormError(null)
     const errs: Record<string, string> = {}
-    if (!customer) errs.customer = requiredMessage(t.fields.customer)
+    if (!customer) errs.customer = requiredMessage(purchase ? tp.fields.supplier : t.fields.customer)
     if (!head.date) errs.date = requiredMessage(t.fields.date)
     if (kind === 'quotation' && !head.second) errs.second = requiredMessage(t.fields.validUntil)
     if (lines.length === 0) errs.lines = tl.noLines
@@ -98,7 +134,8 @@ export function SalesDocForm({
     setErrors(errs)
     if (Object.keys(errs).length) return focusFirstInvalid(formRef.current)
     const body: Record<string, unknown> = {
-      customer_id: customer!.id,
+      [purchase ? 'supplier_id' : 'customer_id']: customer!.id,
+      [purchase ? 'supplier_branch_no' : 'customer_branch_no']: branchNo,
       date: head.date,
       reference: head.reference.trim(),
       description: head.description.trim(),
@@ -124,9 +161,9 @@ export function SalesDocForm({
       {formError && <Alert tone="error">{formError}</Alert>}
       <FormSection title={t.sections.header}>
         <ReferenceSelect
-          label={t.fields.customer}
+          label={purchase ? tp.fields.supplier : t.fields.customer}
           required
-          source={customersApi}
+          source={partiesApi}
           params={{ status: 'active' }}
           value={customer}
           onChange={setCustomer}
@@ -134,6 +171,15 @@ export function SalesDocForm({
           texts={texts.reference}
           className="sm:col-span-2"
         />
+        {branchOptions.length > 1 && (
+          <SelectField
+            label={purchase ? tp.fields.supplierBranch : t.fields.customerBranch}
+            value={branchNo}
+            options={branchOptions}
+            onChange={(e) => setBranchNo(e.target.value)}
+            className="sm:col-span-2"
+          />
+        )}
         <TextField label={t.fields.date} required type="date" value={head.date} error={errors.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} />
         <TextField
           label={kind === 'quotation' ? t.fields.validUntil : t.fields.deliveryDate}

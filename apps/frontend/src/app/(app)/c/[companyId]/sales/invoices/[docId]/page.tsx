@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { branchLabel } from '@/features/sales/PrintDocument'
 import { texts } from '@/config'
 import { companyPath } from '@/config/apps'
 import { formatAmount, toUnits } from '@/features/accounting/money'
@@ -47,7 +48,8 @@ export default async function Page({ params, searchParams }: Props) {
         <DocActions apiPath={`${salesApi.invoices(companyId)}/${inv.id}`} listHref={listHref} docNo={inv.document_no} actions={actions} />
         <Facts
           items={[
-            [t.fields.customer, `${inv.customer.code} ${inv.customer.name}`],
+            [t.fields.customer, `${inv.customer.code} ${inv.bill_to.name || inv.customer.name}`],
+            [t.fields.customerBranch, branchLabel(inv.bill_to.branch_no)],
             [t.fields.date, dateText(inv.date)],
             [t.columns.due, dateText(inv.due_date)],
             [t.columns.order, inv.order ? <EntryLink key="o" href={`${salesPage(companyId, 'orders')}/${inv.order.id}`} no={inv.order.order_no} /> : ''],

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { branchLabel } from '@/features/sales/PrintDocument'
 import { format, texts } from '@/config'
 import { formatAmount, toUnits } from '@/features/accounting/money'
 import { FormPage, loadItem } from '@/features/organization/pages'
@@ -64,7 +65,7 @@ export default async function Page({ params, searchParams }: Props) {
           <SalesDocForm
             kind="order"
             apiPath={salesApi.orders(companyId)}
-            customersApi={salesApi.customers(companyId)}
+            partiesApi={salesApi.customers(companyId)}
             itemsApi={salesApi.items(companyId)}
             docsPath={path}
             listHref={listHref}
@@ -76,6 +77,7 @@ export default async function Page({ params, searchParams }: Props) {
             <Facts
               items={[
                 [t.fields.customer, `${o.customer.code} ${o.customer.name}`],
+                [t.fields.customerBranch, branchLabel(o.customer_branch_no)],
                 [t.fields.date, dateText(o.date)],
                 [t.fields.deliveryDate, dateText(o.delivery_date)],
                 [t.fields.reference, o.reference],

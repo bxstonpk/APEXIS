@@ -33,7 +33,7 @@ describe('visibleApps', () => {
     const apps = visibleApps(['sales.customer:read', 'sales.report:read'])
     expect(apps).toHaveLength(1)
     expect(apps[0]!.key).toBe('sales')
-    expect(apps[0]!.menu.map((m) => m.path)).toEqual(['customers', 'reports'])
+    expect(apps[0]!.menu.map((m) => m.path)).toEqual(['dashboard', 'customers', 'reports']) // ภาพรวมใช้สิทธิ์รายงาน
   })
 
   it('สิทธิ์ manage อย่างเดียวไม่ทำให้เห็นเมนู (ต้องมี read)', () => {
