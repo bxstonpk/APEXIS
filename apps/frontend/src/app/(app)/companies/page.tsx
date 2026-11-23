@@ -3,9 +3,11 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import Form from 'next/form'
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { Alert, Badge, Button, ButtonLink, Pagination, TextField } from '@/components'
 import { appConfig, format, texts } from '@/config'
 import { companyPath } from '@/config/apps'
+import { CompaniesSkeleton } from '@/features/loading/PageSkeleton'
 import { TopBar } from '@/features/shell'
 import { cx } from '@/lib/cx'
 import { errorMessage } from '@/lib/http'
@@ -32,8 +34,28 @@ function avatarTone(code: string): string {
  */
 export default async function CompaniesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams
+  const user = await currentUser() // จาก cookie — ไม่เรียก backend
+  return (
+    <Suspense
+      key={pickQuery(params, QUERY_KEYS).toString()}
+      fallback={
+        <div className="flex min-h-full flex-col">
+          <TopBar userName={user.name} />
+          <main id="main" tabIndex={-1} className="mx-auto w-full max-w-4xl flex-1 px-4 pt-12 pb-16 outline-none sm:pt-16">
+            <CompaniesSkeleton />
+          </main>
+        </div>
+      }
+    >
+      <Companies params={params} user={user} />
+    </Suspense>
+  )
+}
+
+/** ส่วนที่ต้องรอ backend (รายชื่อบริษัท) — ระหว่างรอ / ค้นหาใหม่แสดง skeleton */
+async function Companies({ params, user }: { params: SearchParams; user: { name: string } }) {
   const query = pickQuery(params, QUERY_KEYS)
-  const [user, store] = await Promise.all([currentUser(), cookies()])
+  const store = await cookies()
   const lastUsed = store.get(appConfig.cookies.company)?.value
   const t = texts.companies
 

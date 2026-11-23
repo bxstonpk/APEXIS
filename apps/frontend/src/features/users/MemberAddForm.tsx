@@ -99,7 +99,7 @@ export function MemberAddForm({ apiPath, listHref, roles }: { apiPath: string; l
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-6">
+    <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-6">
       {formError && <Alert tone="error">{formError}</Alert>}
 
       <FormSection title={t.sections.account} description={t.sections.accountHint}>

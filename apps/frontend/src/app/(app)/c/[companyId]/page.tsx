@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import { ButtonLink } from '@/components'
 import { appConfig, format, texts } from '@/config'
 import { appTexts, appWindowName, companyPath, visibleApps } from '@/config/apps'
+import { LauncherSkeleton } from '@/features/loading/PageSkeleton'
 import { AppTile, MessagePanel, TopBar } from '@/features/shell'
 import { currentUser } from '@/lib/server/backend'
 import { getCompanyContext } from '@/lib/server/company'
@@ -11,10 +13,30 @@ export const metadata: Metadata = { title: texts.launcher.pageTitle }
 /**
  * หน้ารวมแอปของบริษัท — ไอคอนแอปกลางจอ (เฉพาะแอปที่มีสิทธิ์)
  * กดไอคอน = เปิดแอปในแท็บใหม่ที่เมนูแรกที่มีสิทธิ์; ในแท็บนั้นกด ✕ เพื่อปิดกลับมาที่นี่
+ * แถบบนแสดงทันที ส่วนไอคอนแอปรอสิทธิ์จาก backend (skeleton ระหว่างรอ)
  */
 export default async function LauncherPage({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params
-  const [user, ctx] = await Promise.all([currentUser(), getCompanyContext(companyId)])
+  const user = await currentUser() // จาก cookie — ไม่เรียก backend
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-full flex-col">
+          <TopBar userName={user.name} />
+          <main id="main" tabIndex={-1} className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-4 pt-16 pb-16 sm:pt-24">
+            <LauncherSkeleton />
+          </main>
+        </div>
+      }
+    >
+      <Launcher companyId={companyId} user={user} />
+    </Suspense>
+  )
+}
+
+/** ส่วนที่ต้องรอ backend (บริษัท + สิทธิ์) — ระหว่างรอแสดง skeleton ของไอคอนแอป */
+async function Launcher({ companyId, user }: { companyId: string; user: { name: string } }) {
+  const ctx = await getCompanyContext(companyId)
 
   if (!ctx) {
     return (
