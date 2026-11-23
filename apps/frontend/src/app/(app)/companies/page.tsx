@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: texts.companies.pageTitle }
 const QUERY_KEYS = ['q', 'page'] as const
 
 /** สีประจำบริษัท (คงที่ตามรหัส) — ใช้ชุดสีเดียวกับไอคอนแอป */
-const AVATAR_TONES = ['bg-app-purchasing', 'bg-app-accounting', 'bg-app-organization', 'bg-app-cashbank', 'bg-app-inventory', 'bg-app-sales'] as const
+const AVATAR_TONES = ['bg-app-purchasing', 'bg-app-accounting', 'bg-app-organization', 'bg-app-finance', 'bg-app-inventory', 'bg-app-sales'] as const
 
 function avatarTone(code: string): string {
   let h = 0

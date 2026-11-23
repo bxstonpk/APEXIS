@@ -53,7 +53,7 @@
   --color-app-purchasing: #2c5fb8;
   --color-app-inventory: #c46f17;
   --color-app-accounting: #11795b;
-  --color-app-cashbank: #0f7c91;
+  --color-app-finance: #0f7c91;
   --color-app-organization: #5b48b8;
   --color-app-users: #475467;
 
@@ -101,5 +101,19 @@
   ::after {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* เอกสารพิมพ์ (ใบเสนอราคา / ใบกำกับภาษี / ใบเสร็จ): A4 แนวตั้ง, พื้นหลังขาว, สีตามจริง */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 14mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

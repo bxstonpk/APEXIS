@@ -25,7 +25,7 @@ describe('covers (กติกาเดียวกับ backend)', () => {
 describe('visibleApps', () => {
   it('owner (*) เห็นทุกแอปและทุกเมนู', () => {
     const apps = visibleApps(['*'])
-    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'accounting', 'cashbank', 'organization', 'users'])
+    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'accounting', 'finance', 'organization', 'users'])
     expect(apps.find((a) => a.key === 'organization')!.menu[0]!.path).toBe('branches')
   })
 
