@@ -24,6 +24,7 @@ type OrderLineData struct {
 
 type OrderData struct {
 	SupplierID       vo.SupplierID
+	SupplierBranchNo string // สาขาผู้ขาย (ว่าง = สาขาหลัก) — use case ตรวจกับทะเบียนผู้ขายแล้ว; ใบแจ้งหนี้ใช้สาขานี้
 	Date             time.Time
 	DeliveryDate     *time.Time
 	Reference        string
@@ -349,7 +350,7 @@ func normalizeOrder(d OrderData, quantityDecimals int) (OrderData, error) {
 	if !vo.IsDateOnly(d.Date) || (d.DeliveryDate != nil && (!vo.IsDateOnly(*d.DeliveryDate) || d.DeliveryDate.Before(d.Date))) {
 		return OrderData{}, domain.ErrInvalidDate
 	}
-	out := OrderData{SupplierID: d.SupplierID, Date: d.Date, PriceIncludesVat: d.PriceIncludesVat}
+	out := OrderData{SupplierID: d.SupplierID, SupplierBranchNo: d.SupplierBranchNo, Date: d.Date, PriceIncludesVat: d.PriceIncludesVat}
 	if d.DeliveryDate != nil {
 		dd := *d.DeliveryDate
 		out.DeliveryDate = &dd

@@ -27,6 +27,7 @@ type CompanySettings struct {
 type Period struct {
 	ID         vo.FiscalPeriodID
 	FiscalYear int
+	YearStart  time.Time // วันแรกของปีบัญชี
 	Open       bool
 }
 
@@ -84,15 +85,4 @@ type Ledger interface {
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
-}
-
-type CashAccount struct {
-	ID          vo.CashAccountID
-	Code        string
-	GLAccountID vo.AccountID
-	Active      bool
-}
-
-type CashBank interface {
-	CashAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.CashAccountID) (map[vo.CashAccountID]CashAccount, error)
 }

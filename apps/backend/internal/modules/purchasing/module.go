@@ -7,14 +7,14 @@
 // การลงบัญชี (ระบบบัญชีตามปีบัญชีที่ inventory กำหนด):
 //   - รับสินค้า: Dr สินค้าคงเหลือ (perpetual + stock) หรือบัญชีซื้อ (อื่นๆ) / Cr GR/IR
 //   - แจ้งหนี้: Dr GR/IR ± ผลต่างราคา + Dr ภาษีซื้อ / Cr เจ้าหนี้
-//   - จ่ายชำระ: Dr เจ้าหนี้ / Cr เงินสด / ธนาคาร (ตามทะเบียน) + Cr ภาษีหัก ณ ที่จ่ายค้างจ่าย (ภ.ง.ด.3 / 53)
 //
 // พึ่งพา module อื่นผ่าน interface เท่านั้น (ทั้งหมดอยู่ใน transaction เดียวกัน):
 //   - identity: ตรวจ token, user ปัจจุบัน, ตรวจสิทธิ์
 //   - organization: สถานะบริษัท + จำนวนทศนิยม, งวดบัญชี
 //   - inventory: สินค้า + บัญชี, ระบบบัญชี, ใบรับเข้าคลัง (FIFO)
 //   - ledger: ตรวจบัญชี / สมุดรายวัน, ลงรายการ / กลับรายการ
-//   - cashbank: ทะเบียนเงินสด / ธนาคารที่ใช้จ่ายชำระ (บัญชีที่ผูกไว้)
+//
+// ใบจ่ายชำระเป็นของ finance: ตัดยอดใบแจ้งหนี้ผ่าน SettlePayables / UnsettlePayables ใน transaction เดียวกัน
 package purchasing
 
 import (
@@ -24,10 +24,11 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"apexis/backend/internal/modules/purchasing/application/dto"
 	"apexis/backend/internal/modules/purchasing/application/usecases"
+	domain "apexis/backend/internal/modules/purchasing/domain/errors"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	gp "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/purchasing/infrastructure/services"
 	purchasinghttp "apexis/backend/internal/modules/purchasing/presentation/http"
@@ -48,7 +49,6 @@ type (
 	Organization = services.OrganizationAccess
 	Ledger       = services.LedgerAccess
 	Inventory    = services.InventoryAccess
-	CashBank     = services.CashBankAccess
 )
 
 type Module struct {
@@ -57,24 +57,22 @@ type Module struct {
 	handler  *handlers.Handler
 }
 
-func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, inventory Inventory, cashbank CashBank) *Module {
+func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, inventory Inventory) *Module {
 	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
-		Tx:        gp.NewTransactionManager(db),
-		Auth:      services.NewIdentityAuthorizer(identity),
-		Org:       services.NewOrganization(org),
-		Ledger:    services.NewLedger(ledger),
-		Inventory: services.NewInventory(inventory),
-		CashBank:  services.NewCashBank(cashbank),
-		Settings:  gormrepo.NewSettingsRepository(db),
-		Suppliers: gormrepo.NewSupplierRepository(db),
-		Sequence:  gormrepo.NewSequenceRepository(),
-		Orders:    gormrepo.NewOrderRepository(db),
-		Receipts:  gormrepo.NewReceiptRepository(db),
-		Invoices:  gormrepo.NewInvoiceRepository(db),
-		Reports:   gormrepo.NewReportRepository(db),
-		WhtTypes:  gormrepo.NewWhtTypeRepository(db),
-		Payments:  gormrepo.NewPaymentRepository(db),
+		Tx:          gp.NewTransactionManager(db),
+		Auth:        services.NewIdentityAuthorizer(identity),
+		Org:         services.NewOrganization(org),
+		Ledger:      services.NewLedger(ledger),
+		Inventory:   services.NewInventory(inventory),
+		Settings:    gormrepo.NewSettingsRepository(db),
+		Suppliers:   gormrepo.NewSupplierRepository(db),
+		Sequence:    gormrepo.NewSequenceRepository(),
+		Orders:      gormrepo.NewOrderRepository(db),
+		Receipts:    gormrepo.NewReceiptRepository(db),
+		Invoices:    gormrepo.NewInvoiceRepository(db),
+		Reports:     gormrepo.NewReportRepository(db),
+		Settlements: gormrepo.NewSettlementRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -98,7 +96,61 @@ func DocumentTypes() []integration.DocumentType {
 }
 
 // Migrate สร้างตารางของ purchasing
-func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+// Migrate: คืนผู้ขายรหัสซ้ำที่ถูกรวม (finance ต้องปรับ id คู่ค้าในใบจ่ายเงินตาม — ดู main.go)
+func Migrate(db *gorm.DB) ([]integration.PartyMerge, error) { return gp.Migrate(db) }
+
+// ---------- public API สำหรับ finance (เรียกภายใน transaction ของ finance) ----------
+
+// SettlePayables ตัดยอดใบแจ้งหนี้ผู้ขายตามเอกสารจ่ายเงิน — คืนผู้ขาย ณ วันนี้ (ประเภทผู้เสียภาษี) + บัญชีเจ้าหนี้ + ใบแจ้งหนี้
+// กฎธุรกิจของจัดซื้อ (เช่นเกินยอดค้าง, ไม่ได้ตั้งบัญชีเจ้าหนี้) ถูกห่อเป็น integration.ErrRejected
+func (m *Module) SettlePayables(ctx context.Context, companyID, supplierID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error) {
+	in := make([]dto.SettlementLine, len(lines))
+	for i, l := range lines {
+		in[i] = dto.SettlementLine{InvoiceID: vo.InvoiceID(l.InvoiceID), Amount: l.Amount}
+	}
+	res, err := m.UseCases.Settlements.Settle(ctx, vo.CompanyID(companyID), vo.SupplierID(supplierID),
+		dto.SettlementDoc{ID: doc.DocumentID, No: doc.DocumentNo, Date: doc.Date}, in)
+	if err != nil {
+		return integration.SettlementResult{}, reject(err)
+	}
+	s := res.Supplier
+	out := integration.SettlementResult{
+		Party: integration.Counterparty{ID: uuid.UUID(s.ID), Code: s.Code, Name: s.Name, TaxID: s.TaxID, BranchNo: s.BranchNo,
+			Address: s.Address, TaxType: string(s.TaxType)},
+		ControlAccountID: uuid.UUID(res.APAccountID), Invoices: make([]integration.SettledInvoice, len(res.Invoices)),
+	}
+	for i, x := range res.Invoices {
+		out.Invoices[i] = integration.SettledInvoice{InvoiceID: uuid.UUID(x.ID), DocumentNo: x.DocumentNo, PartnerRef: x.SupplierInvoiceNo, Net: x.Net, Gross: x.Gross}
+	}
+	return out, nil
+}
+
+// UnsettlePayables คืนยอดค้างให้ใบแจ้งหนี้ของเอกสารจ่ายเงิน (ยกเลิกใบจ่าย)
+func (m *Module) UnsettlePayables(ctx context.Context, companyID, documentID uuid.UUID) error {
+	return reject(m.UseCases.Settlements.Unsettle(ctx, vo.CompanyID(companyID), documentID))
+}
+
+// OpenPayables: ใบแจ้งหนี้ค้างจ่ายของผู้ขาย (ไม่ตรวจสิทธิ์ — finance ตรวจ finance.payment:read แล้ว)
+func (m *Module) OpenPayables(ctx context.Context, companyID, supplierID uuid.UUID) ([]integration.OpenInvoice, error) {
+	rows, err := m.UseCases.Settlements.Open(ctx, vo.CompanyID(companyID), vo.SupplierID(supplierID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]integration.OpenInvoice, len(rows))
+	for i, r := range rows {
+		id, _ := uuid.Parse(r.ID)
+		out[i] = integration.OpenInvoice{ID: id, DocumentNo: r.DocumentNo, PartnerRef: r.SupplierInvoiceNo, Date: r.Date, DueDate: r.DueDate,
+			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+	}
+	return out, nil
+}
+
+func reject(err error) error {
+	if err != nil && domain.IsBusiness(err) {
+		return integration.Reject("purchasing", err)
+	}
+	return err
+}
 
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {

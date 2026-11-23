@@ -135,23 +135,3 @@ func TestInvoiceJournalWithDeliveryOneLinePerAccount(t *testing.T) {
 		t.Fatalf("due date = %v", i.State().DueDate)
 	}
 }
-
-func TestReceiptRules(t *testing.T) {
-	inv := vo.NewID[vo.InvoiceID]()
-	cash := vo.NewID[vo.CashAccountID]()
-	ar, wht, cashGL := vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID](), vo.NewID[vo.AccountID]()
-	base := ReceiptState{Date: day, Lines: []ReceiptLine{{InvoiceID: inv, Amount: d("1070"), Wht: d("30")}}}
-	base.Methods = []ReceiptMethod{{CashAccountID: cash, GLAccountID: cashGL, Amount: d("1070")}}
-	if _, err := NewReceipt(base, 2); !errors.Is(err, domain.ErrInvalidReceipt) {
-		t.Fatalf("methods must equal amount - wht: %v", err)
-	}
-	base.Methods[0].Amount = d("1040")
-	r, err := NewReceipt(base, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	j := r.Journal(ar, wht)
-	if len(j) != 3 || j[0].AccountID != cashGL || !j[1].Debit.Equal(d("30")) || !j[2].Credit.Equal(d("1070")) {
-		t.Fatalf("receipt journal = %+v", j)
-	}
-}

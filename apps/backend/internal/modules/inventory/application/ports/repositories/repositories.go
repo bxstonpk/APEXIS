@@ -5,6 +5,7 @@
 package repositories
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
 	"time"
 
@@ -74,6 +75,8 @@ type StockRepository interface {
 	ApplyCancel(ctx context.Context, companyID vo.CompanyID, plan services.CancelPlan) error
 
 	StockOnHand(ctx context.Context, companyID vo.CompanyID, f dto.StockOnHandFilter) (listing.Result[dto.StockOnHandRow], vo.Money, error)
+	// Dashboard: ภาพรวมคลังสินค้า ณ end_date + การเคลื่อนไหวในช่วง (aggregate ไม่กี่ query)
+	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
 	// StockCardOpening: ยอดยกมาก่อนวันที่ start
 	StockCardOpening(ctx context.Context, companyID vo.CompanyID, f dto.StockCardFilter) (vo.Quantity, vo.Money, error)
 	// StockCardLines: การเคลื่อนไหวในช่วงวันที่ พร้อมยอดสะสม (ไม่รวมยอดยกมา) — แบ่งหน้าใน DB

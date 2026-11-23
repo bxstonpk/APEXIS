@@ -96,6 +96,22 @@ describe('tree', () => {
   })
 })
 
+describe('income statement csv', () => {
+  it('บัญชีพักแสดงเป็นส่วนแยกหลังกำไรสุทธิ', () => {
+    const line = (code: string, amount: string) => ({ account_id: code, code, name: code, level: 0, is_header: false, amount })
+    const rows = reportCsvRows(
+      { book: 'income-statement', start_date: '2026-01-01', end_date: '2026-06-30', revenue: [line('4100', '100')], total_revenue: '100',
+        expenses: [], total_expenses: '0', net_income: '100', suspense: [line('6200', '-40')], total_suspense: '-40' },
+      'ACME',
+    )
+    const net = rows.findIndex((r) => r[1] === texts.reports.totals.netIncome)
+    const sus = rows.findIndex((r) => r[0] === texts.reports.sections.suspenseExcluded)
+    expect(net).toBeGreaterThan(0)
+    expect(sus).toBeGreaterThan(net)
+    expect(rows).toContainEqual(['', texts.reports.totals.suspensePeriod, '-40.00'])
+  })
+})
+
 describe('csv', () => {
   it('ครอบทุกช่อง, escape ", มี BOM และกันสูตร Excel', () => {
     expect(toCsv([['a"b', -5, '=SUM(A1)', null]])).toBe('﻿"a""b","-5","\'=SUM(A1)",""\r\n')

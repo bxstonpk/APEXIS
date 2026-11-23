@@ -139,6 +139,14 @@ func (m *Module) SeedUser(ctx context.Context, email, name, password string) (bo
 // Migrate สร้างตารางของ identity
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
 
+// PermissionRename คือการแปลงสิทธิ์ของบทบาท (From -> To, Keep = คงสิทธิ์เดิมไว้ด้วย)
+type PermissionRename = models.PermissionRename
+
+// RenamePermissions แปลงสิทธิ์เดิมของทุกบทบาทเมื่อความรับผิดชอบย้าย module — main.go เรียกหลัง Migrate (ทำซ้ำได้)
+func RenamePermissions(db *gorm.DB, rules []PermissionRename) error {
+	return models.RenamePermissions(db, rules)
+}
+
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {
 	out := make([]string, len(vo.AllPermissions))

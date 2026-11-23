@@ -9,7 +9,6 @@ import (
 	domain "apexis/backend/internal/modules/sales/domain/errors"
 	"apexis/backend/internal/modules/sales/domain/services"
 	vo "apexis/backend/internal/modules/sales/domain/value_objects"
-	"apexis/backend/internal/platform/numeric"
 )
 
 // Posting คือเลขที่และรายการบัญชีของเอกสารที่ลงบัญชีแล้ว
@@ -145,6 +144,7 @@ type InvoiceState struct {
 	CompanyID    vo.CompanyID
 	OrderID      vo.OrderID
 	CustomerID   vo.CustomerID
+	BillTo       BillTo // ผู้ซื้อตามใบกำกับภาษี ณ วันออก
 	Date         time.Time
 	DueDate      time.Time // วันที่ + เครดิตเทอมตามใบสั่งขาย
 	Reference    string
@@ -158,6 +158,15 @@ type InvoiceState struct {
 	Status       vo.DocStatus
 	Posting      Posting
 	Cancellation *Cancellation
+}
+
+// BillTo คือชื่อ / เลขผู้เสียภาษี / สาขา / ที่อยู่ของผู้ซื้อ ณ วันออกใบกำกับภาษี (ม.86/4)
+// เก็บไว้ในใบ — แก้ทะเบียนลูกค้าภายหลังไม่กระทบใบที่ออกแล้ว
+type BillTo struct {
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
 }
 
 // Invoice คือใบแจ้งหนี้ / ใบกำกับภาษี — ลงบัญชีทันที: Dr ลูกหนี้ / Cr รายได้ + ภาษีขาย
@@ -234,121 +243,4 @@ func (i *Invoice) Cancel(by vo.UserID, at time.Time) error {
 		return domain.ErrInvoicePaid
 	}
 	return cancel(&i.s.Status, &i.s.Cancellation, by, at)
-}
-
-// ---------- ใบเสร็จรับเงิน ----------
-
-// ReceiptLine: ยอดที่ตัดหนี้ (รวม VAT) และภาษีที่ลูกค้าหัก ณ ที่จ่าย
-type ReceiptLine struct {
-	InvoiceID vo.InvoiceID
-	Amount    vo.Money
-	Wht       vo.Money
-}
-
-type ReceiptMethod struct {
-	CashAccountID vo.CashAccountID
-	GLAccountID   vo.AccountID
-	Amount        vo.Money
-	Reference     string
-}
-
-type ReceiptTotals struct {
-	Amount   vo.Money // ตัดหนี้รวม
-	Wht      vo.Money // ถูกหัก ณ ที่จ่ายรวม
-	Received vo.Money // รับจริง = Amount - Wht
-}
-
-type ReceiptState struct {
-	ID           vo.ReceiptID
-	CompanyID    vo.CompanyID
-	CustomerID   vo.CustomerID
-	Date         time.Time
-	Description  string
-	Lines        []ReceiptLine
-	Methods      []ReceiptMethod
-	Totals       ReceiptTotals
-	Status       vo.DocStatus
-	Posting      Posting
-	Cancellation *Cancellation
-}
-
-// Receipt คือใบเสร็จรับเงิน (ลูกค้า 1 ราย) — ตัดหลายใบแจ้งหนี้, รับหลายช่องทาง; รวมช่องทาง = ตัดหนี้ - ถูกหัก ณ ที่จ่าย
-type Receipt struct{ s ReceiptState }
-
-func NewReceipt(s ReceiptState, amountDecimals int) (*Receipt, error) {
-	var err error
-	bad := func(format string, args ...any) error {
-		return fmt.Errorf("%w: "+format, append([]any{domain.ErrInvalidReceipt}, args...)...)
-	}
-	money := func(v vo.Money) bool { return numeric.InRange(v) && numeric.FitsScale(v, amountDecimals) }
-	if !vo.IsDateOnly(s.Date) {
-		return nil, domain.ErrInvalidDate
-	}
-	if s.Description, err = vo.OptionalText(s.Description, 500); err != nil {
-		return nil, err
-	}
-	if len(s.Lines) == 0 || len(s.Lines) > MaxLines {
-		return nil, bad("a receipt must have 1 to %d invoices", MaxLines)
-	}
-	if len(s.Methods) == 0 || len(s.Methods) > 20 {
-		return nil, bad("a receipt must have 1 to 20 payment methods")
-	}
-	t := ReceiptTotals{Amount: decimal.Zero, Wht: decimal.Zero, Received: decimal.Zero}
-	invoices := map[vo.InvoiceID]bool{}
-	for i, l := range s.Lines {
-		switch {
-		case invoices[l.InvoiceID]:
-			return nil, bad("line %d: invoice appears more than once", i+1)
-		case !l.Amount.IsPositive() || !money(l.Amount):
-			return nil, bad("line %d: amount must be positive with at most %d decimal places", i+1, amountDecimals)
-		case l.Wht.IsNegative() || !money(l.Wht) || l.Wht.GreaterThan(l.Amount):
-			return nil, bad("line %d: withholding tax must be zero to amount with at most %d decimal places", i+1, amountDecimals)
-		}
-		invoices[l.InvoiceID] = true
-		t.Amount, t.Wht = t.Amount.Add(l.Amount), t.Wht.Add(l.Wht)
-	}
-	accounts := map[vo.CashAccountID]bool{}
-	for i := range s.Methods {
-		m := &s.Methods[i]
-		switch {
-		case accounts[m.CashAccountID]:
-			return nil, bad("method %d: cash / bank account appears more than once", i+1)
-		case !m.Amount.IsPositive() || !money(m.Amount):
-			return nil, bad("method %d: amount must be positive with at most %d decimal places", i+1, amountDecimals)
-		}
-		if m.Reference, err = vo.OptionalText(m.Reference, 50); err != nil {
-			return nil, err
-		}
-		accounts[m.CashAccountID] = true
-		t.Received = t.Received.Add(m.Amount)
-	}
-	if net := t.Amount.Sub(t.Wht); !t.Received.Equal(net) {
-		return nil, bad("payment methods total %s must equal amount %s minus withholding tax %s (= %s)", t.Received, t.Amount, t.Wht, net)
-	}
-	s.Totals = t
-	s.ID, s.Status, s.Cancellation = vo.NewID[vo.ReceiptID](), vo.DocPosted, nil
-	return &Receipt{s: s}, nil
-}
-
-func RehydrateReceipt(s ReceiptState) *Receipt { return &Receipt{s: s} }
-
-func (r *Receipt) ID() vo.ReceiptID    { return r.s.ID }
-func (r *Receipt) State() ReceiptState { return r.s }
-func (r *Receipt) SetEntry(id vo.EntryID, no string) {
-	r.s.Posting.EntryID, r.s.Posting.EntryNo = &id, no
-}
-
-// Journal: Dr เงินสด / ธนาคาร (ตามทะเบียน) + Dr ภาษีถูกหัก ณ ที่จ่าย / Cr ลูกหนี้
-func (r *Receipt) Journal(ar, wht vo.AccountID) []services.JournalLine {
-	j := services.NewJournal()
-	for _, m := range r.s.Methods {
-		j.Debit(m.GLAccountID, m.Amount)
-	}
-	j.Debit(wht, r.s.Totals.Wht)
-	j.Credit(ar, r.s.Totals.Amount)
-	return j.Lines()
-}
-
-func (r *Receipt) Cancel(by vo.UserID, at time.Time) error {
-	return cancel(&r.s.Status, &r.s.Cancellation, by, at)
 }

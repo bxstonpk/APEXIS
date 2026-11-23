@@ -10,6 +10,7 @@ package integration
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -100,14 +101,67 @@ type DocumentType struct {
 	DefaultPrefix string
 }
 
-// ---------- cashbank ----------
+// ---------- การตัดยอดใบแจ้งหนี้ (finance -> sales / purchasing) ----------
+//
+// finance เป็นเจ้าของเอกสารรับ / จ่ายเงิน ส่วนใบแจ้งหนี้และยอดค้างเป็นของ sales / purchasing:
+// finance ขอตัดยอดผ่าน public API ของ module นั้นใน transaction เดียวกับใบรับ / จ่าย
+// module ปลายทางเก็บประวัติการตัดยอด (วันที่ + เอกสารการเงิน) ไว้เอง — รายงานอายุหนี้จึงไม่ต้อง JOIN ข้าม module
 
-// CashAccount คือทะเบียนเงินสด / บัญชีธนาคาร พร้อมบัญชีแยกประเภทที่ผูกไว้
-type CashAccount struct {
+// Settlement คือยอดที่ตัดจากใบแจ้งหนี้หนึ่งใบ (รวม VAT, ก่อนหักภาษี ณ ที่จ่าย)
+type Settlement struct {
+	InvoiceID uuid.UUID
+	Amount    decimal.Decimal
+}
+
+// SettlementDoc คือเอกสารของ finance ที่ตัดยอด (ใช้ยกเลิกทั้งชุดด้วย DocumentID)
+type SettlementDoc struct {
+	DocumentID uuid.UUID
+	DocumentNo string
+	Date       time.Time
+}
+
+// Counterparty คือข้อมูลคู่ค้า ณ วันเอกสาร (finance เก็บติดเอกสารไว้ใช้ทำรายงานภาษี)
+type Counterparty struct {
+	ID       uuid.UUID
+	Code     string
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+	TaxType  string // individual / juristic (ผู้ขาย — กำหนดแบบ ภ.ง.ด.3 / 53); ลูกค้า = ""
+}
+
+// SettledInvoice คือข้อมูลใบแจ้งหนี้ที่ตัดยอดแล้ว — Net / Gross ใช้คำนวณฐานภาษีหัก ณ ที่จ่ายตามสัดส่วน
+type SettledInvoice struct {
+	InvoiceID  uuid.UUID
+	DocumentNo string
+	PartnerRef string // เลขที่ใบแจ้งหนี้ของผู้ขาย (จัดซื้อ)
+	Net        decimal.Decimal
+	Gross      decimal.Decimal
+}
+
+// SettlementResult คือผลการตัดยอด: คู่ค้า + บัญชีคุม (ลูกหนี้ / เจ้าหนี้) ที่ต้องลงบัญชี + ใบแจ้งหนี้ตามลำดับที่ส่งมา
+type SettlementResult struct {
+	Party            Counterparty
+	ControlAccountID uuid.UUID
+	Invoices         []SettledInvoice
+}
+
+// OpenInvoice คือใบแจ้งหนี้ที่ยังค้างชำระ (ให้หน้ารับ / จ่ายเงินเลือก)
+type OpenInvoice struct {
 	ID          uuid.UUID
-	Code        string
-	Name        string
-	Type        string // cash / bank
-	GLAccountID uuid.UUID
-	Active      bool
+	DocumentNo  string
+	PartnerRef  string
+	Date        time.Time
+	DueDate     time.Time
+	Net         decimal.Decimal // ยอดก่อน VAT (ใช้คำนวณฐานภาษีหัก ณ ที่จ่าย)
+	Gross       decimal.Decimal
+	Outstanding decimal.Decimal
+}
+
+// PartyMerge คือคู่ค้ารหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ที่ถูกรวมตอน migrate — From ถูกลบ, เอกสารย้ายไป To
+// module ที่เก็บ id คู่ค้าไว้ในเอกสารของตัวเอง (เช่น finance) ใช้รายการนี้ปรับ id ตาม
+type PartyMerge struct {
+	From uuid.UUID
+	To   uuid.UUID
 }

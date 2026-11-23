@@ -3,6 +3,7 @@
 package gormpersistence
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,7 +49,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 	return models.SettingsModel{
 		CompanyID: uuid.UUID(companyID), VatRegistered: s.VatRegistered, VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		ARAccountID: OptUUID(s.ARAccountID), OutputVatAccountID: OptUUID(s.OutputVatAccountID), RevenueAccountID: OptUUID(s.RevenueAccountID),
-		CogsAccountID: OptUUID(s.CogsAccountID), WhtAccountID: OptUUID(s.WhtAccountID),
+		CogsAccountID: OptUUID(s.CogsAccountID),
 	}
 }
 
@@ -57,7 +58,6 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRegistered: m.VatRegistered, VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		ARAccountID: OptID[vo.AccountID](m.ARAccountID), OutputVatAccountID: OptID[vo.AccountID](m.OutputVatAccountID),
 		RevenueAccountID: OptID[vo.AccountID](m.RevenueAccountID), CogsAccountID: OptID[vo.AccountID](m.CogsAccountID),
-		WhtAccountID: OptID[vo.AccountID](m.WhtAccountID),
 	}
 }
 
@@ -65,22 +65,43 @@ func CustomerToModel(c *entities.Customer) models.CustomerModel {
 	d := c.Data()
 	return models.CustomerModel{
 		ID: uuid.UUID(c.ID()), CompanyID: uuid.UUID(c.CompanyID()), Code: d.Code, Name: d.Name, TaxID: d.TaxID, BranchNo: d.BranchNo,
-		Address: d.Address, PaymentTermDays: d.PaymentTermDays, TaxType: string(d.TaxType), CreditLimit: d.CreditLimit, Status: string(d.Status),
+		Address: d.Address, AddressDetail: addressToModel(d.AddressDetail), PaymentTermDays: d.PaymentTermDays, TaxType: string(d.TaxType), CreditLimit: d.CreditLimit, Status: string(d.Status),
 	}
 }
 
-func CustomerToEntity(m models.CustomerModel) *entities.Customer {
+// CustomerBranchesToModel: สาขาเพิ่มเติมตามลำดับที่บันทึก
+func CustomerBranchesToModel(c *entities.Customer) []models.CustomerBranchModel {
+	bs := c.Data().Branches
+	out := make([]models.CustomerBranchModel, len(bs))
+	for i, b := range bs {
+		out[i] = models.CustomerBranchModel{CustomerID: uuid.UUID(c.ID()), BranchNo: b.BranchNo, Name: b.Name, Address: b.Address,
+			AddressDetail: addressToModel(b.AddressDetail), Position: i + 1}
+	}
+	return out
+}
+
+func CustomerBranchesToDomain(ms []models.CustomerBranchModel) []entities.CustomerBranch {
+	out := make([]entities.CustomerBranch, len(ms))
+	for i, m := range ms {
+		out[i] = entities.CustomerBranch{BranchNo: m.BranchNo, Name: m.Name, Address: m.Address, AddressDetail: addressToDomain(m.AddressDetail)}
+	}
+	return out
+}
+
+// CustomerToEntity: branches = สาขาเพิ่มเติมที่โหลดแยก (nil = ไม่มี)
+func CustomerToEntity(m models.CustomerModel, branches ...models.CustomerBranchModel) *entities.Customer {
 	return entities.RehydrateCustomer(vo.CustomerID(m.ID), vo.CompanyID(m.CompanyID), entities.CustomerData{
-		Code: m.Code, Name: m.Name, TaxID: m.TaxID, BranchNo: m.BranchNo, Address: m.Address, PaymentTermDays: m.PaymentTermDays,
+		Code: m.Code, Name: m.Name, TaxID: m.TaxID, BranchNo: m.BranchNo, Address: m.Address, AddressDetail: addressToDomain(m.AddressDetail), PaymentTermDays: m.PaymentTermDays,
 		TaxType: vo.TaxType(m.TaxType), CreditLimit: m.CreditLimit, Status: vo.Status(m.Status),
+		Branches: CustomerBranchesToDomain(branches),
 	})
 }
 
 // ---------- ใบเสนอราคา / ใบสั่งขาย ----------
 
-func salesDoc(customerID vo.CustomerID, reference, description string, terms entities.Terms, p entities.Priced, by vo.UserID) models.SalesDocModel {
+func salesDoc(customerID vo.CustomerID, branchNo, reference, description string, terms entities.Terms, p entities.Priced, by vo.UserID) models.SalesDocModel {
 	return models.SalesDocModel{
-		CustomerID: uuid.UUID(customerID), Reference: reference, Description: description,
+		CustomerID: uuid.UUID(customerID), CustomerBranchNo: branchNo, Reference: reference, Description: description,
 		VatRegistered: terms.Vat.Registered, VatRate: terms.Vat.Rate, PriceIncludesVat: terms.Vat.Inclusive, PaymentTermDays: terms.PaymentTermDays,
 		TotalNet: p.Totals.Net, TotalVat: p.Totals.Vat, TotalGross: p.Totals.Gross, CreatedBy: uuid.UUID(by),
 	}
@@ -121,7 +142,7 @@ func QuotationToModel(q *entities.Quotation) models.QuotationModel {
 	s := q.State()
 	m := models.QuotationModel{
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocDate: s.Data.Date, ValidUntil: s.Data.ValidUntil,
-		SalesDocModel: salesDoc(s.Data.CustomerID, s.Data.Reference, s.Data.Description, s.Terms, s.Priced, s.CreatedBy),
+		SalesDocModel: salesDoc(s.Data.CustomerID, s.Data.CustomerBranchNo, s.Data.Reference, s.Data.Description, s.Terms, s.Priced, s.CreatedBy),
 		Status:        string(s.Status), OrderID: OptUUID(s.OrderID),
 	}
 	if s.QuotationNo != "" {
@@ -144,7 +165,7 @@ func QuotationToEntity(m models.QuotationModel) *entities.Quotation {
 		ID: vo.QuotationID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Terms: termsOf(m.SalesDocModel), Priced: p,
 		Status: vo.QuotationStatus(m.Status), OrderID: OptID[vo.OrderID](m.OrderID), CreatedBy: vo.UserID(m.SalesDocModel.CreatedBy),
 		Data: entities.QuotationData{
-			CustomerID: vo.CustomerID(m.SalesDocModel.CustomerID), Date: DateUTC(m.DocDate), ValidUntil: DateUTC(m.ValidUntil),
+			CustomerID: vo.CustomerID(m.SalesDocModel.CustomerID), CustomerBranchNo: m.CustomerBranchNo, Date: DateUTC(m.DocDate), ValidUntil: DateUTC(m.ValidUntil),
 			Reference: m.SalesDocModel.Reference, Description: m.SalesDocModel.Description, PriceIncludesVat: m.SalesDocModel.PriceIncludesVat, Lines: p.Lines,
 		},
 	}
@@ -158,7 +179,7 @@ func OrderToModel(o *entities.Order) models.OrderModel {
 	s := o.State()
 	m := models.OrderModel{
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), QuotationID: OptUUID(s.Data.QuotationID), DocDate: s.Data.Date,
-		SalesDocModel: salesDoc(s.Data.CustomerID, s.Data.Reference, s.Data.Description, s.Terms, s.Priced, s.CreatedBy),
+		SalesDocModel: salesDoc(s.Data.CustomerID, s.Data.CustomerBranchNo, s.Data.Reference, s.Data.Description, s.Terms, s.Priced, s.CreatedBy),
 		DeliveryDate:  s.Data.DeliveryDate, Status: string(s.Status),
 	}
 	if a := s.Approval; a != nil {
@@ -192,7 +213,7 @@ func OrderToEntity(m models.OrderModel) *entities.Order {
 		ID: vo.OrderID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Terms: termsOf(m.SalesDocModel), Priced: p, Progress: progress,
 		Status: vo.OrderStatus(m.Status), CreatedBy: vo.UserID(m.SalesDocModel.CreatedBy),
 		Data: entities.OrderData{
-			CustomerID: vo.CustomerID(m.SalesDocModel.CustomerID), QuotationID: OptID[vo.QuotationID](m.QuotationID), Date: DateUTC(m.DocDate),
+			CustomerID: vo.CustomerID(m.SalesDocModel.CustomerID), CustomerBranchNo: m.CustomerBranchNo, QuotationID: OptID[vo.QuotationID](m.QuotationID), Date: DateUTC(m.DocDate),
 			DeliveryDate: optDate(m.DeliveryDate), Reference: m.SalesDocModel.Reference, Description: m.SalesDocModel.Description,
 			PriceIncludesVat: m.SalesDocModel.PriceIncludesVat, Lines: p.Lines,
 		},
@@ -293,6 +314,7 @@ func InvoiceToModel(inv *entities.Invoice) models.InvoiceModel {
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
 		OrderID: uuid.UUID(s.OrderID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
 		StockModel: stockModel(s.Stock), WithDelivery: s.WithDelivery, DueDate: s.DueDate, Reference: s.Reference,
+		BillToName: s.BillTo.Name, BillToTaxID: s.BillTo.TaxID, BillToBranchNo: s.BillTo.BranchNo, BillToAddress: s.BillTo.Address,
 		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
 		ReceivedAmount: s.Received,
 	}
@@ -310,6 +332,7 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 	s := entities.InvoiceState{
 		ID: vo.InvoiceID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), CustomerID: vo.CustomerID(m.PostedModel.CustomerID),
 		Date: DateUTC(m.DocDate), DueDate: DateUTC(m.DueDate), Reference: m.Reference, Description: m.PostedModel.Description,
+		BillTo:       entities.BillTo{Name: m.BillToName, TaxID: m.BillToTaxID, BranchNo: m.BillToBranchNo, Address: m.BillToAddress},
 		Vat:          services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
 		WithDelivery: m.WithDelivery, Stock: stockOf(m.StockModel), Received: m.ReceivedAmount,
 		Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross},
@@ -326,39 +349,6 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 	return entities.RehydrateInvoice(s)
 }
 
-func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
-	s := r.State()
-	m := models.ReceiptModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
-		PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
-		TotalAmount: s.Totals.Amount, TotalWht: s.Totals.Wht, TotalReceived: s.Totals.Received,
-	}
-	for i, l := range s.Lines {
-		m.Lines = append(m.Lines, models.ReceiptLineModel{ReceiptID: m.ID, LineNo: i + 1, InvoiceID: uuid.UUID(l.InvoiceID), Amount: l.Amount, Wht: l.Wht})
-	}
-	for i, x := range s.Methods {
-		m.Methods = append(m.Methods, models.ReceiptMethodModel{
-			ReceiptID: m.ID, LineNo: i + 1, CashAccountID: uuid.UUID(x.CashAccountID), GLAccountID: uuid.UUID(x.GLAccountID),
-			Amount: x.Amount, Reference: x.Reference,
-		})
-	}
-	return m
-}
+func addressToModel(a thaiaddress.Address) models.AddressColumns { return models.AddressColumns(a) }
 
-func ReceiptToEntity(m models.ReceiptModel) *entities.Receipt {
-	s := entities.ReceiptState{
-		ID: vo.ReceiptID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), CustomerID: vo.CustomerID(m.PostedModel.CustomerID), Date: DateUTC(m.DocDate),
-		Description: m.PostedModel.Description, Totals: entities.ReceiptTotals{Amount: m.TotalAmount, Wht: m.TotalWht, Received: m.TotalReceived},
-		Status: vo.DocStatus(m.PostedModel.Status), Posting: postingOf(m.DocumentNo, m.PostedModel), Cancellation: cancellationOf(m.PostedModel),
-		Lines: make([]entities.ReceiptLine, len(m.Lines)), Methods: make([]entities.ReceiptMethod, len(m.Methods)),
-	}
-	for i, l := range m.Lines {
-		s.Lines[i] = entities.ReceiptLine{InvoiceID: vo.InvoiceID(l.InvoiceID), Amount: l.Amount, Wht: l.Wht}
-	}
-	for i, x := range m.Methods {
-		s.Methods[i] = entities.ReceiptMethod{
-			CashAccountID: vo.CashAccountID(x.CashAccountID), GLAccountID: vo.AccountID(x.GLAccountID), Amount: x.Amount, Reference: x.Reference,
-		}
-	}
-	return entities.RehydrateReceipt(s)
-}
+func addressToDomain(m models.AddressColumns) thaiaddress.Address { return thaiaddress.Address(m) }

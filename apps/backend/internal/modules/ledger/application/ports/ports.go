@@ -52,4 +52,14 @@ type Organization interface {
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)
 	// MissingDimensions คืนชนิดมิติที่มี id ไม่พบ เช่น ["branch"]
 	MissingDimensions(ctx context.Context, companyID vo.CompanyID, d Dimensions) ([]string, error)
+	// PeriodRange: งวดที่ครอบคลุมวันนั้นพร้อมวันแรก / วันสุดท้าย — ไม่มีงวด = nil (ไม่ใช่ error)
+	PeriodRange(ctx context.Context, companyID vo.CompanyID, date time.Time) (*PeriodRange, error)
+}
+
+// PeriodRange คืองวดบัญชี (ใช้แสดงสถานะงวดใน dashboard)
+type PeriodRange struct {
+	FiscalYear int
+	Start      time.Time
+	End        time.Time
+	Open       bool
 }

@@ -5,6 +5,8 @@ package ledger_test
 // (ไม่ได้ตั้ง env = skip) — test จะ DROP ตาราง identity_* / organization_* / ledger_* ใน DB นั้น ห้ามชี้ไป DB จริง
 
 import (
+	"gorm.io/gorm"
+
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -25,6 +27,7 @@ import (
 type api struct {
 	t   *testing.T
 	srv *httptest.Server
+	db  *gorm.DB
 }
 
 type resp struct {
@@ -139,7 +142,7 @@ func setup(t *testing.T) api {
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", idm.Authenticate(reg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return api{t: t, srv: srv}
+	return api{t: t, srv: srv, db: db}
 }
 
 func ln(account string, debit, credit any) obj {

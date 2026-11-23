@@ -98,7 +98,7 @@ export function EntryView({
         ))}
       </dl>
 
-      <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-subtle text-left text-[13px] text-ink-muted">

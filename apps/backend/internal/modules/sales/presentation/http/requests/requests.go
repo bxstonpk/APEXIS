@@ -3,6 +3,7 @@
 package requests
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"bytes"
 	"errors"
 	"fmt"
@@ -142,7 +143,6 @@ type Settings struct {
 	OutputVatAccountID *string  `json:"output_vat_account_id"`
 	RevenueAccountID   *string  `json:"revenue_account_id"`
 	CogsAccountID      *string  `json:"cogs_account_id"`
-	WhtAccountID       *string  `json:"wht_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -164,7 +164,6 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 	}{
 		{"ar_account_id", r.ARAccountID, &out.ARAccountID}, {"output_vat_account_id", r.OutputVatAccountID, &out.OutputVatAccountID},
 		{"revenue_account_id", r.RevenueAccountID, &out.RevenueAccountID}, {"cogs_account_id", r.CogsAccountID, &out.CogsAccountID},
-		{"wht_account_id", r.WhtAccountID, &out.WhtAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -175,15 +174,16 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 
 // Customer: POST / PUT /customers — credit_limit ไม่ส่ง / null = ไม่จำกัด
 type Customer struct {
-	Code            string   `json:"code"`
-	Name            string   `json:"name"`
-	TaxID           string   `json:"tax_id"`
-	BranchNo        string   `json:"branch_no"`
-	Address         string   `json:"address"`
-	PaymentTermDays int      `json:"payment_term_days"`
-	TaxType         string   `json:"tax_type"`
-	CreditLimit     *Decimal `json:"credit_limit"`
-	Status          string   `json:"status"`
+	Code            string            `json:"code"`
+	Name            string            `json:"name"`
+	TaxID           string            `json:"tax_id"`
+	BranchNo        string            `json:"branch_no"`
+	AddressDetail   *thaiaddress.JSON `json:"address_detail"` // ที่อยู่ตามแบบสรรพากร (ไม่ส่ง = ว่าง)
+	PaymentTermDays int               `json:"payment_term_days"`
+	TaxType         string            `json:"tax_type"`
+	CreditLimit     *Decimal          `json:"credit_limit"`
+	Status          string            `json:"status"`
+	Branches        []Branch          `json:"branches"` // สาขาเพิ่มเติม (แทนที่ทั้งชุด; ไม่ส่ง = ไม่มี)
 }
 
 func (r Customer) ToData(isCreate bool) (entities.CustomerData, error) {
@@ -199,9 +199,24 @@ func (r Customer) ToData(isCreate bool) (entities.CustomerData, error) {
 		return entities.CustomerData{}, err
 	}
 	return entities.CustomerData{
-		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address, PaymentTermDays: r.PaymentTermDays,
-		TaxType: vo.TaxType(r.TaxType), CreditLimit: limit, Status: st,
+		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, AddressDetail: r.AddressDetail.Address(), PaymentTermDays: r.PaymentTermDays,
+		TaxType: vo.TaxType(r.TaxType), CreditLimit: limit, Status: st, Branches: branches(r.Branches),
 	}, nil
+}
+
+// Branch คือสาขาเพิ่มเติมของลูกค้า
+type Branch struct {
+	BranchNo      string            `json:"branch_no"`
+	Name          string            `json:"name"`
+	AddressDetail *thaiaddress.JSON `json:"address_detail"`
+}
+
+func branches(in []Branch) []entities.CustomerBranch {
+	out := make([]entities.CustomerBranch, len(in))
+	for i, b := range in {
+		out[i] = entities.CustomerBranch{BranchNo: b.BranchNo, Name: b.Name, AddressDetail: b.AddressDetail.Address()}
+	}
+	return out
 }
 
 // ---------- ใบเสนอราคา / ใบสั่งขาย ----------
@@ -240,6 +255,7 @@ func lines(in []Line) ([]entities.LineData, error) {
 // Quotation: POST / PUT /quotations
 type Quotation struct {
 	CustomerID       string `json:"customer_id"`
+	CustomerBranchNo string `json:"customer_branch_no"` // ว่าง = สาขาหลัก
 	Date             string `json:"date"`
 	ValidUntil       string `json:"valid_until"`
 	Reference        string `json:"reference"`
@@ -269,7 +285,7 @@ func (r Quotation) ToData() (entities.QuotationData, error) {
 		return entities.QuotationData{}, err
 	}
 	return entities.QuotationData{
-		CustomerID: customer, Date: d, ValidUntil: valid, Reference: r.Reference, Description: r.Description,
+		CustomerID: customer, CustomerBranchNo: r.CustomerBranchNo, Date: d, ValidUntil: valid, Reference: r.Reference, Description: r.Description,
 		PriceIncludesVat: r.PriceIncludesVat, Lines: ls,
 	}, nil
 }
@@ -278,6 +294,7 @@ func (r Quotation) ToData() (entities.QuotationData, error) {
 type Order struct {
 	QuotationID      *string `json:"quotation_id"`
 	CustomerID       string  `json:"customer_id"`
+	CustomerBranchNo string  `json:"customer_branch_no"` // ว่าง = สาขาหลัก (มาจากใบเสนอราคา = ตามใบเสนอราคา)
 	Date             string  `json:"date"`
 	DeliveryDate     *string `json:"delivery_date"`
 	Reference        string  `json:"reference"`
@@ -298,7 +315,7 @@ func (r Order) ToData(allowQuotation bool) (entities.OrderData, error) {
 	if err != nil {
 		return entities.OrderData{}, err
 	}
-	out := entities.OrderData{Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description, PriceIncludesVat: r.PriceIncludesVat}
+	out := entities.OrderData{CustomerBranchNo: r.CustomerBranchNo, Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description, PriceIncludesVat: r.PriceIncludesVat}
 	if r.QuotationID != nil && *r.QuotationID != "" {
 		if !allowQuotation {
 			return entities.OrderData{}, invalid("quotation_id can only be set when creating a sales order")
@@ -399,72 +416,6 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 	}
 	return dto.InvoiceInput{OrderID: in.OrderID, Date: in.Date, WithDelivery: r.WithDelivery, WarehouseID: in.WarehouseID,
 		Reference: in.Reference, Description: in.Description, Lines: in.Lines}, nil
-}
-
-type ReceiptLine struct {
-	InvoiceID string   `json:"invoice_id"`
-	Amount    *Decimal `json:"amount"` // ยอดตัดหนี้ (รวม VAT)
-	Wht       *Decimal `json:"wht"`    // ภาษีที่ลูกค้าหัก ณ ที่จ่าย (ไม่ส่ง = 0)
-}
-
-type ReceiptMethod struct {
-	CashAccountID string   `json:"cash_account_id"`
-	Amount        *Decimal `json:"amount"`
-	Reference     string   `json:"reference"`
-}
-
-// Receipt: POST /customer-receipts — ยอดรวม methods = ยอดรวม lines.amount - lines.wht
-type Receipt struct {
-	CustomerID  string          `json:"customer_id"`
-	Date        string          `json:"date"`
-	Description string          `json:"description"`
-	Lines       []ReceiptLine   `json:"lines"`
-	Methods     []ReceiptMethod `json:"methods"`
-}
-
-func (r Receipt) ToInput() (dto.ReceiptInput, error) {
-	if err := required(map[string]string{"customer_id": r.CustomerID, "date": r.Date}); err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	customer, err := id[vo.CustomerID]("customer_id", r.CustomerID)
-	if err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	d, err := date("date", r.Date)
-	if err != nil {
-		return dto.ReceiptInput{}, err
-	}
-	out := dto.ReceiptInput{CustomerID: customer, Date: d, Description: r.Description,
-		Lines: make([]dto.ReceiptLineInput, len(r.Lines)), Methods: make([]dto.ReceiptMethodInput, len(r.Methods))}
-	for i, l := range r.Lines {
-		n := i + 1
-		inv, err := id[vo.InvoiceID](fmt.Sprintf("lines[%d].invoice_id", n), l.InvoiceID)
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		amount, err := l.Amount.required(fmt.Sprintf("lines[%d].amount", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		wht, err := l.Wht.orZero(fmt.Sprintf("lines[%d].wht", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		out.Lines[i] = dto.ReceiptLineInput{InvoiceID: inv, Amount: amount, Wht: wht}
-	}
-	for i, m := range r.Methods {
-		n := i + 1
-		acc, err := id[vo.CashAccountID](fmt.Sprintf("methods[%d].cash_account_id", n), m.CashAccountID)
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		amount, err := m.Amount.required(fmt.Sprintf("methods[%d].amount", n))
-		if err != nil {
-			return dto.ReceiptInput{}, err
-		}
-		out.Methods[i] = dto.ReceiptMethodInput{CashAccountID: acc, Amount: amount, Reference: m.Reference}
-	}
-	return out, nil
 }
 
 // ---------- URL query ----------

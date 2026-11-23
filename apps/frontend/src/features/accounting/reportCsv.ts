@@ -48,6 +48,7 @@ export function reportCsvRows(r: Report, companyName: string): CsvCell[][] {
         ...section(t.sections.revenue, r.revenue, t.totals.revenue, r.total_revenue),
         ...section(t.sections.expenses, r.expenses, t.totals.expenses, r.total_expenses),
         ['', t.totals.netIncome, plainAmount(r.net_income)],
+        ...(r.suspense?.length ? [[], ...section(t.sections.suspenseExcluded, r.suspense, t.totals.suspensePeriod, r.total_suspense)] : []),
       ]
     case 'general-ledger':
       return [

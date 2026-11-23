@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"net/http"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
@@ -13,6 +14,18 @@ import (
 )
 
 // ---------- ค่าตั้ง ----------
+
+// Dashboard: GET /dashboards/purchasing?start_date=&end_date= (บังคับทั้งคู่)
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		p, err := dashperiod.Parse(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		d, err := h.uc.Reports.Dashboard(r.Context(), dto.List[dashperiod.Period]{Actor: a, Filter: p})
+		return one(responses.FromDashboard(d), err)
+	})
+}
 
 // GetSettings: GET /purchasing-settings
 func (h *Handler) GetSettings(w http.ResponseWriter, r *http.Request) {

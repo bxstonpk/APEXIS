@@ -90,17 +90,3 @@ type Ledger interface {
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
 }
-
-// CashAccount คือทะเบียนเงินสด / ธนาคารจาก cashbank พร้อมบัญชีแยกประเภทที่ผูกไว้
-type CashAccount struct {
-	ID          vo.CashAccountID
-	Code        string
-	Name        string
-	GLAccountID vo.AccountID
-	Active      bool
-}
-
-type CashBank interface {
-	// CashAccounts: ที่ไม่พบ / ถูกลบจะไม่อยู่ใน map
-	CashAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.CashAccountID) (map[vo.CashAccountID]CashAccount, error)
-}

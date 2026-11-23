@@ -15,8 +15,6 @@ const (
 	PermReceiptPost    Permission = "purchasing.receipt:post" // รับสินค้า / ยกเลิก (ลงบัญชี + สต็อก)
 	PermInvoiceRead    Permission = "purchasing.invoice:read"
 	PermInvoicePost    Permission = "purchasing.invoice:post" // บันทึกใบแจ้งหนี้ / ยกเลิก (ลงบัญชี)
-	PermPaymentRead    Permission = "purchasing.payment:read"
-	PermPaymentPost    Permission = "purchasing.payment:post" // จ่ายชำระ / ยกเลิก (ลงบัญชี)
 	PermReportRead     Permission = "purchasing.report:read"
 )
 
@@ -35,7 +33,5 @@ var AllPermissions = []Permission{
 	PermReceiptPost,
 	PermInvoiceRead,
 	PermInvoicePost,
-	PermPaymentRead,
-	PermPaymentPost,
 	PermReportRead,
 }

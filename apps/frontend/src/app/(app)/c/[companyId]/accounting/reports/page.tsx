@@ -74,7 +74,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
         {report && <ReportActions rows={reportCsvRows(report, ctx.company.name)} filename={`${book}_${book === 'balance-sheet' ? end : `${start}_${end}`}.csv`} />}
       </header>
 
-      <Form action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
+      <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-56" />
         {book !== 'balance-sheet' && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
         <TextField name="end_date" type="date" label={book === 'balance-sheet' ? t.fields.asOf : t.fields.end} defaultValue={end} />

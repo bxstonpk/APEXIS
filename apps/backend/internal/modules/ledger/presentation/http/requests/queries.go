@@ -182,3 +182,10 @@ func bookList() string {
 	}
 	return s
 }
+
+// ParseDateRange: GET /dashboards/accounting?start_date=&end_date= — ต้องมีทั้งคู่ (YYYY-MM-DD) และ start <= end
+func ParseDateRange(v url.Values) (time.Time, time.Time, error) {
+	q := &query{v: v}
+	start, end := q.dateRange()
+	return start, end, q.err
+}

@@ -14,24 +14,20 @@ var (
 	ErrInvalidDate     = errors.New("invalid date")
 	ErrInvalidTaxID    = errors.New("tax id must be 13 digits")
 	ErrInvalidBranchNo = errors.New("branch number must be 5 digits")
+	ErrDuplicateBranch = errors.New("duplicate supplier branch number") // detailed
 	ErrInvalidTerm     = errors.New("payment term must be 0 to 365 days")
 	ErrInvalidVatRate  = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
 	ErrInvalidLine     = errors.New("invalid line") // detailed
 	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
-	ErrInvalidWhtRate  = errors.New("withholding tax rate must be more than 0 and at most 100 with at most 2 decimal places")
-	ErrInvalidPayment  = errors.New("invalid payment") // detailed
 )
 
 // ไม่พบ (404)
 var (
-	ErrSupplierNotFound    = errors.New("supplier not found")
-	ErrOrderNotFound       = errors.New("purchase order not found")
-	ErrReceiptNotFound     = errors.New("goods receipt not found")
-	ErrInvoiceNotFound     = errors.New("supplier invoice not found")
-	ErrItemNotFound        = errors.New("item not found") // detailed
-	ErrPaymentNotFound     = errors.New("supplier payment not found")
-	ErrWhtTypeNotFound     = errors.New("withholding tax type not found") // detailed
-	ErrCashAccountNotFound = errors.New("cash / bank account not found")  // detailed
+	ErrSupplierNotFound = errors.New("supplier not found")
+	ErrOrderNotFound    = errors.New("purchase order not found")
+	ErrReceiptNotFound  = errors.New("goods receipt not found")
+	ErrInvoiceNotFound  = errors.New("supplier invoice not found")
+	ErrItemNotFound     = errors.New("item not found") // detailed
 )
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
@@ -40,6 +36,7 @@ var (
 	ErrInUse           = errors.New("record is referenced by other records")
 	ErrInvoiceNoExists = errors.New("supplier invoice number already recorded for this supplier")
 	ErrDocumentNoUsed  = errors.New("document number is already used (check the document number format)")
+	ErrTaxIDExists     = errors.New("tax id already belongs to another supplier") // detailed: รหัสที่มีอยู่ — เพิ่มสาขาที่รหัสนั้นแทน
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -66,6 +63,7 @@ var (
 	ErrOverPayment       = errors.New("amount exceeds the invoice outstanding balance")          // detailed
 	ErrInvoiceNotPayable = errors.New("invoice is not a posted invoice of this supplier")        // detailed
 	ErrInactiveRef       = errors.New("withholding tax type or cash / bank account is inactive") // detailed
+	ErrBranchNotFound    = errors.New("supplier branch not found")                               // detailed
 )
 
 // สิทธิ์ (403)
@@ -73,14 +71,13 @@ var ErrForbidden = errors.New("permission denied")
 
 var all = []error{
 	ErrInvalidID, ErrInvalidCode, ErrInvalidName, ErrInvalidText, ErrInvalidStatus, ErrInvalidDate, ErrInvalidTaxID,
-	ErrInvalidBranchNo, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType, ErrInvalidWhtRate, ErrInvalidPayment,
-	ErrPaymentNotFound, ErrWhtTypeNotFound, ErrCashAccountNotFound,
+	ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType,
 	ErrInvoicePaid, ErrOverPayment, ErrInvoiceNotPayable, ErrInactiveRef,
 	ErrSupplierNotFound, ErrOrderNotFound, ErrReceiptNotFound, ErrInvoiceNotFound, ErrItemNotFound,
-	ErrCodeExists, ErrInUse, ErrInvoiceNoExists, ErrDocumentNoUsed,
+	ErrCodeExists, ErrInUse, ErrInvoiceNoExists, ErrDocumentNoUsed, ErrTaxIDExists,
 	ErrCompanyInactive, ErrSupplierInactive, ErrItemInactive, ErrVatNotApplicable, ErrOrderNotDraft, ErrOrderNotApproved,
 	ErrOrderNotOpen, ErrOrderHasActivity, ErrOverReceipt, ErrOverInvoice, ErrReceiptInvoiced, ErrAlreadyCancelled,
-	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired,
+	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired, ErrBranchNotFound,
 	ErrForbidden,
 }
 

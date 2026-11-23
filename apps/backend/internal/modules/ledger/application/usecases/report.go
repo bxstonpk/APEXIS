@@ -188,6 +188,7 @@ func (uc *ReportUseCases) IncomeStatement(ctx context.Context, in dto.DateRange)
 	out.Revenue, out.TotalRevenue = services.BuildSection(chart, net, vo.AccountRevenue)
 	out.Expenses, out.TotalExpenses = services.BuildSection(chart, net, vo.AccountExpense)
 	out.NetIncome = out.TotalRevenue.Sub(out.TotalExpenses)
+	out.Suspense, out.TotalSuspense = services.BuildSection(chart, net, vo.AccountSuspense)
 	return out, nil
 }
 

@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
@@ -31,17 +32,16 @@ func (uc *ReportUseCases) Outstanding(ctx context.Context, in dto.List[dto.Outst
 }
 
 // Aging: อายุเจ้าหนี้ ณ วันที่
+// Dashboard: ภาพรวมแอปจัดซื้อ — สิทธิ์เดียวกับรายงาน (purchasing.report:read), อ่านอย่างเดียว ไม่ใช้ transaction
+func (uc *ReportUseCases) Dashboard(ctx context.Context, in dto.List[dashperiod.Period]) (dto.Dashboard, error) {
+	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Dashboard, error) {
+		return uc.reports.Dashboard(ctx, in.CompanyID, in.Filter)
+	})
+}
+
 func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter]) (dto.Aging, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Aging, error) {
 		rows, totals, err := uc.reports.Aging(ctx, in.CompanyID, in.Filter)
 		return dto.Aging{AsOf: in.Filter.AsOf, Rows: rows, Totals: totals}, err
-	})
-}
-
-// Withholding: ภาษีหัก ณ ที่จ่ายตามวันที่จ่าย แยก ภ.ง.ด.3 / 53 (กรอง form)
-func (uc *ReportUseCases) Withholding(ctx context.Context, in dto.List[dto.WithholdingFilter]) (dto.Withholding, error) {
-	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Withholding, error) {
-		rows, totals, err := uc.reports.Withholding(ctx, in.CompanyID, in.Filter)
-		return dto.Withholding{Start: in.Filter.Start, End: in.Filter.End, Rows: rows, Totals: totals}, err
 	})
 }

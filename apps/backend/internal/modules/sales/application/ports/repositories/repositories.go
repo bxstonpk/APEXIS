@@ -4,7 +4,10 @@
 package repositories
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
+
+	"github.com/google/uuid"
 
 	"apexis/backend/internal/modules/sales/application/dto"
 	"apexis/backend/internal/modules/sales/domain/entities"
@@ -23,6 +26,8 @@ type CustomerRepository interface {
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) error
 	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) (*entities.Customer, error)
 	InUse(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) (bool, error)
+	// TaxIDOwner: รหัสลูกค้าอื่นที่ใช้เลขผู้เสียภาษีนี้อยู่ ("" = ไม่มี) — ใช้แจ้ง error ที่อ่านเข้าใจได้ (DB unique index เป็นตัวกันจริง)
+	TaxIDOwner(ctx context.Context, companyID vo.CompanyID, taxID string, except *vo.CustomerID) (string, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) (dto.Customer, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.CustomerFilter) (listing.Result[dto.Customer], error)
 }
@@ -65,19 +70,21 @@ type InvoiceRepository interface {
 	Create(ctx context.Context, i *entities.Invoice) error
 	UpdateStatus(ctx context.Context, i *entities.Invoice) error
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (*entities.Invoice, error)
-	// LockForReceipt: หัวใบแจ้งหนี้ (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
-	LockForReceipt(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
+	// LockForSettlement: หัวใบแจ้งหนี้ (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
+	LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
 	SaveReceived(ctx context.Context, invoices []*entities.Invoice) error
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error)
+	// Open: ใบแจ้งหนี้ที่ยังค้างรับของลูกค้า เรียงวันครบกำหนด — query เดียว
+	Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error)
 }
 
-type ReceiptRepository interface {
-	Create(ctx context.Context, r *entities.Receipt) error
-	UpdateStatus(ctx context.Context, r *entities.Receipt) error
-	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (*entities.Receipt, error)
-	Get(ctx context.Context, companyID vo.CompanyID, id vo.ReceiptID) (dto.Receipt, error)
-	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.ReceiptSummary], error)
+// SettlementRepository: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance (ใช้คำนวณอายุลูกหนี้ ณ วันที่)
+type SettlementRepository interface {
+	Create(ctx context.Context, companyID vo.CompanyID, doc dto.SettlementDoc, lines []dto.SettlementLine) error
+	// LockDocument: รายการที่ยังมีผลของเอกสาร (FOR UPDATE) — ว่าง = ไม่พบ / ยกเลิกแล้ว
+	LockDocument(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) ([]dto.SettlementLine, error)
+	Cancel(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
 }
 
 type ReportRepository interface {
@@ -85,6 +92,6 @@ type ReportRepository interface {
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
 	// OutputVat: ใบแจ้งหนี้ (ยังไม่ยกเลิก) ในช่วงวันที่ — ฐาน = ยอดก่อน VAT, ภาษี = VAT
 	OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
-	// WithholdingReceived: บรรทัดใบเสร็จ (ยังไม่ยกเลิก) ที่ลูกค้าหักภาษีไว้
-	WithholdingReceived(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
+	// Dashboard: ภาพรวมแอปขายในช่วง (aggregate ไม่กี่ query)
+	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
 }

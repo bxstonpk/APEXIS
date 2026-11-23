@@ -57,7 +57,7 @@ export function LoginForm({ onSuccess, texts: t = appTexts.auth.login, defaultEm
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+    <form method="post" onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
       {serverError && <Alert tone="error">{serverError}</Alert>}
       <TextField
         ref={emailRef}

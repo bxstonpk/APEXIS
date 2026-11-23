@@ -110,6 +110,23 @@ func (uc *CompanyUseCases) GetMine(ctx context.Context, userID vo.UserID, compan
 	return res.Items[0], nil
 }
 
+// Letterhead คืนข้อมูลหัวเอกสาร (ชื่อนิติบุคคล เลขผู้เสียภาษี ที่อยู่ ติดต่อ) ให้สมาชิกทุกคน — ใช้พิมพ์ใบเสนอราคา / ใบกำกับภาษี
+// ไม่ต้องมีสิทธิ์ organization.company:read (ไม่มีค่าตั้งบัญชี / ทศนิยม); ไม่ใช่สมาชิก = ErrCompanyNotFound
+func (uc *CompanyUseCases) Letterhead(ctx context.Context, userID vo.UserID, companyID vo.CompanyID) (dto.Company, error) {
+	ids, err := uc.members.CompanyIDsOf(ctx, userID)
+	if err != nil {
+		return dto.Company{}, err
+	}
+	if !slices.Contains(ids, companyID) {
+		return dto.Company{}, domain.ErrCompanyNotFound
+	}
+	c, err := uc.companies.FindByID(ctx, companyID)
+	if err != nil {
+		return dto.Company{}, err
+	}
+	return companyDTO(c), nil
+}
+
 func companyDTO(c *entities.Company) dto.Company {
 	d := c.Data()
 	return dto.Company{

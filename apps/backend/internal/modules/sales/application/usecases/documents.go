@@ -1,7 +1,9 @@
 package usecases
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -266,8 +268,9 @@ func (uc *DeliveryUseCases) Cancel(ctx context.Context, in dto.ByID[vo.DeliveryI
 
 type InvoiceUseCases struct {
 	base
-	invoices repositories.InvoiceRepository
-	orders   repositories.OrderRepository
+	invoices  repositories.InvoiceRepository
+	orders    repositories.OrderRepository
+	customers repositories.CustomerRepository
 }
 
 func (uc *InvoiceUseCases) Get(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
@@ -360,8 +363,12 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 		if err := o.Invoice(ships, s.QuantityDecimals, in.Data.WithDelivery, uc.now()); err != nil {
 			return err
 		}
+		billTo, err := uc.billTo(ctx, in.CompanyID, st.Data.CustomerID, st.Data.CustomerBranchNo)
+		if err != nil {
+			return err
+		}
 		inv, err := entities.NewInvoice(entities.InvoiceState{
-			CompanyID: in.CompanyID, OrderID: o.ID(), CustomerID: st.Data.CustomerID, Date: in.Data.Date,
+			CompanyID: in.CompanyID, OrderID: o.ID(), CustomerID: st.Data.CustomerID, BillTo: billTo, Date: in.Data.Date,
 			Reference: in.Data.Reference, Description: in.Data.Description, Vat: st.Terms.Vat,
 			WithDelivery: in.Data.WithDelivery, Stock: stock, Lines: lines,
 			Posting: entities.Posting{DocumentNo: no, FiscalYear: period.FiscalYear, PeriodID: period.ID, By: in.UserID, At: uc.now()},
@@ -392,6 +399,20 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 		return dto.Invoice{}, err
 	}
 	return uc.get(ctx, in.CompanyID, id)
+}
+
+// billTo: ผู้ซื้อ ณ วันออกใบ — ชื่อ / เลขผู้เสียภาษีของลูกค้า + เลขสาขา / ที่อยู่ของสาขาตามใบสั่งขาย
+func (uc *InvoiceUseCases) billTo(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID, branchNo string) (entities.BillTo, error) {
+	c, err := uc.customers.FindByID(ctx, companyID, customerID)
+	if err != nil {
+		return entities.BillTo{}, err
+	}
+	b, err := c.Branch(branchNo)
+	if err != nil {
+		return entities.BillTo{}, err
+	}
+	d := c.Data()
+	return entities.BillTo{Name: d.Name, TaxID: d.TaxID, BranchNo: b.BranchNo, Address: b.Address}, nil
 }
 
 // Cancel: ใบที่รับเงินแล้วต้องยกเลิกใบเสร็จก่อน; รวมใบ = คืนสต็อกด้วย; กลับรายการ ณ วันที่เดิม
@@ -434,165 +455,6 @@ func (uc *InvoiceUseCases) Cancel(ctx context.Context, in dto.ByID[vo.InvoiceID]
 	return uc.get(ctx, in.CompanyID, in.ID)
 }
 
-// ---------- ใบเสร็จรับเงิน ----------
-
-type ReceiptUseCases struct {
-	base
-	receipts  repositories.ReceiptRepository
-	invoices  repositories.InvoiceRepository
-	customers repositories.CustomerRepository
-	cashbank  ports.CashBank
-}
-
-func (uc *ReceiptUseCases) Get(ctx context.Context, in dto.ByID[vo.ReceiptID]) (dto.Receipt, error) {
-	return read(ctx, uc.base, in.Actor, vo.PermReceiptRead, func() (dto.Receipt, error) { return uc.receipts.Get(ctx, in.CompanyID, in.ID) })
-}
-
-func (uc *ReceiptUseCases) List(ctx context.Context, in dto.List[dto.DocumentFilter]) (listing.Result[dto.ReceiptSummary], error) {
-	return read(ctx, uc.base, in.Actor, vo.PermReceiptRead, func() (listing.Result[dto.ReceiptSummary], error) {
-		return uc.receipts.List(ctx, in.CompanyID, in.Filter)
-	})
-}
-
-// Create รับชำระ: lock ใบแจ้งหนี้ (เรียง id) -> ยอดค้าง -> ทะเบียนเงิน (cashbank) -> งวดเปิด -> เลขที่
-// -> ลงบัญชีรายการเดียว: Dr เงินสด / ธนาคาร + ภาษีถูกหัก ณ ที่จ่าย / Cr ลูกหนี้
-func (uc *ReceiptUseCases) Create(ctx context.Context, in dto.Create[dto.ReceiptInput]) (dto.Receipt, error) {
-	var id vo.ReceiptID
-	err := uc.writeWith(ctx, in.Actor, vo.PermReceiptPost, func(ctx context.Context, s ports.CompanySettings) error {
-		settings, err := uc.settings.Get(ctx, in.CompanyID)
-		if err != nil {
-			return err
-		}
-		if err := settings.Require("journal_id", "ar_account_id"); err != nil {
-			return err
-		}
-		customer, err := uc.customers.FindByID(ctx, in.CompanyID, in.Data.CustomerID)
-		if err != nil {
-			return err
-		}
-		ids := make([]vo.InvoiceID, len(in.Data.Lines))
-		for i, l := range in.Data.Lines {
-			ids[i] = l.InvoiceID
-		}
-		invoices, err := uc.invoices.LockForReceipt(ctx, in.CompanyID, ids)
-		if err != nil {
-			return err
-		}
-		byID := make(map[vo.InvoiceID]*entities.Invoice, len(invoices))
-		for _, inv := range invoices {
-			byID[inv.ID()] = inv
-		}
-		lines := make([]entities.ReceiptLine, len(in.Data.Lines))
-		for i, l := range in.Data.Lines {
-			inv, ok := byID[l.InvoiceID]
-			if !ok {
-				return fmt.Errorf("%w: line %d", domain.ErrInvoiceNotFound, i+1)
-			}
-			if err := inv.Receive(customer.ID(), l.Amount); err != nil {
-				return err
-			}
-			lines[i] = entities.ReceiptLine{InvoiceID: l.InvoiceID, Amount: l.Amount, Wht: l.Wht}
-		}
-		cashIDs := make([]vo.CashAccountID, len(in.Data.Methods))
-		for i, m := range in.Data.Methods {
-			cashIDs[i] = m.CashAccountID
-		}
-		cash, err := uc.cashbank.CashAccounts(ctx, in.CompanyID, cashIDs)
-		if err != nil {
-			return err
-		}
-		methods := make([]entities.ReceiptMethod, len(in.Data.Methods))
-		for i, m := range in.Data.Methods {
-			c, ok := cash[m.CashAccountID]
-			switch {
-			case !ok:
-				return fmt.Errorf("%w: method %d", domain.ErrCashAccountNotFound, i+1)
-			case !c.Active:
-				return fmt.Errorf("%w: %s", domain.ErrCashAccountInactive, c.Code)
-			}
-			methods[i] = entities.ReceiptMethod{CashAccountID: m.CashAccountID, GLAccountID: c.GLAccountID, Amount: m.Amount, Reference: m.Reference}
-		}
-		period, err := uc.openPeriod(ctx, in.CompanyID, in.Data.Date)
-		if err != nil {
-			return err
-		}
-		no, err := uc.number(ctx, in.CompanyID, vo.DocReceipt, in.Data.Date, period.FiscalYear)
-		if err != nil {
-			return err
-		}
-		r, err := entities.NewReceipt(entities.ReceiptState{
-			CompanyID: in.CompanyID, CustomerID: customer.ID(), Date: in.Data.Date, Description: in.Data.Description,
-			Lines: lines, Methods: methods,
-			Posting: entities.Posting{DocumentNo: no, FiscalYear: period.FiscalYear, PeriodID: period.ID, By: in.UserID, At: uc.now()},
-		}, s.AmountDecimals)
-		if err != nil {
-			return err
-		}
-		if !r.State().Totals.Wht.IsZero() {
-			if err := settings.Require("wht_account_id"); err != nil {
-				return err
-			}
-		}
-		entryID, entryNo, err := uc.post(ctx, in.Actor, *settings.JournalID, in.Data.Date, "Customer receipt "+no+" / "+customer.Data().Code, no,
-			r.Journal(*settings.ARAccountID, accountOr(settings.WhtAccountID)))
-		if err != nil {
-			return err
-		}
-		if entryID != nil {
-			r.SetEntry(*entryID, entryNo)
-		}
-		id = r.ID()
-		if err := uc.receipts.Create(ctx, r); err != nil {
-			return err
-		}
-		return uc.invoices.SaveReceived(ctx, invoices)
-	})
-	if err != nil {
-		return dto.Receipt{}, err
-	}
-	return uc.receipts.Get(ctx, in.CompanyID, id)
-}
-
-// Cancel: กลับรายการ ณ วันที่เดิม และคืนยอดค้างให้ใบแจ้งหนี้
-func (uc *ReceiptUseCases) Cancel(ctx context.Context, in dto.ByID[vo.ReceiptID]) (dto.Receipt, error) {
-	err := uc.write(ctx, in.Actor, vo.PermReceiptPost, func(ctx context.Context) error {
-		r, err := uc.receipts.FindForUpdate(ctx, in.CompanyID, in.ID)
-		if err != nil {
-			return err
-		}
-		if err := r.Cancel(in.UserID, uc.now()); err != nil {
-			return err
-		}
-		s := r.State()
-		if _, err := uc.openPeriod(ctx, in.CompanyID, s.Date); err != nil {
-			return err
-		}
-		ids := make([]vo.InvoiceID, len(s.Lines))
-		amounts := map[vo.InvoiceID]vo.Money{}
-		for i, l := range s.Lines {
-			ids[i], amounts[l.InvoiceID] = l.InvoiceID, l.Amount
-		}
-		invoices, err := uc.invoices.LockForReceipt(ctx, in.CompanyID, ids)
-		if err != nil {
-			return err
-		}
-		for _, inv := range invoices {
-			inv.Unreceive(amounts[inv.ID()])
-		}
-		if err := uc.unpost(ctx, in.Actor, s.Posting, s.Date, "customer receipt"); err != nil {
-			return err
-		}
-		if err := uc.receipts.UpdateStatus(ctx, r); err != nil {
-			return err
-		}
-		return uc.invoices.SaveReceived(ctx, invoices)
-	})
-	if err != nil {
-		return dto.Receipt{}, err
-	}
-	return uc.receipts.Get(ctx, in.CompanyID, in.ID)
-}
-
 // ---------- รายงาน ----------
 
 type ReportUseCases struct {
@@ -614,6 +476,22 @@ func (uc *ReportUseCases) Outstanding(ctx context.Context, in dto.List[dto.Outst
 	})
 }
 
+// Dashboard: ภาพรวมแอปขาย — สิทธิ์เดียวกับรายงาน (sales.report:read), อ่านอย่างเดียว ไม่ใช้ transaction
+func (uc *ReportUseCases) Dashboard(ctx context.Context, in dto.List[dashperiod.Period]) (dto.Dashboard, error) {
+	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Dashboard, error) {
+		// กราฟรายเดือน = ปีบัญชีที่ครอบคลุม end_date (เดือนเริ่มงวด -> สิ้นงวด) เทียบปีก่อนหน้า; ไม่มีปีบัญชี = 12 เดือนล่าสุด
+		p := in.Filter
+		fy, err := uc.org.PeriodAt(ctx, in.CompanyID, p.End)
+		switch {
+		case err == nil:
+			p = p.InFiscalYear(fy.FiscalYear, fy.YearStart)
+		case !errors.Is(err, domain.ErrNoFiscalPeriod):
+			return dto.Dashboard{}, err
+		}
+		return uc.reports.Dashboard(ctx, in.CompanyID, p)
+	})
+}
+
 func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter]) (dto.Aging, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Aging, error) {
 		rows, totals, err := uc.reports.Aging(ctx, in.CompanyID, in.Filter)
@@ -624,13 +502,6 @@ func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter
 func (uc *ReportUseCases) OutputVat(ctx context.Context, in dto.List[dto.TaxFilter]) (dto.TaxReport, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.TaxReport, error) {
 		rows, t, err := uc.reports.OutputVat(ctx, in.CompanyID, in.Filter)
-		return dto.TaxReport{Start: in.Filter.Start, End: in.Filter.End, Rows: rows, TotalBase: t.Base, TotalTax: t.Tax}, err
-	})
-}
-
-func (uc *ReportUseCases) WithholdingReceived(ctx context.Context, in dto.List[dto.TaxFilter]) (dto.TaxReport, error) {
-	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.TaxReport, error) {
-		rows, t, err := uc.reports.WithholdingReceived(ctx, in.CompanyID, in.Filter)
 		return dto.TaxReport{Start: in.Filter.Start, End: in.Filter.End, Rows: rows, TotalBase: t.Base, TotalTax: t.Tax}, err
 	})
 }

@@ -84,6 +84,23 @@ type CompanySummary struct {
 	Status string `json:"status"`
 }
 
+// Letterhead คือข้อมูลหัวเอกสารที่พิมพ์บนใบเสนอราคา / ใบกำกับภาษี
+type Letterhead struct {
+	Name        string  `json:"name"`
+	LegalNameTH string  `json:"legal_name_th"`
+	LegalNameEN string  `json:"legal_name_en"`
+	TaxID       string  `json:"tax_id"`
+	Address     Address `json:"address"`
+	Phone       string  `json:"phone"`
+	Email       string  `json:"email"`
+	Website     string  `json:"website"`
+}
+
+func FromLetterhead(c dto.Company) Letterhead {
+	return Letterhead{Name: c.Name, LegalNameTH: c.LegalNameTH, LegalNameEN: c.LegalNameEN, TaxID: c.TaxID, Address: address(c.Address),
+		Phone: c.Phone, Email: c.Email, Website: c.Website}
+}
+
 func FromCompanySummary(c dto.CompanySummary) CompanySummary {
 	return CompanySummary{ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, Status: c.Status}
 }

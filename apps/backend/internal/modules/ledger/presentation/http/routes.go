@@ -39,6 +39,9 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("PATCH "+base+"/journal-entries/{entryID}", h.UpdateEntryStatus)
 	handle("DELETE "+base+"/journal-entries/{entryID}", h.DeleteEntry)
 	handle("POST "+base+"/journal-entries/{entryID}/reversals", h.ReverseEntry)
+
+	// ภาพรวมแอปบัญชี (ต้องมี ledger.report:read)
+	handle("GET "+base+"/dashboards/accounting", h.AccountingDashboard)
 }
 
 // RegisterReports ลงทะเบียนรายงานของ ledger กับ GET /reports?book= (registry ถูก mount พร้อม Authenticate แล้ว)

@@ -25,7 +25,7 @@ describe('covers (กติกาเดียวกับ backend)', () => {
 describe('visibleApps', () => {
   it('owner (*) เห็นทุกแอปและทุกเมนู', () => {
     const apps = visibleApps(['*'])
-    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'accounting', 'cashbank', 'organization', 'users'])
+    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'accounting', 'finance', 'organization', 'users'])
     expect(apps.find((a) => a.key === 'organization')!.menu[0]!.path).toBe('branches')
   })
 
@@ -33,7 +33,7 @@ describe('visibleApps', () => {
     const apps = visibleApps(['sales.customer:read', 'sales.report:read'])
     expect(apps).toHaveLength(1)
     expect(apps[0]!.key).toBe('sales')
-    expect(apps[0]!.menu.map((m) => m.path)).toEqual(['customers', 'reports'])
+    expect(apps[0]!.menu.map((m) => m.path)).toEqual(['dashboard', 'customers', 'reports']) // ภาพรวมใช้สิทธิ์รายงาน
   })
 
   it('สิทธิ์ manage อย่างเดียวไม่ทำให้เห็นเมนู (ต้องมี read)', () => {

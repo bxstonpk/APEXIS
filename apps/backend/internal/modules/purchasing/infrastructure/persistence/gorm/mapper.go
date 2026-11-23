@@ -6,6 +6,7 @@
 package gormpersistence
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,7 +54,6 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 		CompanyID: uuid.UUID(companyID), VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		GRIRAccountID: OptUUID(s.GRIRAccountID), APAccountID: OptUUID(s.APAccountID),
 		InputVatAccountID: OptUUID(s.InputVatAccountID), PriceVarianceAccountID: OptUUID(s.PriceVarianceAccountID),
-		WhtPnd3AccountID: OptUUID(s.WhtPnd3AccountID), WhtPnd53AccountID: OptUUID(s.WhtPnd53AccountID),
 	}
 }
 
@@ -62,7 +62,6 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		GRIRAccountID: OptID[vo.AccountID](m.GRIRAccountID), APAccountID: OptID[vo.AccountID](m.APAccountID),
 		InputVatAccountID: OptID[vo.AccountID](m.InputVatAccountID), PriceVarianceAccountID: OptID[vo.AccountID](m.PriceVarianceAccountID),
-		WhtPnd3AccountID: OptID[vo.AccountID](m.WhtPnd3AccountID), WhtPnd53AccountID: OptID[vo.AccountID](m.WhtPnd53AccountID),
 	}
 }
 
@@ -70,15 +69,36 @@ func SupplierToModel(s *entities.Supplier) models.SupplierModel {
 	d := s.Data()
 	return models.SupplierModel{
 		ID: uuid.UUID(s.ID()), CompanyID: uuid.UUID(s.CompanyID()), Code: d.Code, Name: d.Name, TaxID: d.TaxID,
-		BranchNo: d.BranchNo, Address: d.Address, PaymentTermDays: d.PaymentTermDays, VatRegistered: d.VatRegistered, TaxType: string(d.TaxType),
+		BranchNo: d.BranchNo, Address: d.Address, AddressDetail: addressToModel(d.AddressDetail), PaymentTermDays: d.PaymentTermDays, VatRegistered: d.VatRegistered, TaxType: string(d.TaxType),
 		Status: string(d.Status),
 	}
 }
 
-func SupplierToEntity(m models.SupplierModel) *entities.Supplier {
+// SupplierBranchesToModel: สาขาเพิ่มเติมตามลำดับที่บันทึก
+func SupplierBranchesToModel(sp *entities.Supplier) []models.SupplierBranchModel {
+	bs := sp.Data().Branches
+	out := make([]models.SupplierBranchModel, len(bs))
+	for i, b := range bs {
+		out[i] = models.SupplierBranchModel{SupplierID: uuid.UUID(sp.ID()), BranchNo: b.BranchNo, Name: b.Name, Address: b.Address,
+			AddressDetail: addressToModel(b.AddressDetail), Position: i + 1}
+	}
+	return out
+}
+
+func SupplierBranchesToDomain(ms []models.SupplierBranchModel) []entities.SupplierBranch {
+	out := make([]entities.SupplierBranch, len(ms))
+	for i, m := range ms {
+		out[i] = entities.SupplierBranch{BranchNo: m.BranchNo, Name: m.Name, Address: m.Address, AddressDetail: addressToDomain(m.AddressDetail)}
+	}
+	return out
+}
+
+// SupplierToEntity: branches = สาขาเพิ่มเติมที่โหลดแยก (nil = ไม่มี)
+func SupplierToEntity(m models.SupplierModel, branches ...models.SupplierBranchModel) *entities.Supplier {
 	return entities.RehydrateSupplier(vo.SupplierID(m.ID), vo.CompanyID(m.CompanyID), entities.SupplierData{
-		Code: m.Code, Name: m.Name, TaxID: m.TaxID, BranchNo: m.BranchNo, Address: m.Address,
+		Code: m.Code, Name: m.Name, TaxID: m.TaxID, BranchNo: m.BranchNo, Address: m.Address, AddressDetail: addressToDomain(m.AddressDetail),
 		PaymentTermDays: m.PaymentTermDays, VatRegistered: m.VatRegistered, TaxType: vo.TaxType(m.TaxType), Status: vo.Status(m.Status),
+		Branches: SupplierBranchesToDomain(branches),
 	})
 }
 
@@ -87,7 +107,7 @@ func SupplierToEntity(m models.SupplierModel) *entities.Supplier {
 func OrderToModel(o *entities.Order) models.OrderModel {
 	s := o.State()
 	m := models.OrderModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), SupplierID: uuid.UUID(s.Data.SupplierID),
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), SupplierID: uuid.UUID(s.Data.SupplierID), SupplierBranchNo: s.Data.SupplierBranchNo,
 		OrderDate: s.Data.Date, DeliveryDate: s.Data.DeliveryDate, Reference: s.Data.Reference, Description: s.Data.Description,
 		VatRegistered: s.Terms.Vat.Registered, VatRate: s.Terms.Vat.Rate, PriceIncludesVat: s.Terms.Vat.Inclusive,
 		PaymentTermDays: s.Terms.PaymentTermDays, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
@@ -121,7 +141,7 @@ func OrderToEntity(m models.OrderModel) *entities.Order {
 	s := entities.OrderState{
 		ID: vo.OrderID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Status: vo.OrderStatus(m.Status), CreatedBy: vo.UserID(m.CreatedBy),
 		Data: entities.OrderData{
-			SupplierID: vo.SupplierID(m.SupplierID), Date: DateUTC(m.OrderDate), DeliveryDate: optDate(m.DeliveryDate),
+			SupplierID: vo.SupplierID(m.SupplierID), SupplierBranchNo: m.SupplierBranchNo, Date: DateUTC(m.OrderDate), DeliveryDate: optDate(m.DeliveryDate),
 			Reference: m.Reference, Description: m.Description, PriceIncludesVat: m.PriceIncludesVat,
 			Lines: make([]entities.OrderLineData, len(m.Lines)),
 		},
@@ -216,6 +236,7 @@ func InvoiceToModel(inv *entities.Invoice) models.InvoiceModel {
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
 		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), OrderID: uuid.UUID(s.OrderID), SupplierID: uuid.UUID(s.SupplierID),
 		SupplierInvoiceNo: s.SupplierInvoiceNo, InvoiceDate: s.InvoiceDate, PostingDate: s.Date, DueDate: s.DueDate,
+		BillFromName: s.BillFrom.Name, BillFromTaxID: s.BillFrom.TaxID, BillFromBranchNo: s.BillFrom.BranchNo, BillFromAddress: s.BillFrom.Address,
 		Description: s.Description, VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive,
 		TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross, PaidAmount: s.Paid,
 		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
@@ -238,8 +259,9 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 		ID: vo.InvoiceID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), SupplierID: vo.SupplierID(m.SupplierID),
 		SupplierInvoiceNo: m.SupplierInvoiceNo, InvoiceDate: DateUTC(m.InvoiceDate), Date: DateUTC(m.PostingDate),
 		DueDate: DateUTC(m.DueDate), Description: m.Description,
-		Vat:    services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
-		Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross}, Paid: m.PaidAmount,
+		BillFrom: entities.BillFrom{Name: m.BillFromName, TaxID: m.BillFromTaxID, BranchNo: m.BillFromBranchNo, Address: m.BillFromAddress},
+		Vat:      services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+		Totals:   services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross}, Paid: m.PaidAmount,
 		Status: vo.DocStatus(m.Status), Lines: make([]entities.InvoiceLine, len(m.Lines)),
 		Posting: entities.Posting{
 			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
@@ -259,65 +281,6 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 
 // ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่าย ----------
 
-func WhtTypeToModel(w *entities.WhtType) models.WhtTypeModel {
-	d := w.Data()
-	return models.WhtTypeModel{ID: uuid.UUID(w.ID()), CompanyID: uuid.UUID(w.CompanyID()), Code: d.Code, Name: d.Name, Rate: d.Rate, Status: string(d.Status)}
-}
+func addressToModel(a thaiaddress.Address) models.AddressColumns { return models.AddressColumns(a) }
 
-func WhtTypeToEntity(m models.WhtTypeModel) *entities.WhtType {
-	return entities.RehydrateWhtType(vo.WhtTypeID(m.ID), vo.CompanyID(m.CompanyID), entities.WhtTypeData{
-		Code: m.Code, Name: m.Name, Rate: m.Rate, Status: vo.Status(m.Status),
-	})
-}
-
-func PaymentToModel(p *entities.Payment) models.PaymentModel {
-	s := p.State()
-	m := models.PaymentModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
-		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), SupplierID: uuid.UUID(s.SupplierID), TaxType: string(s.TaxType),
-		PaymentDate: s.Date, Description: s.Description, TotalAmount: s.Totals.Amount, TotalWht: s.Totals.Wht, TotalPaid: s.Totals.Paid,
-		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
-		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
-		Lines: make([]models.PaymentLineModel, len(s.Lines)), Methods: make([]models.PaymentMethodModel, len(s.Methods)),
-	}
-	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
-	for i, l := range s.Lines {
-		m.Lines[i] = models.PaymentLineModel{
-			PaymentID: m.ID, LineNo: i + 1, InvoiceID: uuid.UUID(l.InvoiceID), Amount: l.Amount, WhtTypeID: OptUUID(l.WhtTypeID),
-			WhtRate: l.WhtRate, WhtBase: l.WhtBase, Wht: l.Wht,
-		}
-	}
-	for i, x := range s.Methods {
-		m.Methods[i] = models.PaymentMethodModel{
-			PaymentID: m.ID, LineNo: i + 1, CashAccountID: uuid.UUID(x.CashAccountID), GLAccountID: uuid.UUID(x.GLAccountID),
-			Amount: x.Amount, Reference: x.Reference,
-		}
-	}
-	return m
-}
-
-func PaymentToEntity(m models.PaymentModel) *entities.Payment {
-	s := entities.PaymentState{
-		ID: vo.PaymentID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), SupplierID: vo.SupplierID(m.SupplierID), TaxType: vo.TaxType(m.TaxType),
-		Date: DateUTC(m.PaymentDate), Description: m.Description, Status: vo.DocStatus(m.Status),
-		Totals: entities.PaymentTotals{Amount: m.TotalAmount, Wht: m.TotalWht, Paid: m.TotalPaid},
-		Lines:  make([]entities.PaymentLine, len(m.Lines)), Methods: make([]entities.PaymentMethod, len(m.Methods)),
-		Posting: entities.Posting{
-			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
-			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
-		},
-		Cancellation: toCancellation(m.CancelledBy, m.CancelledAt),
-	}
-	for i, l := range m.Lines {
-		s.Lines[i] = entities.PaymentLine{
-			InvoiceID: vo.InvoiceID(l.InvoiceID), Amount: l.Amount, WhtTypeID: OptID[vo.WhtTypeID](l.WhtTypeID),
-			WhtRate: l.WhtRate, WhtBase: l.WhtBase, Wht: l.Wht,
-		}
-	}
-	for i, x := range m.Methods {
-		s.Methods[i] = entities.PaymentMethod{
-			CashAccountID: vo.CashAccountID(x.CashAccountID), GLAccountID: vo.AccountID(x.GLAccountID), Amount: x.Amount, Reference: x.Reference,
-		}
-	}
-	return entities.RehydratePayment(s)
-}
+func addressToDomain(m models.AddressColumns) thaiaddress.Address { return thaiaddress.Address(m) }

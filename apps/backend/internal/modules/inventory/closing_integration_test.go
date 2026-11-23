@@ -39,6 +39,7 @@ func TestPeriodicClosing(t *testing.T) {
 	if s["cogs_account_id"] != cogs || s["journal_id"] != jv || len(s["accounting_systems"].([]any)) != 0 {
 		t.Fatalf("settings = %v", s)
 	}
+	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "perpetual"}), 200, "perpetual 2026 (default = periodic)")
 	a.expect(a.do("POST", base+"/inventory-closings", owner, obj{"date": "2026-01-31"}), 422, "closing in perpetual year")
 	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "fifo"}), 400, "invalid system")
 	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "periodic"}), 200, "periodic from 2026")

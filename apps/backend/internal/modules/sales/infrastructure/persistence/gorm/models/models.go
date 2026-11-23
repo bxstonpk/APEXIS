@@ -23,7 +23,6 @@ type SettingsModel struct {
 	OutputVatAccountID *uuid.UUID      `gorm:"type:uuid"`
 	RevenueAccountID   *uuid.UUID      `gorm:"type:uuid"`
 	CogsAccountID      *uuid.UUID      `gorm:"type:uuid"`
-	WhtAccountID       *uuid.UUID      `gorm:"type:uuid"`
 	UpdatedAt          time.Time       `gorm:"not null"`
 }
 
@@ -37,6 +36,7 @@ type CustomerModel struct {
 	TaxID           string           `gorm:"size:13;not null;default:''"`
 	BranchNo        string           `gorm:"size:5;not null;default:'00000'"`
 	Address         string           `gorm:"size:500;not null;default:''"`
+	AddressDetail   AddressColumns   `gorm:"embedded;embeddedPrefix:addr_"`
 	PaymentTermDays int              `gorm:"not null;default:0;check:chk_sal_customers_term,payment_term_days BETWEEN 0 AND 365"`
 	TaxType         string           `gorm:"size:20;not null;check:chk_sal_customers_tax_type,tax_type IN ('individual','juristic')"`
 	CreditLimit     *decimal.Decimal `gorm:"type:numeric(24,6);check:chk_sal_customers_credit,credit_limit IS NULL OR credit_limit >= 0"`
@@ -47,6 +47,19 @@ type CustomerModel struct {
 }
 
 func (CustomerModel) TableName() string { return "sales_customers" }
+
+// CustomerBranchModel คือสาขาเพิ่มเติมของลูกค้า (สาขาหลักอยู่ในตารางลูกค้า) — แทนที่ทั้งชุดตอนบันทึกลูกค้า
+type CustomerBranchModel struct {
+	CustomerID    uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	BranchNo      string         `gorm:"size:5;primaryKey"`
+	Customer      *CustomerModel `gorm:"foreignKey:CustomerID;constraint:OnDelete:CASCADE"`
+	Name          string         `gorm:"size:200;not null;default:''"`
+	Address       string         `gorm:"size:500;not null;default:''"`
+	AddressDetail AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
+	Position      int            `gorm:"not null"`
+}
+
+func (CustomerBranchModel) TableName() string { return "sales_customer_branches" }
 
 // LineModel คือบรรทัดราคาของใบเสนอราคา / ใบสั่งขาย (ตารางแยก — ฝังคอลัมน์ร่วม)
 type LineModel struct {
@@ -63,6 +76,7 @@ type LineModel struct {
 // SalesDocModel คือคอลัมน์ร่วมของหัวใบเสนอราคา / ใบสั่งขาย
 type SalesDocModel struct {
 	CustomerID       uuid.UUID       `gorm:"type:uuid;not null;index"`
+	CustomerBranchNo string          `gorm:"size:5;not null;default:''"` // ว่าง = สาขาหลักของลูกค้า
 	Reference        string          `gorm:"size:100;not null;default:''"`
 	Description      string          `gorm:"size:500;not null;default:''"`
 	VatRegistered    bool            `gorm:"not null"`
@@ -193,6 +207,10 @@ type InvoiceModel struct {
 	Order      *OrderModel `gorm:"foreignKey:OrderID;constraint:OnDelete:RESTRICT"`
 	PostedModel
 	StockModel
+	BillToName       string             `gorm:"size:200;not null;default:''"`
+	BillToTaxID      string             `gorm:"size:13;not null;default:''"`
+	BillToBranchNo   string             `gorm:"size:5;not null;default:''"`
+	BillToAddress    string             `gorm:"size:500;not null;default:''"`
 	WithDelivery     bool               `gorm:"not null"`
 	DueDate          time.Time          `gorm:"type:date;not null"`
 	Reference        string             `gorm:"size:100;not null;default:''"`
@@ -225,42 +243,22 @@ type InvoiceLineModel struct {
 
 func (InvoiceLineModel) TableName() string { return "sales_invoice_lines" }
 
-type ReceiptModel struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
-	CompanyID  uuid.UUID `gorm:"type:uuid;not null;index:idx_sal_receipts_date,priority:1;uniqueIndex:uq_sal_receipts_no,priority:1"`
-	DocumentNo string    `gorm:"size:30;not null;uniqueIndex:uq_sal_receipts_no,priority:2"`
-	DocDate    time.Time `gorm:"type:date;not null;index:idx_sal_receipts_date,priority:2"`
-	PostedModel
-	TotalAmount   decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_sal_receipts_amount,total_amount > 0"`
-	TotalWht      decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_sal_receipts_wht,total_wht >= 0 AND total_wht <= total_amount"`
-	TotalReceived decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_sal_receipts_received,total_received = total_amount - total_wht"`
-	Lines         []ReceiptLineModel   `gorm:"foreignKey:ReceiptID;constraint:OnDelete:CASCADE"`
-	Methods       []ReceiptMethodModel `gorm:"foreignKey:ReceiptID;constraint:OnDelete:CASCADE"`
+// SettlementModel: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance
+// (document_id ไม่มี FK เพราะเป็นตารางของ module อื่น) — อายุลูกหนี้รวมยอดตาม settled_on
+type SettlementModel struct {
+	ID         uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	CompanyID  uuid.UUID       `gorm:"type:uuid;not null;index:idx_sal_settlements_doc,priority:1"`
+	DocumentID uuid.UUID       `gorm:"type:uuid;not null;index:idx_sal_settlements_doc,priority:2"`
+	DocumentNo string          `gorm:"size:30;not null"`
+	SettledOn  time.Time       `gorm:"type:date;not null"`
+	InvoiceID  uuid.UUID       `gorm:"type:uuid;not null;index"`
+	Invoice    *InvoiceModel   `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
+	Amount     decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_sal_settlements_amount,amount > 0"`
+	Status     string          `gorm:"size:20;not null;check:chk_sal_settlements_status,status IN ('posted','cancelled')"`
+	CreatedAt  time.Time       `gorm:"not null"`
 }
 
-func (ReceiptModel) TableName() string { return "sales_receipts" }
-
-type ReceiptLineModel struct {
-	ReceiptID uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	LineNo    int             `gorm:"primaryKey"`
-	InvoiceID uuid.UUID       `gorm:"type:uuid;not null;index"`
-	Invoice   *InvoiceModel   `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
-	Amount    decimal.Decimal `gorm:"type:numeric(24,6);not null;check:amount > 0"`
-	Wht       decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:wht >= 0 AND wht <= amount"`
-}
-
-func (ReceiptLineModel) TableName() string { return "sales_receipt_lines" }
-
-type ReceiptMethodModel struct {
-	ReceiptID     uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	LineNo        int             `gorm:"primaryKey"`
-	CashAccountID uuid.UUID       `gorm:"type:uuid;not null"`
-	GLAccountID   uuid.UUID       `gorm:"column:gl_account_id;type:uuid;not null"`
-	Amount        decimal.Decimal `gorm:"type:numeric(24,6);not null;check:amount > 0"`
-	Reference     string          `gorm:"size:50;not null;default:''"`
-}
-
-func (ReceiptMethodModel) TableName() string { return "sales_receipt_methods" }
+func (SettlementModel) TableName() string { return "sales_invoice_settlements" }
 
 type SequenceModel struct {
 	CompanyID uuid.UUID `gorm:"type:uuid;primaryKey"`
@@ -272,9 +270,38 @@ type SequenceModel struct {
 func (SequenceModel) TableName() string { return "sales_number_sequences" }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&SettingsModel{}, &CustomerModel{}, &QuotationModel{}, &QuotationLineModel{}, &OrderModel{}, &OrderLineModel{},
+	if err := db.AutoMigrate(
+		&SettingsModel{}, &CustomerModel{}, &CustomerBranchModel{}, &QuotationModel{}, &QuotationLineModel{}, &OrderModel{}, &OrderLineModel{},
 		&DeliveryModel{}, &DeliveryLineModel{}, &InvoiceModel{}, &InvoiceLineModel{},
-		&ReceiptModel{}, &ReceiptLineModel{}, &ReceiptMethodModel{}, &SequenceModel{},
-	)
+		&SettlementModel{}, &SequenceModel{},
+	); err != nil {
+		return err
+	}
+	// ใบเสร็จรับเงินย้ายไป finance (ตัดสินใจ 2026-11-23: ข้อมูลทดสอบเดิมไม่ย้าย) + ค่าตั้งภาษีถูกหักย้ายไปค่าตั้งการเงิน
+	for _, t := range []string{"sales_receipt_methods", "sales_receipt_lines", "sales_receipts"} {
+		if err := db.Migrator().DropTable(t); err != nil {
+			return err
+		}
+	}
+	if db.Migrator().HasColumn(&SettingsModel{}, "wht_account_id") {
+		return db.Migrator().DropColumn(&SettingsModel{}, "wht_account_id")
+	}
+	return nil
+}
+
+// AddressColumns คือที่อยู่ตามแบบสรรพากร (คอลัมน์ addr_*) — คอลัมน์ address เก็บข้อความที่ประกอบแล้ว (พิมพ์ / snapshot)
+type AddressColumns struct {
+	Building    string `gorm:"size:100;not null;default:''"`
+	RoomNo      string `gorm:"size:100;not null;default:''"`
+	FloorNo     string `gorm:"size:100;not null;default:''"`
+	Village     string `gorm:"size:100;not null;default:''"`
+	HouseNo     string `gorm:"size:100;not null;default:''"`
+	Moo         string `gorm:"size:100;not null;default:''"`
+	Soi         string `gorm:"size:100;not null;default:''"`
+	Yaek        string `gorm:"size:100;not null;default:''"`
+	Street      string `gorm:"size:100;not null;default:''"`
+	SubDistrict string `gorm:"size:100;not null;default:''"`
+	District    string `gorm:"size:100;not null;default:''"`
+	Province    string `gorm:"size:100;not null;default:''"`
+	PostalCode  string `gorm:"size:5;not null;default:''"`
 }

@@ -46,7 +46,7 @@ export function ChangePasswordForm({ redirectTo, email }: { redirectTo: string; 
   }
 
   return (
-    <form noValidate onSubmit={submit} className="flex flex-col gap-5">
+    <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-5">
       {formError && <Alert tone="error">{formError}</Alert>}
       {/* ชื่อผู้ใช้ (ซ่อน) ให้ password manager รู้ว่ารหัสใหม่เป็นของบัญชีไหน */}
       <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />

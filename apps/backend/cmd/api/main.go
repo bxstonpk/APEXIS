@@ -11,13 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"apexis/backend/internal/modules/cashbank"
+	"apexis/backend/internal/modules/finance"
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
+	"apexis/backend/internal/modules/taxregistry"
 	"apexis/backend/internal/platform/config"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/permissions"
@@ -60,13 +61,31 @@ func run(logger *slog.Logger) error {
 	if err := inventory.Migrate(db); err != nil {
 		return err
 	}
-	if err := cashbank.Migrate(db); err != nil {
+	if err := finance.Migrate(db); err != nil {
 		return err
 	}
-	if err := purchasing.Migrate(db); err != nil {
+	// ผู้ขายรหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบจ่ายเงินของ finance ต้องชี้รหัสที่เก็บไว้
+	supplierMerges, err := purchasing.Migrate(db)
+	if err != nil {
 		return err
 	}
-	if err := sales.Migrate(db); err != nil {
+	if err := finance.RemapParties(db, "supplier", supplierMerges); err != nil {
+		return err
+	}
+	// ลูกค้ารหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบรับเงินของ finance ต้องชี้รหัสที่เก็บไว้
+	customerMerges, err := sales.Migrate(db)
+	if err != nil {
+		return err
+	}
+	if err := finance.RemapParties(db, "customer", customerMerges); err != nil {
+		return err
+	}
+	// สิทธิ์เดิมของบทบาทตามความรับผิดชอบที่ย้าย module (รับ / จ่ายเงิน -> finance) — ทำซ้ำได้
+	renames := make([]identity.PermissionRename, 0, len(finance.PermissionMigrations()))
+	for _, r := range finance.PermissionMigrations() {
+		renames = append(renames, identity.PermissionRename{From: r.From, To: r.To, Keep: r.Keep})
+	}
+	if err := identity.RenamePermissions(db, renames); err != nil {
 		return err
 	}
 
@@ -94,12 +113,15 @@ func run(logger *slog.Logger) error {
 	ledgerModule.RegisterRoutes(mux)
 	inventoryModule := inventory.New(db, identityModule, organizationModule, ledgerModule)
 	inventoryModule.RegisterRoutes(mux)
-	cashbankModule := cashbank.New(db, identityModule, organizationModule, ledgerModule)
-	cashbankModule.RegisterRoutes(mux)
-	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule, cashbankModule)
+	purchasingModule := purchasing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
 	purchasingModule.RegisterRoutes(mux)
-	salesModule := sales.New(db, identityModule, organizationModule, ledgerModule, inventoryModule, cashbankModule)
+	salesModule := sales.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
 	salesModule.RegisterRoutes(mux)
+	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing
+	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule)
+	financeModule.RegisterRoutes(mux)
+	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
+	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 
 	// รายงานทุก module ผ่าน endpoint เดียว: GET /reports?book=... (หน้ารายงานของ frontend เป็นหน้าเดียว)
 	reportBooks := reports.NewRegistry()
@@ -107,12 +129,13 @@ func run(logger *slog.Logger) error {
 	inventoryModule.RegisterReports(reportBooks)
 	purchasingModule.RegisterReports(reportBooks)
 	salesModule.RegisterReports(reportBooks)
+	financeModule.RegisterReports(reportBooks)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
 
 	// รายการสิทธิ์ทั้งหมด (หน้ากำหนดบทบาทของ frontend) — แต่ละ module ลงทะเบียนของตัวเอง
 	permissionCatalog := permissions.NewCatalog()
 	for _, m := range []interface{ Permissions() []string }{
-		salesModule, purchasingModule, inventoryModule, ledgerModule, cashbankModule, organizationModule, identityModule,
+		salesModule, purchasingModule, inventoryModule, ledgerModule, financeModule, organizationModule, identityModule,
 	} {
 		permissionCatalog.Register(m.Permissions()...)
 	}

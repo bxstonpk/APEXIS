@@ -120,16 +120,22 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `purchasing_receipts` (+ `_lines`) | id, document_no, fiscal_year, fiscal_period_id, order_id, supplier_id, receipt_date, warehouse_id, system, stock_document_id/no, total_value, entry_id/no, status; บรรทัด: order_line_no, item_id, stock, quantity, unit_cost, value, account_id | UNIQUE `(company_id, document_no)`; FK order / supplier RESTRICT |
 | `purchasing_invoices` (+ `_lines`) | id, document_no, supplier_invoice_no, invoice_date, posting_date, due_date, vat_rate, price_includes_vat, total_net/vat/gross, **paid_amount**, entry_id/no, status; บรรทัด: quantity, unit_price, net, vat, gross, cleared, variance_account_id | UNIQUE `(company_id, document_no)`; **partial UNIQUE `(company_id, supplier_id, supplier_invoice_no) WHERE status = 'posted'`**; CHECK gross = net + vat; **CHECK 0 ≤ paid_amount ≤ total_gross** |
 | `purchasing_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` (แทน `purchasing_sequences`) |
-| `purchasing_wht_types` | id, company_id, code, name, rate, status, deleted_at | partial UNIQUE code; CHECK 0 < rate ≤ 100 |
-| `purchasing_payments` | id, document_no, fiscal_year, fiscal_period_id, supplier_id, tax_type (ณ วันจ่าย), payment_date, total_amount, total_wht, total_paid, entry_id/no, status | UNIQUE `(company_id, document_no)`; **CHECK total_paid = total_amount - total_wht**; index `(company_id, payment_date)` |
-| `purchasing_payment_lines` | payment_id, line_no, invoice_id, amount, wht_type_id, wht_rate, wht_base, wht | FK invoice / wht type RESTRICT; index invoice_id; CHECK 0 ≤ wht ≤ amount |
-| `purchasing_payment_methods` | payment_id, line_no, cash_account_id (cashbank), gl_account_id (ณ วันจ่าย), amount, reference | CHECK amount > 0 |
+| `purchasing_invoice_settlements` | เหมือน `sales_invoice_settlements` (เอกสารจ่ายเงินของ finance) | อายุเจ้าหนี้รวมยอดตาม settled_on |
 
-## 3.3.4 ตาราง — cashbank
+## 3.3.4 ตาราง — finance (การเงิน)
 
 | ตาราง | คอลัมน์หลัก | Constraint / Index |
 |---|---|---|
-| `cashbank_accounts` | id, company_id, code, name, type, bank_name, bank_branch, account_no, gl_account_id, status, deleted_at | partial UNIQUE code; CHECK type IN (cash, bank); **CHECK bank ต้องมี bank_name + account_no** |
+| `finance_cash_accounts` | id, company_id, code, name, type, bank_name, bank_branch, account_no, gl_account_id, status, deleted_at | partial UNIQUE code; CHECK type IN (cash, bank); CHECK bank ต้องมี bank_name + account_no (เปลี่ยนชื่อจาก `cashbank_accounts` คงข้อมูล) |
+| `finance_settings` | company_id, receipt / payment / transfer_journal_id, wht_received / wht_pnd3 / wht_pnd53_account_id | PK company_id |
+| `finance_wht_types` | id, company_id, code, name, rate, status, deleted_at | partial UNIQUE code; CHECK 0 < rate ≤ 100 |
+| `finance_receipts` | id, company_id, document_no, doc_date, kind, party_* (คู่ค้า ณ วันเอกสาร), total_amount, total_wht, total_received, status, fiscal_period_id, entry_id/no, created_by, cancelled_* | UNIQUE (company_id, document_no); index (company_id, doc_date), party_id; CHECK kind, received = amount - wht |
+| `finance_receipt_lines` / `_methods` | invoice_id + invoice_no (ใบแจ้งหนี้ขาย) **หรือ** account_id, amount, wht / cash_account_id, gl_account_id, amount, reference | CHECK invoice_id กับ account_id มีอย่างใดอย่างหนึ่ง; FK ทะเบียนเงิน RESTRICT |
+| `finance_payments` (+ `_lines`, `_methods`) | เหมือนใบรับ + party_tax_type; บรรทัดมี wht_type_id, wht_rate, wht_base, wht (ณ วันจ่าย), supplier_invoice_no | CHECK paid = amount - wht; FK ประเภทภาษี RESTRICT |
+| `finance_transfers` | id, document_no, doc_date, from / to_account_id, from / to_gl_account_id, amount, reference, status, entry_id/no | CHECK from <> to, amount > 0 |
+| `finance_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` |
+
+- ตารางเดิม `sales_receipts*`, `purchasing_payments*`, `purchasing_wht_types` และคอลัมน์ภาษีหัก ณ ที่จ่ายของค่าตั้งขาย / จัดซื้อถูกลบตอน migrate (ข้อมูลทดสอบเดิมไม่ย้าย — ตัดสินใจ 2026-11-23)
 
 - สินค้า / คลัง / บัญชี / งวด / เอกสารสต็อก / รายการบัญชี เก็บเป็น id ของ module เจ้าของ (ไม่มี FK ข้าม module)
 
@@ -143,7 +149,7 @@ ledger_journal_lines ─► ledger_journal_entries ─► ledger_journals ◄─
 | `sales_orders` (+ `_lines`) | id, order_no, quotation_id, doc_date, delivery_date, เงื่อนไข VAT / เครดิตเทอม, totals, status; บรรทัด: delivered_qty, invoiced_qty | UNIQUE เลขที่; **UNIQUE quotation_id (แปลงได้ครั้งเดียว)**; **CHECK 0 ≤ delivered ≤ quantity, 0 ≤ invoiced ≤ delivered** |
 | `sales_deliveries` (+ `_lines`) | id, document_no, order_id, customer_id, doc_date, warehouse_id, system, stock_document_id/no, total_cost, entry_id/no, status; บรรทัด: quantity, stock, cost, inventory_account_id | UNIQUE `(company_id, document_no)` |
 | `sales_invoices` (+ `_lines`) | id, document_no, order_id, with_delivery, doc_date, due_date, vat_rate, totals, **received_amount**, stock_*, entry_id/no, status; บรรทัด: quantity, unit_price, net/vat/gross, revenue_account_id, cost | UNIQUE เลขที่; CHECK gross = net + vat; **CHECK 0 ≤ received ≤ gross** |
-| `sales_receipts` (+ `_lines`, `_methods`) | id, document_no, customer_id, doc_date, total_amount, total_wht, total_received; บรรทัด: invoice_id, amount, wht; ช่องทาง: cash_account_id, gl_account_id, amount, reference | **CHECK total_received = total_amount - total_wht**; CHECK 0 ≤ wht ≤ amount |
+| `sales_invoice_settlements` | id, company_id, document_id / document_no (เอกสารรับเงินของ finance), settled_on, invoice_id, amount, status | FK invoice RESTRICT; index (company_id, document_id), invoice_id; CHECK amount > 0 — อายุลูกหนี้รวมยอดตาม settled_on |
 | `sales_number_sequences` | company_id, doc_type, period_key, last_no | PK `(company_id, doc_type, period_key)` |
 
 ## 3.4 ข้อตกลงด้านข้อมูล

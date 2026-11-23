@@ -142,3 +142,44 @@ func (r *ReportRepository) AccountLines(ctx context.Context, companyID vo.Compan
 	}
 	return out, total, nil
 }
+
+// EntryActivity — 1 query: COUNT ... FILTER ตามสถานะ (index: company_id + entry_date)
+func (r *ReportRepository) EntryActivity(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (int64, int64, error) {
+	var row struct {
+		Drafts int64
+		Posted int64
+	}
+	err := database.Conn(ctx, r.db).Raw(`SELECT
+			COUNT(*) FILTER (WHERE status = ?) AS drafts,
+			COUNT(*) FILTER (WHERE status IN ?) AS posted
+		FROM ledger_journal_entries WHERE company_id = ? AND entry_date BETWEEN ? AND ?`,
+		vo.EntryDraft, affecting, uuidOf(companyID), start, end).Scan(&row).Error
+	return row.Drafts, row.Posted, err
+}
+
+// RecentEntries — 1 query: ยอดเดบิตรวมเก็บในหัวรายการแล้ว (total_debit) จึงไม่ต้อง JOIN บรรทัด
+func (r *ReportRepository) RecentEntries(ctx context.Context, companyID vo.CompanyID, limit int) ([]dto.RecentEntry, error) {
+	var rows []struct {
+		ID          uuid.UUID
+		EntryNo     *string
+		EntryDate   time.Time
+		Description string
+		TotalDebit  decimal.Decimal
+	}
+	err := database.Conn(ctx, r.db).Table("ledger_journal_entries").
+		Select("id, entry_no, entry_date, description, total_debit").
+		Where("company_id = ? AND status IN ?", uuidOf(companyID), affecting).
+		Order("entry_date DESC, entry_no DESC").Limit(limit).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.RecentEntry, len(rows))
+	for i, x := range rows {
+		no := ""
+		if x.EntryNo != nil {
+			no = *x.EntryNo
+		}
+		out[i] = dto.RecentEntry{ID: x.ID.String(), EntryNo: no, Date: gp.DateUTC(x.EntryDate), Description: x.Description, Amount: x.TotalDebit}
+	}
+	return out, nil
+}

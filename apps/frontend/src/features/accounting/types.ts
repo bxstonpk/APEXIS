@@ -100,6 +100,9 @@ export type IncomeStatement = {
   expenses: StatementLine[]
   total_expenses: string
   net_income: string
+  /** บัญชีพัก: เคลื่อนไหวในช่วง (เดบิตเป็นบวก) — แสดงแยก ไม่รวมใน net_income */
+  suspense: StatementLine[]
+  total_suspense: string
 }
 
 export type GeneralLedger = {

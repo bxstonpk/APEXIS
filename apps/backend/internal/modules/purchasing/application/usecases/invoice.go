@@ -19,8 +19,9 @@ import (
 // InvoiceUseCases: ใบแจ้งหนี้ผู้ขาย (ตั้งเจ้าหนี้) ตามจำนวนที่รับแล้ว
 type InvoiceUseCases struct {
 	base
-	invoices repositories.InvoiceRepository
-	orders   repositories.OrderRepository
+	invoices  repositories.InvoiceRepository
+	orders    repositories.OrderRepository
+	suppliers repositories.SupplierRepository
 }
 
 func (uc *InvoiceUseCases) Get(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
@@ -119,8 +120,12 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 		if used {
 			return domain.ErrInvoiceNoExists
 		}
+		billFrom, err := uc.billFrom(ctx, in.CompanyID, o.Data().SupplierID, o.Data().SupplierBranchNo)
+		if err != nil {
+			return err
+		}
 		inv, err := entities.NewInvoice(entities.InvoiceState{
-			CompanyID: in.CompanyID, OrderID: o.ID(), SupplierID: o.Data().SupplierID,
+			CompanyID: in.CompanyID, OrderID: o.ID(), SupplierID: o.Data().SupplierID, BillFrom: billFrom,
 			SupplierInvoiceNo: in.Data.SupplierInvoiceNo, InvoiceDate: in.Data.InvoiceDate, Date: in.Data.Date,
 			Description: in.Data.Description, Vat: terms.Vat, Lines: lines,
 			Posting: entities.Posting{DocumentNo: no, FiscalYear: period.FiscalYear, PeriodID: period.ID, By: in.UserID, At: uc.now()},
@@ -206,4 +211,18 @@ func (uc *InvoiceUseCases) get(ctx context.Context, companyID vo.CompanyID, id v
 		refs[i] = &out.Lines[i].Item
 	}
 	return out, uc.itemRefs(ctx, companyID, refs)
+}
+
+// billFrom: ผู้ขาย ณ วันบันทึกใบ — ชื่อ / เลขผู้เสียภาษีของผู้ขาย + เลขสาขา / ที่อยู่ของสาขาตามใบสั่งซื้อ
+func (uc *InvoiceUseCases) billFrom(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, branchNo string) (entities.BillFrom, error) {
+	s, err := uc.suppliers.FindByID(ctx, companyID, supplierID)
+	if err != nil {
+		return entities.BillFrom{}, err
+	}
+	b, err := s.Branch(branchNo)
+	if err != nil {
+		return entities.BillFrom{}, err
+	}
+	d := s.Data()
+	return entities.BillFrom{Name: d.Name, TaxID: d.TaxID, BranchNo: b.BranchNo, Address: b.Address}, nil
 }

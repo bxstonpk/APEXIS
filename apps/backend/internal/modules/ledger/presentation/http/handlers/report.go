@@ -48,3 +48,15 @@ func (h *Handler) Report(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 }
+
+// AccountingDashboard: GET /api/v1/companies/{companyID}/dashboards/accounting?start_date=&end_date=
+func (h *Handler) AccountingDashboard(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		start, end, err := requests.ParseDateRange(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		d, err := h.uc.Reports.Dashboard(r.Context(), dto.DateRange{Actor: a, Start: start, End: end})
+		return one(responses.FromAccountingDashboard(d), err)
+	})
+}

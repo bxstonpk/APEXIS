@@ -50,9 +50,9 @@ func NewSystemChange(fromYear int, system vo.AccountingSystem, yearHasPostings b
 	return SystemChange{FromYear: fromYear, System: system}, nil
 }
 
-// SystemFor คืนระบบของปีบัญชี year: การตั้งค่าล่าสุดที่ FromYear <= year — ไม่ได้ตั้ง = perpetual
+// SystemFor คืนระบบของปีบัญชี year: การตั้งค่าล่าสุดที่ FromYear <= year — ไม่ได้ตั้ง = periodic (สิ้นงวด)
 func SystemFor(changes []SystemChange, year int) vo.AccountingSystem {
-	system, best := vo.Perpetual, 0
+	system, best := vo.Periodic, 0
 	for _, c := range changes {
 		if c.FromYear <= year && c.FromYear > best {
 			system, best = c.System, c.FromYear

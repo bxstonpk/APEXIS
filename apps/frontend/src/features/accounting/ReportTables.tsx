@@ -194,14 +194,29 @@ export function BalanceSheetTable({ r }: { r: BalanceSheet }) {
   )
 }
 
+/**
+ * งบกำไรขาดทุน — บัญชีพักแสดงเป็นส่วนแยกท้ายงบ (ไม่รวมในกำไรสุทธิ) ให้เห็นยอดที่ยังรอโอนไปบัญชีที่ถูกต้อง
+ * งบระหว่างปีจึงเห็นรายการพักชัดเจน; ก่อนปิดงบโอนออกจนเป็นศูนย์แล้วส่วนนี้จะหายไป
+ */
 export function IncomeStatementTable({ r }: { r: IncomeStatement }) {
   const t = texts.reports
+  const suspense = (r.suspense?.length ?? 0) > 0 || toUnits(r.total_suspense) !== 0n
   return (
-    <StatementFrame>
-      <Section title={t.sections.revenue} lines={r.revenue} totalLabel={t.totals.revenue} total={r.total_revenue} />
-      <Section title={t.sections.expenses} lines={r.expenses} totalLabel={t.totals.expenses} total={r.total_expenses} />
-      <GrandTotal label={t.totals.netIncome} value={r.net_income} />
-    </StatementFrame>
+    <div className="flex flex-col gap-4">
+      {suspense && (
+        <p role="status" className="flex items-start gap-2 rounded-(--radius-control) border border-warning/40 bg-warning-soft px-3.5 py-2.5 text-sm text-warning print:border-ink/40">
+          <CircleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+          {format(t.suspenseInPeriod, { amount: amount(r.total_suspense) })}
+        </p>
+      )}
+      <StatementFrame>
+        <Section title={t.sections.revenue} lines={r.revenue} totalLabel={t.totals.revenue} total={r.total_revenue} />
+        <Section title={t.sections.expenses} lines={r.expenses} totalLabel={t.totals.expenses} total={r.total_expenses} />
+        <GrandTotal label={t.totals.netIncome} value={r.net_income} />
+        {suspense && <Section title={t.sections.suspenseExcluded} lines={r.suspense} totalLabel={t.totals.suspensePeriod} total={r.total_suspense} />}
+      </StatementFrame>
+      {suspense && <p className="text-[13px] text-ink-muted">{t.suspenseIncomeHint}</p>}
+    </div>
   )
 }
 

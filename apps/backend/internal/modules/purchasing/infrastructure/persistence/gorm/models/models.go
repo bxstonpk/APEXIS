@@ -24,8 +24,6 @@ type SettingsModel struct {
 	APAccountID            *uuid.UUID      `gorm:"column:ap_account_id;type:uuid"`
 	InputVatAccountID      *uuid.UUID      `gorm:"type:uuid"`
 	PriceVarianceAccountID *uuid.UUID      `gorm:"type:uuid"`
-	WhtPnd3AccountID       *uuid.UUID      `gorm:"column:wht_pnd3_account_id;type:uuid"`
-	WhtPnd53AccountID      *uuid.UUID      `gorm:"column:wht_pnd53_account_id;type:uuid"`
 	UpdatedAt              time.Time       `gorm:"not null"`
 }
 
@@ -39,6 +37,7 @@ type SupplierModel struct {
 	TaxID           string         `gorm:"size:13;not null;default:''"`
 	BranchNo        string         `gorm:"size:5;not null;default:'00000'"`
 	Address         string         `gorm:"size:500;not null;default:''"`
+	AddressDetail   AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
 	PaymentTermDays int            `gorm:"not null;default:0;check:chk_pur_suppliers_term,payment_term_days BETWEEN 0 AND 365"`
 	VatRegistered   bool           `gorm:"not null"`
 	TaxType         string         `gorm:"size:20;not null;default:'juristic';check:chk_pur_suppliers_tax_type,tax_type IN ('individual','juristic')"`
@@ -50,6 +49,19 @@ type SupplierModel struct {
 
 func (SupplierModel) TableName() string { return "purchasing_suppliers" }
 
+// SupplierBranchModel คือสาขาเพิ่มเติมของผู้ขาย (สาขาหลักอยู่ในตารางผู้ขาย) — แทนที่ทั้งชุดตอนบันทึกผู้ขาย
+type SupplierBranchModel struct {
+	SupplierID    uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	BranchNo      string         `gorm:"size:5;primaryKey"`
+	Supplier      *SupplierModel `gorm:"foreignKey:SupplierID;constraint:OnDelete:CASCADE"`
+	Name          string         `gorm:"size:200;not null;default:''"`
+	Address       string         `gorm:"size:500;not null;default:''"`
+	AddressDetail AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
+	Position      int            `gorm:"not null"`
+}
+
+func (SupplierBranchModel) TableName() string { return "purchasing_supplier_branches" }
+
 type OrderModel struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CompanyID        uuid.UUID `gorm:"type:uuid;not null;index:idx_pur_orders_date,priority:1;uniqueIndex:uq_pur_orders_no,priority:1,where:order_no IS NOT NULL"`
@@ -57,6 +69,7 @@ type OrderModel struct {
 	FiscalYear       *int
 	SupplierID       uuid.UUID       `gorm:"type:uuid;not null;index"`
 	Supplier         *SupplierModel  `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
+	SupplierBranchNo string          `gorm:"size:5;not null;default:''"` // ว่าง = สาขาหลักของผู้ขาย
 	OrderDate        time.Time       `gorm:"type:date;not null;index:idx_pur_orders_date,priority:2"`
 	DeliveryDate     *time.Time      `gorm:"type:date"`
 	Reference        string          `gorm:"size:100;not null;default:''"`
@@ -159,6 +172,10 @@ type InvoiceModel struct {
 	SupplierID        uuid.UUID          `gorm:"type:uuid;not null;index;uniqueIndex:uq_pur_invoices_supplier_no,priority:2,where:status = 'posted'"`
 	Supplier          *SupplierModel     `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
 	SupplierInvoiceNo string             `gorm:"size:50;not null;uniqueIndex:uq_pur_invoices_supplier_no,priority:3,where:status = 'posted'"`
+	BillFromName      string             `gorm:"size:200;not null;default:''"`
+	BillFromTaxID     string             `gorm:"size:13;not null;default:''"`
+	BillFromBranchNo  string             `gorm:"size:5;not null;default:''"`
+	BillFromAddress   string             `gorm:"size:500;not null;default:''"`
 	InvoiceDate       time.Time          `gorm:"type:date;not null"`
 	PostingDate       time.Time          `gorm:"type:date;not null;index:idx_pur_invoices_date,priority:2"`
 	DueDate           time.Time          `gorm:"type:date;not null;check:chk_pur_invoices_due,due_date >= posting_date"`
@@ -211,11 +228,24 @@ func (SequenceModel) TableName() string { return "purchasing_number_sequences" }
 
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
-		&SettingsModel{}, &SupplierModel{}, &OrderModel{}, &OrderLineModel{},
+		&SettingsModel{}, &SupplierModel{}, &SupplierBranchModel{}, &OrderModel{}, &OrderLineModel{},
 		&ReceiptModel{}, &ReceiptLineModel{}, &InvoiceModel{}, &InvoiceLineModel{}, &SequenceModel{},
-		&WhtTypeModel{}, &PaymentModel{}, &PaymentLineModel{}, &PaymentMethodModel{},
+		&SettlementModel{},
 	); err != nil {
 		return err
+	}
+	// ใบจ่ายชำระ / ประเภทภาษีหัก ณ ที่จ่ายย้ายไป finance (ตัดสินใจ 2026-11-23: ข้อมูลทดสอบเดิมไม่ย้าย)
+	for _, t := range []string{"purchasing_payment_methods", "purchasing_payment_lines", "purchasing_payments", "purchasing_wht_types"} {
+		if err := db.Migrator().DropTable(t); err != nil {
+			return err
+		}
+	}
+	for _, c := range []string{"wht_pnd3_account_id", "wht_pnd53_account_id"} {
+		if db.Migrator().HasColumn(&SettingsModel{}, c) {
+			if err := db.Migrator().DropColumn(&SettingsModel{}, c); err != nil {
+				return err
+			}
+		}
 	}
 	// ลำดับเลขแบบเดิม (prefix + ปีบัญชี) -> ชนิดเอกสาร + คีย์ช่วงนับของรูปแบบเริ่มต้น "F<ปีบัญชี>"
 	if db.Migrator().HasTable("purchasing_sequences") {
@@ -230,75 +260,36 @@ func AutoMigrate(db *gorm.DB) error {
 	return nil
 }
 
-// WhtTypeModel: ประเภทเงินได้ที่หักภาษี ณ ที่จ่าย + อัตรา
-type WhtTypeModel struct {
-	ID        uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	CompanyID uuid.UUID       `gorm:"type:uuid;not null;uniqueIndex:uq_pur_wht_types_code,priority:1,where:deleted_at IS NULL"`
-	Code      string          `gorm:"size:30;not null;uniqueIndex:uq_pur_wht_types_code,priority:2,where:deleted_at IS NULL"`
-	Name      string          `gorm:"size:200;not null"`
-	Rate      decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_pur_wht_types_rate,rate > 0 AND rate <= 100"`
-	Status    string          `gorm:"size:20;not null;check:chk_pur_wht_types_status,status IN ('active','inactive')"`
-	CreatedAt time.Time       `gorm:"not null"`
-	UpdatedAt time.Time       `gorm:"not null"`
-	DeletedAt gorm.DeletedAt  `gorm:"index"`
+// SettlementModel: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารจ่ายเงินของ finance
+// (document_id ไม่มี FK เพราะเป็นตารางของ module อื่น) — อายุเจ้าหนี้รวมยอดตาม settled_on
+type SettlementModel struct {
+	ID         uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	CompanyID  uuid.UUID       `gorm:"type:uuid;not null;index:idx_pur_settlements_doc,priority:1"`
+	DocumentID uuid.UUID       `gorm:"type:uuid;not null;index:idx_pur_settlements_doc,priority:2"`
+	DocumentNo string          `gorm:"size:30;not null"`
+	SettledOn  time.Time       `gorm:"type:date;not null"`
+	InvoiceID  uuid.UUID       `gorm:"type:uuid;not null;index"`
+	Invoice    *InvoiceModel   `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
+	Amount     decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_settlements_amount,amount > 0"`
+	Status     string          `gorm:"size:20;not null;check:chk_pur_settlements_status,status IN ('posted','cancelled')"`
+	CreatedAt  time.Time       `gorm:"not null"`
 }
 
-func (WhtTypeModel) TableName() string { return "purchasing_wht_types" }
+func (SettlementModel) TableName() string { return "purchasing_invoice_settlements" }
 
-// PaymentModel: ใบจ่ายชำระ — total_paid = total_amount - total_wht (CHECK)
-type PaymentModel struct {
-	ID             uuid.UUID            `gorm:"type:uuid;primaryKey"`
-	CompanyID      uuid.UUID            `gorm:"type:uuid;not null;index:idx_pur_payments_date,priority:1;uniqueIndex:uq_pur_payments_no,priority:1"`
-	DocumentNo     string               `gorm:"size:30;not null;uniqueIndex:uq_pur_payments_no,priority:2"`
-	FiscalYear     int                  `gorm:"not null"`
-	FiscalPeriodID uuid.UUID            `gorm:"type:uuid;not null"`
-	SupplierID     uuid.UUID            `gorm:"type:uuid;not null;index"`
-	Supplier       *SupplierModel       `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
-	TaxType        string               `gorm:"size:20;not null;check:chk_pur_payments_tax_type,tax_type IN ('individual','juristic')"`
-	PaymentDate    time.Time            `gorm:"type:date;not null;index:idx_pur_payments_date,priority:2"`
-	Description    string               `gorm:"size:500;not null;default:''"`
-	TotalAmount    decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_pur_payments_amount,total_amount > 0"`
-	TotalWht       decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_pur_payments_wht,total_wht >= 0 AND total_wht <= total_amount"`
-	TotalPaid      decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_pur_payments_paid,total_paid = total_amount - total_wht"`
-	EntryID        *uuid.UUID           `gorm:"type:uuid"`
-	EntryNo        string               `gorm:"size:30;not null;default:''"`
-	Status         string               `gorm:"size:20;not null;check:chk_pur_payments_status,status IN ('posted','cancelled')"`
-	CreatedBy      uuid.UUID            `gorm:"type:uuid;not null"`
-	PostedAt       time.Time            `gorm:"not null"`
-	CancelledBy    *uuid.UUID           `gorm:"type:uuid"`
-	CancelledAt    *time.Time           `gorm:"check:chk_pur_payments_cancelled,(status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL)"`
-	Lines          []PaymentLineModel   `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
-	Methods        []PaymentMethodModel `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
-	CreatedAt      time.Time            `gorm:"not null"`
-	UpdatedAt      time.Time            `gorm:"not null"`
+// AddressColumns คือที่อยู่ตามแบบสรรพากร (คอลัมน์ addr_*) — คอลัมน์ address เก็บข้อความที่ประกอบแล้ว (พิมพ์ / snapshot)
+type AddressColumns struct {
+	Building    string `gorm:"size:100;not null;default:''"`
+	RoomNo      string `gorm:"size:100;not null;default:''"`
+	FloorNo     string `gorm:"size:100;not null;default:''"`
+	Village     string `gorm:"size:100;not null;default:''"`
+	HouseNo     string `gorm:"size:100;not null;default:''"`
+	Moo         string `gorm:"size:100;not null;default:''"`
+	Soi         string `gorm:"size:100;not null;default:''"`
+	Yaek        string `gorm:"size:100;not null;default:''"`
+	Street      string `gorm:"size:100;not null;default:''"`
+	SubDistrict string `gorm:"size:100;not null;default:''"`
+	District    string `gorm:"size:100;not null;default:''"`
+	Province    string `gorm:"size:100;not null;default:''"`
+	PostalCode  string `gorm:"size:5;not null;default:''"`
 }
-
-func (PaymentModel) TableName() string { return "purchasing_payments" }
-
-// PaymentLineModel: ใบแจ้งหนี้ที่ตัดจ่าย — index invoice_id ใช้รวมยอดจ่ายตามวันที่ (อายุเจ้าหนี้)
-type PaymentLineModel struct {
-	PaymentID uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	LineNo    int             `gorm:"primaryKey"`
-	InvoiceID uuid.UUID       `gorm:"type:uuid;not null;index"`
-	Invoice   *InvoiceModel   `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
-	Amount    decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_payment_lines_amount,amount > 0"`
-	WhtTypeID *uuid.UUID      `gorm:"type:uuid"`
-	WhtType   *WhtTypeModel   `gorm:"foreignKey:WhtTypeID;constraint:OnDelete:RESTRICT"`
-	WhtRate   decimal.Decimal `gorm:"type:numeric(5,2);not null;default:0"`
-	WhtBase   decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
-	Wht       decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_pur_payment_lines_wht,wht >= 0 AND wht <= amount"`
-}
-
-func (PaymentLineModel) TableName() string { return "purchasing_payment_lines" }
-
-// PaymentMethodModel: ช่องทางจ่าย — cash_account_id ของ cashbank, gl_account_id ที่ลงบัญชีจริง ณ วันจ่าย
-type PaymentMethodModel struct {
-	PaymentID     uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	LineNo        int             `gorm:"primaryKey"`
-	CashAccountID uuid.UUID       `gorm:"type:uuid;not null"`
-	GLAccountID   uuid.UUID       `gorm:"column:gl_account_id;type:uuid;not null"`
-	Amount        decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_payment_methods_amount,amount > 0"`
-	Reference     string          `gorm:"size:50;not null;default:''"`
-}
-
-func (PaymentMethodModel) TableName() string { return "purchasing_payment_methods" }

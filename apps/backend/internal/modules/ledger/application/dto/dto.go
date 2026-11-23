@@ -262,4 +262,52 @@ type IncomeStatement struct {
 	Expenses      []services.StatementLine
 	TotalExpenses vo.Money
 	NetIncome     vo.Money
+	// Suspense: ยอดเคลื่อนไหวของบัญชีพักในช่วง (เดบิตเป็นบวก) — แสดงแยก ไม่รวมใน NetIncome
+	// (ยอดคงเหลือของบัญชีพักอยู่ในงบแสดงฐานะการเงิน)
+	Suspense      []services.StatementLine
+	TotalSuspense vo.Money
+}
+
+// ---------- dashboard ----------
+
+// IncomeSummary: รายได้ / ค่าใช้จ่าย (ด้านปกติเป็นบวก) และกำไรสุทธิ — ไม่รวมบัญชีพัก
+type IncomeSummary struct {
+	Revenue   vo.Money
+	Expense   vo.Money
+	NetIncome vo.Money
+}
+
+type MonthlyIncome struct {
+	Month   time.Time // วันที่ 1 ของเดือน
+	Revenue vo.Money
+	Expense vo.Money
+}
+
+type RecentEntry struct {
+	ID          string
+	EntryNo     string
+	Date        time.Time
+	Description string
+	Amount      vo.Money // ยอดเดบิตรวม
+}
+
+type DashboardPeriod struct {
+	FiscalYear int
+	Start      time.Time
+	End        time.Time
+	Open       bool
+}
+
+// AccountingDashboard คือภาพรวมแอปบัญชีของช่วง [Start, End]
+type AccountingDashboard struct {
+	Start           time.Time
+	End             time.Time
+	Income          IncomeSummary
+	Previous        IncomeSummary // ช่วงก่อนหน้าความยาวเท่ากัน
+	Monthly         []MonthlyIncome
+	SuspenseBalance vo.Money // ยอดบัญชีพัก ณ End (เดบิตเป็นบวก) — ไม่ศูนย์ = ต้องโอนออกก่อนปิดงบ
+	DraftCount      int64
+	PostedCount     int64
+	RecentEntries   []RecentEntry
+	Period          *DashboardPeriod // งวดที่ครอบคลุม End (nil = ไม่มีงวด)
 }

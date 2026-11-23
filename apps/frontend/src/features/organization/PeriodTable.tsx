@@ -52,7 +52,7 @@ export function PeriodTable({ apiPath, periods, canClose }: { apiPath: string; p
         <Progress closed={closedCount} total={sorted.length} />
       </div>
       {error && <Alert tone="error">{error}</Alert>}
-      <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full border-collapse text-sm tabular-nums">
           <thead className="bg-subtle text-[13px] text-ink-muted">
             <tr>

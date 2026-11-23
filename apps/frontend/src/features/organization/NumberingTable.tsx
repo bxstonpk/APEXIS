@@ -63,7 +63,7 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
         <p className="mt-3 text-ink-muted">{t.resetHint}</p>
       </details>
 
-      <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full border-collapse text-sm tabular-nums">
           <thead className="bg-subtle text-[13px] text-ink-muted">
             <tr>

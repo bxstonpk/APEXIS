@@ -2,6 +2,7 @@
 package responses
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -70,34 +71,54 @@ type Settings struct {
 	OutputVatAccountID *string `json:"output_vat_account_id"`
 	RevenueAccountID   *string `json:"revenue_account_id"`
 	CogsAccountID      *string `json:"cogs_account_id"`
-	WhtAccountID       *string `json:"wht_account_id"`
 }
 
 func FromSettings(s dto.Settings) Settings {
 	return Settings{
 		VatRegistered: s.VatRegistered, VatRate: str(s.VatRate), JournalID: s.JournalID, ARAccountID: s.ARAccountID,
-		OutputVatAccountID: s.OutputVatAccountID, RevenueAccountID: s.RevenueAccountID, CogsAccountID: s.CogsAccountID, WhtAccountID: s.WhtAccountID,
+		OutputVatAccountID: s.OutputVatAccountID, RevenueAccountID: s.RevenueAccountID, CogsAccountID: s.CogsAccountID,
 	}
 }
 
 type Customer struct {
-	ID              string  `json:"id"`
-	Code            string  `json:"code"`
-	Name            string  `json:"name"`
-	TaxID           string  `json:"tax_id"`
-	BranchNo        string  `json:"branch_no"`
-	Address         string  `json:"address"`
-	PaymentTermDays int     `json:"payment_term_days"`
-	TaxType         string  `json:"tax_type"`
-	CreditLimit     *string `json:"credit_limit"`
-	Status          string  `json:"status"`
+	ID              string           `json:"id"`
+	Code            string           `json:"code"`
+	Name            string           `json:"name"`
+	TaxID           string           `json:"tax_id"`
+	BranchNo        string           `json:"branch_no"`
+	Address         string           `json:"address"`
+	AddressDetail   thaiaddress.JSON `json:"address_detail"`
+	PaymentTermDays int              `json:"payment_term_days"`
+	TaxType         string           `json:"tax_type"`
+	CreditLimit     *string          `json:"credit_limit"`
+	Status          string           `json:"status"`
+	Branches        []Branch         `json:"branches,omitempty"` // เฉพาะ GET รายตัว
 }
 
 func FromCustomer(c dto.Customer) Customer {
 	return Customer{
-		ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, BranchNo: c.BranchNo, Address: c.Address,
+		ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, BranchNo: c.BranchNo, Address: c.Address, AddressDetail: thaiaddress.ToJSON(c.AddressDetail),
 		PaymentTermDays: c.PaymentTermDays, TaxType: c.TaxType, CreditLimit: optStr(c.CreditLimit), Status: c.Status,
+		Branches: branchList(c.Branches),
 	}
+}
+
+type Branch struct {
+	BranchNo      string           `json:"branch_no"`
+	Name          string           `json:"name"`
+	Address       string           `json:"address"`
+	AddressDetail thaiaddress.JSON `json:"address_detail"`
+}
+
+func branchList(in []dto.CustomerBranch) []Branch {
+	if in == nil {
+		return nil
+	}
+	out := make([]Branch, len(in))
+	for i, b := range in {
+		out[i] = Branch{BranchNo: b.BranchNo, Name: b.Name, Address: b.Address, AddressDetail: thaiaddress.ToJSON(b.AddressDetail)}
+	}
+	return out
 }
 
 // ---------- ใบเสนอราคา / ใบสั่งขาย ----------
@@ -107,6 +128,7 @@ type SalesDocSummary struct {
 	DocumentNo       *string `json:"document_no"` // null จนกว่าจะส่ง (QT) / อนุมัติ (SO)
 	Date             string  `json:"date"`
 	Customer         Ref     `json:"customer"`
+	CustomerBranchNo string  `json:"customer_branch_no"`
 	Reference        string  `json:"reference"`
 	VatRate          string  `json:"vat_rate"`
 	PriceIncludesVat bool    `json:"price_includes_vat"`
@@ -116,7 +138,7 @@ type SalesDocSummary struct {
 
 func FromSalesDocSummary(s dto.SalesDocSummary) SalesDocSummary {
 	return SalesDocSummary{
-		ID: s.ID, DocumentNo: optNo(s.DocumentNo), Date: date(s.Date), Customer: ref(s.Customer), Reference: s.Reference,
+		ID: s.ID, DocumentNo: optNo(s.DocumentNo), Date: date(s.Date), Customer: ref(s.Customer), CustomerBranchNo: s.CustomerBranchNo, Reference: s.Reference,
 		VatRate: str(s.VatRate), PriceIncludesVat: s.PriceIncludesVat, Totals: totals(s.Totals), Status: s.Status,
 	}
 }
@@ -283,9 +305,18 @@ type InvoiceLine struct {
 	Cost             string `json:"cost"`
 }
 
+// BillTo คือผู้ซื้อตามใบกำกับภาษี ณ วันออก (ชื่อ / เลขผู้เสียภาษี / สาขา / ที่อยู่)
+type BillTo struct {
+	Name     string `json:"name"`
+	TaxID    string `json:"tax_id"`
+	BranchNo string `json:"branch_no"`
+	Address  string `json:"address"`
+}
+
 type Invoice struct {
 	InvoiceSummary
 	StockInfo
+	BillTo           BillTo        `json:"bill_to"`
 	VatRate          string        `json:"vat_rate"`
 	PriceIncludesVat bool          `json:"price_includes_vat"`
 	Reference        string        `json:"reference"`
@@ -297,60 +328,13 @@ func FromInvoice(i dto.Invoice) Invoice {
 	out := Invoice{
 		InvoiceSummary: FromInvoiceSummary(i.InvoiceSummary), StockInfo: stockInfo(i.StockInfo), VatRate: str(i.VatRate),
 		PriceIncludesVat: i.PriceIncludesVat, Reference: i.Reference, Description: i.Description, Lines: make([]InvoiceLine, len(i.Lines)),
+		BillTo: BillTo{Name: i.BillTo.Name, TaxID: i.BillTo.TaxID, BranchNo: i.BillTo.BranchNo, Address: i.BillTo.Address},
 	}
 	for n, l := range i.Lines {
 		out.Lines[n] = InvoiceLine{
 			OrderLineNo: l.OrderLineNo, Item: ref(l.Item), Quantity: str(l.Quantity), UnitPrice: str(l.UnitPrice),
 			Amounts: totals(l.Amounts), RevenueAccountID: l.RevenueAccountID, Cost: str(l.Cost),
 		}
-	}
-	return out
-}
-
-type ReceiptSummary struct {
-	PostedSummary
-	Amount   string `json:"amount"`   // ตัดหนี้
-	Wht      string `json:"wht"`      // ถูกหัก ณ ที่จ่าย
-	Received string `json:"received"` // รับจริง
-}
-
-func FromReceiptSummary(r dto.ReceiptSummary) ReceiptSummary {
-	return ReceiptSummary{PostedSummary: FromPostedSummary(r.PostedSummary), Amount: str(r.Amount), Wht: str(r.Wht), Received: str(r.Received)}
-}
-
-type ReceiptInvoice struct {
-	ID         string `json:"id"`
-	DocumentNo string `json:"document_no"`
-}
-
-type ReceiptLineOut struct {
-	Invoice ReceiptInvoice `json:"invoice"`
-	Amount  string         `json:"amount"`
-	Wht     string         `json:"wht"`
-}
-
-type ReceiptMethod struct {
-	CashAccountID string `json:"cash_account_id"`
-	GLAccountID   string `json:"gl_account_id"`
-	Amount        string `json:"amount"`
-	Reference     string `json:"reference"`
-}
-
-type Receipt struct {
-	ReceiptSummary
-	Description string           `json:"description"`
-	Lines       []ReceiptLineOut `json:"lines"`
-	Methods     []ReceiptMethod  `json:"methods"`
-}
-
-func FromReceipt(r dto.Receipt) Receipt {
-	out := Receipt{ReceiptSummary: FromReceiptSummary(r.ReceiptSummary), Description: r.Description,
-		Lines: make([]ReceiptLineOut, len(r.Lines)), Methods: make([]ReceiptMethod, len(r.Methods))}
-	for i, l := range r.Lines {
-		out.Lines[i] = ReceiptLineOut{Invoice: ReceiptInvoice{ID: l.Invoice.ID, DocumentNo: l.Invoice.Code}, Amount: str(l.Amount), Wht: str(l.Wht)}
-	}
-	for i, m := range r.Methods {
-		out.Methods[i] = ReceiptMethod{CashAccountID: m.CashAccountID, GLAccountID: m.GLAccountID, Amount: str(m.Amount), Reference: m.Reference}
 	}
 	return out
 }
@@ -456,4 +440,88 @@ func FromTax(book string, t dto.TaxReport) ReportBody[TaxReport] {
 	}
 	return ReportBody[TaxReport]{Data: TaxReport{Book: book, StartDate: date(t.Start), EndDate: date(t.End), Rows: rows,
 		TotalBase: str(t.TotalBase), TotalTax: str(t.TotalTax)}, Meta: meta(t.Rows)}
+}
+
+// ---------- ภาพรวม (dashboard) ----------
+
+type MonthNet struct {
+	Month string `json:"month"`
+	Net   string `json:"net"`
+}
+
+type Aging5 struct {
+	NotDue     string `json:"not_due"`
+	Days1To30  string `json:"days_1_30"`
+	Days31To60 string `json:"days_31_60"`
+	Days61To90 string `json:"days_61_90"`
+	Over90     string `json:"over_90"`
+}
+
+type Dashboard struct {
+	StartDate    string     `json:"start_date"`
+	EndDate      string     `json:"end_date"`
+	Sales        Comparison `json:"sales"`
+	InvoiceCount int64      `json:"invoice_count"`
+	Monthly      []MonthNet `json:"monthly"`
+	// FiscalYear: ปีบัญชีของกราฟ (null = ไม่มีปีบัญชีครอบคลุม end_date — กราฟเป็น 12 เดือนล่าสุด)
+	FiscalYear *FiscalYear `json:"fiscal_year"`
+	// PreviousYear: ปีบัญชีก่อนหน้า เดือนต่อเดือนกับ monthly (null = ไม่มียอด)
+	PreviousYear []MonthNet `json:"previous_year"`
+	Quotations   struct {
+		OpenCount  int64  `json:"open_count"`
+		OpenAmount string `json:"open_amount"`
+	} `json:"quotations"`
+	Orders struct {
+		DraftCount     int64 `json:"draft_count"`
+		ToDeliverCount int64 `json:"to_deliver_count"`
+		ToInvoiceCount int64 `json:"to_invoice_count"`
+	} `json:"orders"`
+	Receivables struct {
+		Outstanding string `json:"outstanding"`
+		Overdue     string `json:"overdue"`
+		Aging       Aging5 `json:"aging"`
+	} `json:"receivables"`
+	TopCustomers []TopCustomer `json:"top_customers"`
+}
+
+type Comparison struct {
+	Current  string `json:"current"`
+	Previous string `json:"previous"`
+}
+
+type TopCustomer struct {
+	Customer Ref    `json:"customer"`
+	Net      string `json:"net"`
+}
+
+type FiscalYear struct {
+	Year      int    `json:"year"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date"`
+}
+
+func FromDashboard(d dto.Dashboard) Dashboard {
+	out := Dashboard{
+		StartDate: date(d.Period.Start), EndDate: date(d.Period.End),
+		Sales:        Comparison{Current: str(d.SalesCurrent), Previous: str(d.SalesPrevious)},
+		InvoiceCount: d.InvoiceCount, Monthly: make([]MonthNet, len(d.Monthly)), TopCustomers: make([]TopCustomer, len(d.TopCustomers)),
+	}
+	for i, m := range d.Monthly {
+		out.Monthly[i] = MonthNet{Month: m.Month, Net: str(m.Net)}
+	}
+	if p := d.Period; p.FiscalYear > 0 {
+		out.FiscalYear = &FiscalYear{Year: p.FiscalYear, StartDate: date(p.TrendStart()), EndDate: date(p.TrendEnd())}
+	}
+	for _, m := range d.PreviousYear {
+		out.PreviousYear = append(out.PreviousYear, MonthNet{Month: m.Month, Net: str(m.Net)})
+	}
+	out.Quotations.OpenCount, out.Quotations.OpenAmount = d.QuotationOpenCount, str(d.QuotationOpenAmount)
+	out.Orders.DraftCount, out.Orders.ToDeliverCount, out.Orders.ToInvoiceCount = d.OrderDraftCount, d.OrderToDeliverCount, d.OrderToInvoiceCount
+	r := d.Receivables
+	out.Receivables.Outstanding, out.Receivables.Overdue = str(r.Outstanding), str(r.Overdue)
+	out.Receivables.Aging = Aging5{NotDue: str(r.NotDue), Days1To30: str(r.Days1To30), Days31To60: str(r.Days31To60), Days61To90: str(r.Days61To90), Over90: str(r.Over90)}
+	for i, c := range d.TopCustomers {
+		out.TopCustomers[i] = TopCustomer{Customer: ref(c.Customer), Net: str(c.Net)}
+	}
+	return out
 }

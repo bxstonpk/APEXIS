@@ -2,7 +2,10 @@
 package dto
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
+
+	"github.com/google/uuid"
 
 	vo "apexis/backend/internal/modules/sales/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
@@ -59,26 +62,6 @@ type InvoiceInput struct {
 	Reference    string
 	Description  string
 	Lines        []ShipmentInput
-}
-
-type ReceiptLineInput struct {
-	InvoiceID vo.InvoiceID
-	Amount    vo.Money
-	Wht       vo.Money
-}
-
-type ReceiptMethodInput struct {
-	CashAccountID vo.CashAccountID
-	Amount        vo.Money
-	Reference     string
-}
-
-type ReceiptInput struct {
-	CustomerID  vo.CustomerID
-	Date        time.Time
-	Description string
-	Lines       []ReceiptLineInput
-	Methods     []ReceiptMethodInput
 }
 
 // ---------- Filter ----------
@@ -162,7 +145,6 @@ type Settings struct {
 	OutputVatAccountID *string
 	RevenueAccountID   *string
 	CogsAccountID      *string
-	WhtAccountID       *string
 }
 
 type Customer struct {
@@ -172,10 +154,19 @@ type Customer struct {
 	TaxID           string
 	BranchNo        string
 	Address         string
+	AddressDetail   thaiaddress.Address
 	PaymentTermDays int
 	TaxType         string
 	CreditLimit     *vo.Money
 	Status          string
+	Branches        []CustomerBranch // สาขาเพิ่มเติม — เฉพาะ Get (รายการไม่โหลด)
+}
+
+type CustomerBranch struct {
+	BranchNo      string
+	Name          string
+	Address       string
+	AddressDetail thaiaddress.Address
 }
 
 // SalesDocSummary คือหัวของใบเสนอราคา / ใบสั่งขาย
@@ -184,6 +175,7 @@ type SalesDocSummary struct {
 	DocumentNo       string // ว่างจนกว่าจะส่ง (QT) / อนุมัติ (SO)
 	Date             time.Time
 	Customer         Ref
+	CustomerBranchNo string
 	Reference        string
 	VatRate          vo.Money
 	PriceIncludesVat bool
@@ -280,41 +272,23 @@ type InvoiceSummary struct {
 	Outstanding  vo.Money
 }
 
+// BillTo คือผู้ซื้อตามใบกำกับภาษี ณ วันออก
+type BillTo struct {
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+}
+
 type Invoice struct {
 	InvoiceSummary
 	StockInfo
+	BillTo           BillTo
 	VatRate          vo.Money
 	PriceIncludesVat bool
 	Reference        string
 	Description      string
 	Lines            []InvoiceLine
-}
-
-type ReceiptLine struct {
-	Invoice Ref // Code = เลขที่ใบแจ้งหนี้
-	Amount  vo.Money
-	Wht     vo.Money
-}
-
-type ReceiptMethod struct {
-	CashAccountID string
-	GLAccountID   string
-	Amount        vo.Money
-	Reference     string
-}
-
-type ReceiptSummary struct {
-	PostedSummary
-	Amount   vo.Money
-	Wht      vo.Money
-	Received vo.Money
-}
-
-type Receipt struct {
-	ReceiptSummary
-	Description string
-	Lines       []ReceiptLine
-	Methods     []ReceiptMethod
 }
 
 type OutstandingRow struct {
@@ -361,4 +335,51 @@ type TaxReport struct {
 	Rows       listing.Result[TaxRow]
 	TotalBase  vo.Money
 	TotalTax   vo.Money
+}
+
+// ---------- การตัดยอดใบแจ้งหนี้ (เรียกโดย finance) ----------
+
+// SettlementDoc คือเอกสารรับเงินของ finance ที่ตัดยอด
+type SettlementDoc struct {
+	ID   uuid.UUID
+	No   string
+	Date time.Time
+}
+
+type SettlementLine struct {
+	InvoiceID vo.InvoiceID
+	Amount    vo.Money
+}
+
+type SettledInvoice struct {
+	ID         vo.InvoiceID
+	DocumentNo string
+	Net        vo.Money
+	Gross      vo.Money
+}
+
+// SettlementResult: ลูกค้า ณ วันรับเงิน + บัญชีลูกหนี้ (ค่าตั้งขาย) + ใบแจ้งหนี้ตามลำดับที่ส่งมา
+type SettlementParty struct {
+	ID       vo.CustomerID
+	Code     string
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+}
+
+type SettlementResult struct {
+	Customer    SettlementParty
+	ARAccountID vo.AccountID
+	Invoices    []SettledInvoice
+}
+
+type OpenInvoice struct {
+	ID          string
+	DocumentNo  string
+	Date        time.Time
+	DueDate     time.Time
+	Net         vo.Money
+	Gross       vo.Money
+	Outstanding vo.Money
 }

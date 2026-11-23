@@ -95,7 +95,7 @@ func TestItemRules(t *testing.T) {
 
 func TestAccountingSystemByFiscalYear(t *testing.T) {
 	changes := []SystemChange{{FromYear: 2026, System: vo.Periodic}, {FromYear: 2028, System: vo.Perpetual}}
-	for year, want := range map[int]vo.AccountingSystem{2025: vo.Perpetual, 2026: vo.Periodic, 2027: vo.Periodic, 2028: vo.Perpetual} {
+	for year, want := range map[int]vo.AccountingSystem{2025: vo.Periodic, 2026: vo.Periodic, 2027: vo.Periodic, 2028: vo.Perpetual} {
 		if got := SystemFor(changes, year); got != want {
 			t.Errorf("SystemFor(%d) = %s, want %s", year, got, want)
 		}
