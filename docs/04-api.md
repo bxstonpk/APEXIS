@@ -332,6 +332,19 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบส่งของ | `GET`, `POST /deliveries`; `GET`, `PATCH /deliveries/{deliveryID}` | `status, customer_id, order_id, start_date, end_date` | `sales.delivery:read\|post` |
 | ใบแจ้งหนี้ / ใบกำกับภาษี | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | เหมือนใบส่งของ | `sales.invoice:read\|post` |
 
+- ลูกค้า / ผู้ขาย: ที่อยู่ส่งเป็น `address_detail` ตามแบบกรมสรรพากร `{building, room_no, floor_no, village, house_no, moo, soi, yaek, street, sub_district, district, province, postal_code}` ("-" = ว่าง, รหัสไปรษณีย์ 5 หลัก, ผิด = 400 `invalid_address`); response มี `address` = ข้อความที่ประกอบแล้ว (กรุงเทพฯ ใช้ แขวง / เขต) ใช้พิมพ์ใบกำกับภาษีและเก็บ snapshot ในเอกสารการเงิน
+
+- **เลขผู้เสียภาษี 1 เลข = 1 รหัส** (ลูกค้า / ผู้ขาย, เฉพาะที่ไม่ว่าง): unique index `uq_sal_customers_tax_id` / `uq_pur_suppliers_tax_id` — ซ้ำ = 409 `tax_id_already_belongs_to_another_customer` / `..._supplier` (message มีรหัสเดิม)
+- **สาขา**: `branch_no` / `address_detail` ของลูกค้า = สาขาหลัก; สาขาอื่น `branches: [{branch_no, name, address_detail}]` (PUT แทนที่ทั้งชุด — ไม่ส่ง = ไม่มีสาขาอื่น; response มี `address` และส่งเฉพาะ GET รายตัว); เลขสาขาซ้ำ (รวมสาขาหลัก) = 400 `duplicate_customer_branch_number`
+- ใบเสนอราคา / ใบสั่งขายรับ `customer_branch_no` (ว่าง = สาขาหลัก; ไม่มีในลูกค้า = 422 `customer_branch_not_found`) — ใบสั่งขายจากใบเสนอราคาใช้สาขาตามใบเสนอราคา
+- ใบแจ้งหนี้ / ใบกำกับภาษีมี `bill_to {name, tax_id, branch_no, address}` = ผู้ซื้อ ณ วันออก (สาขาตามใบสั่งขาย) — แก้ทะเบียนลูกค้าภายหลังไม่กระทบ; รายงานภาษีขายใช้ค่านี้
+
+### ค้นหาผู้จดทะเบียน VAT (กรมสรรพากร — module `taxregistry`)
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET | `/companies/{companyID}/vat-registrants?tax_id=&branch_no=` | `sales.customer:manage` หรือ `purchasing.supplier:manage` | ค้นจากระบบผู้ประกอบการจด VAT ของกรมสรรพากร (ไม่บันทึกอะไร) — ตอบ `[{tax_id, branch_no, branch_name, name, tax_type, phone, vat_registered_on, address, address_detail}]` สำนักงานใหญ่ก่อน; ไม่พบ = 404 `vat_registrant_not_found`; ระบบสรรพากรติดต่อไม่ได้ / ช้าเกิน 10 วินาที = 503 `vat_registry_unavailable` |
+
 - ใบเสนอราคา `PATCH` รับ `sent` / `accepted` / `rejected`; ใบสั่งขาย `PATCH` รับ `approved` / `closed` / `cancelled` (approved ตอบ `warnings`)
 - ใบส่งของ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`
 
@@ -405,3 +418,17 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 ตอนเริ่มโปรแกรม `identity.RenamePermissions` แปลงสิทธิ์ของบทบาทเดิม (ทำซ้ำได้): `cashbank.account:*` → `finance.cash_account:*`, `sales.receipt:*` → `finance.receipt:*`,
 `purchasing.payment:*` → `finance.payment:*`; ผู้มี `purchasing.settings:*` / `purchasing.report:read` / `sales.report:read` ได้ `finance.settings:*` / `finance.report:read` เพิ่ม
+
+## Dashboard (ภาพรวมของแต่ละแอป)
+
+`GET /companies/{companyID}/dashboards/{app}?start_date=&end_date=` — ต้องส่งทั้งสองวัน (ผิด = 400 `invalid_query_parameter`), อ่านอย่างเดียวไม่ใช้ transaction, แต่ละ module ใช้ aggregate query ไม่เกิน ~5 ครั้ง
+
+| app | สิทธิ์ | เนื้อหา |
+|---|---|---|
+| `sales` | `sales.report:read` | ยอดขายก่อน VAT ช่วงนี้ / ช่วงก่อน, จำนวนใบกำกับภาษี, รายเดือนตามปีบัญชีที่ครอบคลุม end_date (`fiscal_year {year, start_date, end_date}`) + `previous_year` ปีบัญชีก่อนหน้าเดือนต่อเดือน (null เมื่อไม่มียอด; ไม่มีปีบัญชี = 12 เดือนล่าสุด และ `fiscal_year` = null), ใบเสนอราคารอตอบรับ, ใบสั่งขายร่าง / ค้างส่ง / ค้างออกบิล, ลูกหนี้ค้างรับ + เกินกำหนด + อายุหนี้ ณ end_date, ลูกค้า top 5 |
+| `purchasing` | `purchasing.report:read` | ยอดซื้อ (ตาม posting_date), 12 เดือน, ใบสั่งซื้อร่าง / ค้างรับ / ค้างรับใบแจ้งหนี้, เจ้าหนี้ค้างจ่าย + เกินกำหนด + ครบกำหนดใน 7 วัน + อายุหนี้, ผู้ขาย top 5 |
+| `inventory` | `inventory.report:read` | มูลค่าคงเหลือ ณ end_date (รวม / ตามคลัง), จำนวนสินค้านับสต็อก, ต่ำกว่าจุดสั่งซื้อ (10 อันดับ + จำนวนทั้งหมด), เอกสารรับ / เบิกในช่วง, มูลค่ารับเข้า / จ่ายออกรายเดือน (ไม่รวมโอนคลัง) |
+| `finance` | `finance.report:read` | ยอดบัญชีเงินสด / ธนาคารตามบัญชีแยกประเภท ณ end_date (รวมยอดยกมาจากสมุดรายวัน), เงินรับ / จ่ายจริง, กระแสสุทธิ, จำนวนโอน, 12 เดือน (ไม่รวมโอน), ภาษีหัก ณ ที่จ่าย (หักไว้ / ถูกหัก), รายการล่าสุด 6 รายการ |
+| `accounting` | `ledger.report:read` | รายได้ / ค่าใช้จ่าย / กำไรสุทธิช่วงนี้และช่วงก่อน (ไม่รวมบัญชีพัก), 12 เดือน, ยอดบัญชีพัก ณ end_date, จำนวนรายการบัญชี, รายการล่าสุด 5 รายการ, งวดบัญชีที่ครอบคลุม end_date |
+
+- "ช่วงก่อน" = จำนวนวันเท่ากันก่อน start_date; รายเดือน = 12 เดือนถึงเดือนของ end_date (เติม 0 ครบ 12 เดือน เรียงเก่า → ใหม่); จำนวนเงินเป็น string

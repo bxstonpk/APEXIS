@@ -22,6 +22,7 @@
 | `JWT_SECRET` | — | บังคับ, อย่างน้อย 32 ตัวอักษร (`openssl rand -base64 48`) |
 | `JWT_TTL` | `8h` | รูปแบบ Go duration |
 | `JWT_ISSUER` | `erp-api` | |
+| `VAT_REGISTRY_URL` | (endpoint ของกรมสรรพากร) | ค้นหาผู้จด VAT — ว่าง = `https://vsinter.rd.go.th/.../getVatInfo`; server ต้องออก internet ได้ (ไม่ได้ = ผู้ใช้กรอกเอง) |
 | `INITIAL_ADMIN_USERNAME` | — | อีเมลของผู้ดูแลระบบที่สร้างตอนเริ่มโปรแกรม (ถ้ายังไม่มี) — ต้องตั้งคู่กับ `INITIAL_ADMIN_PASSWORD`; ไม่ตั้งทั้งคู่ = ไม่ seed |
 | `INITIAL_ADMIN_PASSWORD` | — | 8–72 ตัวอักษร — ใช้ตอนสร้างครั้งแรกเท่านั้น (เริ่มโปรแกรมใหม่ไม่รีเซ็ตรหัสผ่าน) |
 
