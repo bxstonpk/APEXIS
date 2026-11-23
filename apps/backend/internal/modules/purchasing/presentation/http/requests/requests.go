@@ -5,6 +5,7 @@
 package requests
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"bytes"
 	"errors"
 	"fmt"
@@ -169,15 +170,16 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 
 // Supplier: POST / PUT /suppliers
 type Supplier struct {
-	Code            string `json:"code"`
-	Name            string `json:"name"`
-	TaxID           string `json:"tax_id"`
-	BranchNo        string `json:"branch_no"`
-	Address         string `json:"address"`
-	PaymentTermDays int    `json:"payment_term_days"`
-	VatRegistered   *bool  `json:"vat_registered"`
-	TaxType         string `json:"tax_type"` // individual (ภ.ง.ด.3) / juristic (ภ.ง.ด.53)
-	Status          string `json:"status"`
+	Code            string            `json:"code"`
+	Name            string            `json:"name"`
+	TaxID           string            `json:"tax_id"`
+	BranchNo        string            `json:"branch_no"`
+	AddressDetail   *thaiaddress.JSON `json:"address_detail"` // ที่อยู่ตามแบบสรรพากร (ไม่ส่ง = ว่าง)
+	PaymentTermDays int               `json:"payment_term_days"`
+	VatRegistered   *bool             `json:"vat_registered"`
+	TaxType         string            `json:"tax_type"` // individual (ภ.ง.ด.3) / juristic (ภ.ง.ด.53)
+	Status          string            `json:"status"`
+	Branches        []Branch          `json:"branches"` // สาขาเพิ่มเติม (แทนที่ทั้งชุด; ไม่ส่ง = ไม่มี)
 }
 
 func (r Supplier) ToData(isCreate bool) (entities.SupplierData, error) {
@@ -192,9 +194,25 @@ func (r Supplier) ToData(isCreate bool) (entities.SupplierData, error) {
 		return entities.SupplierData{}, err
 	}
 	return entities.SupplierData{
-		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address,
+		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, AddressDetail: r.AddressDetail.Address(),
 		PaymentTermDays: r.PaymentTermDays, VatRegistered: *r.VatRegistered, TaxType: vo.TaxType(r.TaxType), Status: st,
+		Branches: branches(r.Branches),
 	}, nil
+}
+
+// Branch คือสาขาเพิ่มเติมของผู้ขาย
+type Branch struct {
+	BranchNo      string            `json:"branch_no"`
+	Name          string            `json:"name"`
+	AddressDetail *thaiaddress.JSON `json:"address_detail"`
+}
+
+func branches(in []Branch) []entities.SupplierBranch {
+	out := make([]entities.SupplierBranch, len(in))
+	for i, b := range in {
+		out[i] = entities.SupplierBranch{BranchNo: b.BranchNo, Name: b.Name, AddressDetail: b.AddressDetail.Address()}
+	}
+	return out
 }
 
 // ---------- ใบสั่งซื้อ ----------
@@ -209,6 +227,7 @@ type OrderLine struct {
 // Order: POST / PUT /purchase-orders — price_includes_vat เลือกได้เฉพาะผู้ขายที่จด VAT
 type Order struct {
 	SupplierID       string      `json:"supplier_id"`
+	SupplierBranchNo string      `json:"supplier_branch_no"` // ว่าง = สาขาหลัก
 	Date             string      `json:"date"`
 	DeliveryDate     *string     `json:"delivery_date"`
 	Reference        string      `json:"reference"`
@@ -234,7 +253,7 @@ func (r Order) ToData() (entities.OrderData, error) {
 		return entities.OrderData{}, err
 	}
 	out := entities.OrderData{
-		SupplierID: supplier, Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description,
+		SupplierID: supplier, SupplierBranchNo: r.SupplierBranchNo, Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description,
 		PriceIncludesVat: r.PriceIncludesVat, Lines: make([]entities.OrderLineData, len(r.Lines)),
 	}
 	for i, l := range r.Lines {

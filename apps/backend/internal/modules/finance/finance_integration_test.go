@@ -106,7 +106,7 @@ func setup(t *testing.T) api {
 		}
 	}
 	for _, migrate := range []func(*gorm.DB) error{
-		identity.Migrate, organization.Migrate, ledger.Migrate, inventory.Migrate, finance.Migrate, purchasing.Migrate, sales.Migrate,
+		identity.Migrate, organization.Migrate, ledger.Migrate, inventory.Migrate, finance.Migrate, func(db *gorm.DB) error { _, err := purchasing.Migrate(db); return err }, func(db *gorm.DB) error { _, err := sales.Migrate(db); return err },
 	} {
 		if err := migrate(db); err != nil {
 			t.Fatal(err)

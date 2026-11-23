@@ -2,6 +2,8 @@
 package handlers
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
+	"apexis/backend/internal/platform/thaiaddress"
 	"context"
 	"errors"
 	"net/http"
@@ -46,22 +48,23 @@ var errorMapper = func() *httpx.ErrorMapper {
 		{Err: domain.ErrForbidden, Status: http.StatusForbidden}, {Err: integration.ErrRejected, Status: rejected}}
 	for status, errs := range map[int][]error{
 		bad: {domain.ErrInvalidID, domain.ErrInvalidCode, domain.ErrInvalidName, domain.ErrInvalidText, domain.ErrInvalidStatus,
-			domain.ErrInvalidDate, domain.ErrInvalidTaxID, domain.ErrInvalidBranchNo, domain.ErrInvalidTerm, domain.ErrInvalidTaxType,
-			domain.ErrInvalidVatRate, domain.ErrInvalidAmount, domain.ErrInvalidLine},
+			domain.ErrInvalidDate, domain.ErrInvalidTaxID, domain.ErrInvalidBranchNo, domain.ErrDuplicateBranch, domain.ErrInvalidTerm, domain.ErrInvalidTaxType,
+			domain.ErrInvalidVatRate, domain.ErrInvalidAmount, domain.ErrInvalidLine, thaiaddress.ErrInvalidAddress},
 		notFound: {domain.ErrCustomerNotFound, domain.ErrQuotationNotFound, domain.ErrOrderNotFound, domain.ErrDeliveryNotFound,
 			domain.ErrInvoiceNotFound, domain.ErrItemNotFound},
-		conflict: {domain.ErrCodeExists, domain.ErrInUse, domain.ErrDocumentNoUsed, domain.ErrQuotationUsed},
+		conflict: {domain.ErrCodeExists, domain.ErrTaxIDExists, domain.ErrInUse, domain.ErrDocumentNoUsed, domain.ErrQuotationUsed},
 		rejected: {domain.ErrCompanyInactive, domain.ErrCustomerInactive, domain.ErrItemInactive, domain.ErrVatNotApplicable,
 			domain.ErrNotDraft, domain.ErrQuotationState, domain.ErrQuotationExpired, domain.ErrOrderNotApproved, domain.ErrOrderNotOpen,
 			domain.ErrOrderHasActivity, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrAlreadyCancelled,
 			domain.ErrInvoicePaid, domain.ErrOverReceipt, domain.ErrInvoiceNotPayable, domain.ErrNoFiscalPeriod,
-			domain.ErrPeriodClosed, domain.ErrSettingsMissing, domain.ErrAccountInvalid, domain.ErrJournalInvalid, domain.ErrWarehouseRequired},
+			domain.ErrPeriodClosed, domain.ErrSettingsMissing, domain.ErrAccountInvalid, domain.ErrJournalInvalid, domain.ErrWarehouseRequired, domain.ErrBranchNotFound},
 	} {
 		for _, e := range errs {
 			rules = append(rules, httpx.ErrorRule{Err: e, Status: status})
 		}
 	}
-	return httpx.NewErrorMapper(rules, requests.ErrValidation, integration.ErrRejected, domain.ErrInvalidAmount, domain.ErrInvalidLine,
+	return httpx.NewErrorMapper(rules, requests.ErrValidation, integration.ErrRejected, thaiaddress.ErrInvalidAddress,
+		domain.ErrDuplicateBranch, domain.ErrTaxIDExists, domain.ErrBranchNotFound, domain.ErrInvalidAmount, domain.ErrInvalidLine,
 		domain.ErrInvoiceNotFound, domain.ErrItemNotFound, domain.ErrItemInactive,
 		domain.ErrQuotationState, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrOverReceipt,
 		domain.ErrInvoiceNotPayable, domain.ErrSettingsMissing, domain.ErrAccountInvalid)
@@ -404,12 +407,25 @@ func report[F any, D any, B any](h *Handler, parse func(*http.Request) (F, error
 	})
 }
 
+// Dashboard: GET /dashboards/sales?start_date=&end_date= (บังคับทั้งคู่)
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		p, err := dashperiod.Parse(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		d, err := h.uc.Reports.Dashboard(r.Context(), dto.List[dashperiod.Period]{Actor: a, Filter: p})
+		return one(responses.FromDashboard(d), err)
+	})
+}
+
 // RegisterRoutes ผูก route ของ sales — ทุก route ต้อง Authenticate, สิทธิ์ตรวจใน use case, ค้นหาด้วย URL query
 func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handler) http.Handler) {
 	const base = "/api/v1/companies/{companyID}"
 	handle := func(pattern string, fn http.HandlerFunc) { mux.Handle(pattern, authenticate(fn)) }
 	uc := h.uc
 
+	handle("GET "+base+"/dashboards/sales", h.Dashboard)
 	handle("GET "+base+"/sales-settings", h.GetSettings)
 	handle("PUT "+base+"/sales-settings", h.UpdateSettings)
 

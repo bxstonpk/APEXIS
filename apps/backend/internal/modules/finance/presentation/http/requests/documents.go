@@ -464,6 +464,23 @@ func ParseWhtTypeFilter(v url.Values) (dto.WhtTypeFilter, error) {
 	return f, err
 }
 
+// ParseDateRange: start_date / end_date ต้องมีทั้งคู่ (YYYY-MM-DD) และ start <= end — รายงาน / dashboard
+func ParseDateRange(v url.Values) (time.Time, time.Time, error) {
+	var out [2]time.Time
+	for i, key := range []string{"start_date", "end_date"} {
+		raw := v.Get(key)
+		t, err := listing.ParseDate(raw)
+		if raw == "" || err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("%w: %s is required (YYYY-MM-DD)", listing.ErrInvalidQuery, key)
+		}
+		out[i] = t
+	}
+	if out[0].After(out[1]) {
+		return time.Time{}, time.Time{}, fmt.Errorf("%w: start_date must not be after end_date", listing.ErrInvalidQuery)
+	}
+	return out[0], out[1], nil
+}
+
 // ParseWithholding: GET /reports?book=withholding-tax|withholding-tax-received&start_date=&end_date=&form=pnd3|pnd53&party_id=&sort=&page=
 func ParseWithholding(v url.Values) (dto.WithholdingFilter, error) {
 	var f dto.WithholdingFilter
@@ -474,19 +491,8 @@ func ParseWithholding(v url.Values) (dto.WithholdingFilter, error) {
 	default:
 		return f, fmt.Errorf("%w: form must be pnd3 or pnd53", listing.ErrInvalidQuery)
 	}
-	for _, d := range []struct {
-		key string
-		dst *time.Time
-	}{{"start_date", &f.Start}, {"end_date", &f.End}} {
-		raw := v.Get(d.key)
-		t, err := listing.ParseDate(raw)
-		if raw == "" || err != nil {
-			return f, fmt.Errorf("%w: %s is required (YYYY-MM-DD)", listing.ErrInvalidQuery, d.key)
-		}
-		*d.dst = t
-	}
-	if f.Start.After(f.End) {
-		return f, fmt.Errorf("%w: start_date must not be after end_date", listing.ErrInvalidQuery)
+	if f.Start, f.End, err = ParseDateRange(v); err != nil {
+		return f, err
 	}
 	if f.PartyID, err = optUUIDParam(v, "party_id"); err != nil {
 		return f, err

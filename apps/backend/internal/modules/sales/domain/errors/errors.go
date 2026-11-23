@@ -14,6 +14,7 @@ var (
 	ErrInvalidDate     = errors.New("invalid date")
 	ErrInvalidTaxID    = errors.New("tax id must be 13 digits")
 	ErrInvalidBranchNo = errors.New("branch number must be 5 digits")
+	ErrDuplicateBranch = errors.New("duplicate customer branch number") // detailed
 	ErrInvalidTerm     = errors.New("payment term must be 0 to 365 days")
 	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
 	ErrInvalidVatRate  = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
@@ -37,6 +38,7 @@ var (
 	ErrInUse          = errors.New("record is referenced by other records")
 	ErrDocumentNoUsed = errors.New("document number is already used (check the document number format)")
 	ErrQuotationUsed  = errors.New("quotation already has a sales order")
+	ErrTaxIDExists    = errors.New("tax id already belongs to another customer") // detailed: รหัสที่มีอยู่ — เพิ่มสาขาที่รหัสนั้นแทน
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -64,20 +66,21 @@ var (
 	ErrAccountInvalid    = errors.New("account cannot be used for posting (not found, header or inactive)") // detailed
 	ErrJournalInvalid    = errors.New("journal not found or inactive")
 	ErrWarehouseRequired = errors.New("warehouse_id is required to deliver stock items")
+	ErrBranchNotFound    = errors.New("customer branch not found") // detailed
 )
 
 var ErrForbidden = errors.New("permission denied")
 
 var all = []error{
 	ErrInvalidID, ErrInvalidCode, ErrInvalidName, ErrInvalidText, ErrInvalidStatus, ErrInvalidDate, ErrInvalidTaxID,
-	ErrInvalidBranchNo, ErrInvalidTerm, ErrInvalidTaxType, ErrInvalidVatRate, ErrInvalidAmount, ErrInvalidLine,
+	ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidTaxType, ErrInvalidVatRate, ErrInvalidAmount, ErrInvalidLine,
 	ErrCustomerNotFound, ErrQuotationNotFound, ErrOrderNotFound, ErrDeliveryNotFound, ErrInvoiceNotFound,
 	ErrItemNotFound,
-	ErrCodeExists, ErrInUse, ErrDocumentNoUsed, ErrQuotationUsed,
+	ErrCodeExists, ErrInUse, ErrDocumentNoUsed, ErrQuotationUsed, ErrTaxIDExists,
 	ErrCompanyInactive, ErrCustomerInactive, ErrItemInactive, ErrVatNotApplicable, ErrNotDraft, ErrQuotationState,
 	ErrQuotationExpired, ErrOrderNotApproved, ErrOrderNotOpen, ErrOrderHasActivity, ErrOverDelivery, ErrOverInvoice,
 	ErrDeliveryInvoiced, ErrAlreadyCancelled, ErrInvoicePaid, ErrOverReceipt, ErrInvoiceNotPayable,
-	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired,
+	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired, ErrBranchNotFound,
 	ErrForbidden,
 }
 

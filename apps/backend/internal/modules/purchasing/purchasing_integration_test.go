@@ -93,7 +93,7 @@ func setup(t *testing.T) api {
 	for _, tbl := range []string{
 		"purchasing_invoice_settlements",
 		"purchasing_invoice_lines", "purchasing_invoices", "purchasing_receipt_lines", "purchasing_receipts",
-		"purchasing_order_lines", "purchasing_orders", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
+		"purchasing_order_lines", "purchasing_orders", "purchasing_supplier_branches", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
 		"inventory_allocations", "inventory_movements", "inventory_layers", "inventory_sequences", "inventory_number_sequences", "inventory_document_lines",
 		"inventory_documents", "inventory_items", "inventory_warehouses", "inventory_item_categories", "inventory_uoms",
@@ -111,7 +111,7 @@ func setup(t *testing.T) api {
 		func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) },
 		func() error { return inventory.Migrate(db) },
-		func() error { return purchasing.Migrate(db) },
+		func() error { _, err := purchasing.Migrate(db); return err },
 	} {
 		if err := migrate(); err != nil {
 			t.Fatal(err)
@@ -178,13 +178,23 @@ func TestPurchasingFlow(t *testing.T) {
 	a.expect(a.do("PUT", base+"/purchasing-settings", owner, settings), 200, "settings")
 
 	// ---------- ผู้ขาย ----------
-	supplier := func(code string, vat bool) string {
+	// เลขผู้เสียภาษี 1 เลข = ผู้ขาย 1 รหัส
+	supplier := func(code, taxID string, vat bool) string {
 		t.Helper()
-		return a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": code, "name": code, "tax_id": "0105551234567", "payment_term_days": 30, "vat_registered": vat, "tax_type": "juristic"}), 201, "supplier "+code).id()
+		return a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": code, "name": code, "tax_id": taxID, "payment_term_days": 30, "vat_registered": vat, "tax_type": "juristic"}), 201, "supplier "+code).id()
 	}
-	vatSup, plainSup := supplier("V", true), supplier("N", false)
+	vatSup, plainSup := supplier("V", "0105551234567", true), supplier("N", "0105557654321", false)
 	a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "X", "name": "x", "tax_id": "123", "vat_registered": true, "tax_type": "juristic"}), 400, "bad tax id")
 	a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "X", "name": "x"}), 400, "vat_registered missing")
+	sup := a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "ADDR", "name": "ผู้ขายที่อยู่", "vat_registered": true, "tax_type": "juristic",
+		"address_detail": obj{"house_no": "72/7", "moo": "3", "sub_district": "ท่าทราย", "district": "เมืองสมุทรสาคร", "province": "สมุทรสาคร", "postal_code": "74000"}}), 201, "supplier address").data()
+	if sup["address"] != "เลขที่ 72/7 หมู่ที่ 3 ตำบลท่าทราย อำเภอเมืองสมุทรสาคร จังหวัดสมุทรสาคร 74000" {
+		t.Fatalf("supplier address = %v", sup["address"])
+	}
+	got := a.expect(a.do("GET", base+"/suppliers/"+sup["id"].(string), owner, nil), 200, "supplier get").data()
+	if got["address_detail"].(obj)["moo"] != "3" {
+		t.Fatalf("supplier address_detail = %v", got["address_detail"])
+	}
 
 	// ---------- ใบสั่งซื้อ: VAT ตามผู้ขาย ณ ตอนสร้าง ----------
 	line := func(item, qty, price string) obj { return obj{"item_id": item, "quantity": qty, "unit_price": price} }

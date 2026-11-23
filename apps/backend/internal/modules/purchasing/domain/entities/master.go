@@ -5,6 +5,7 @@
 package entities
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"fmt"
 	"strings"
 
@@ -76,10 +77,12 @@ type SupplierData struct {
 	TaxID           string
 	BranchNo        string // เลขสาขาตามใบกำกับภาษี (00000 = สำนักงานใหญ่)
 	Address         string
+	AddressDetail   thaiaddress.Address // ที่อยู่ตามแบบสรรพากร — Address = ข้อความที่ประกอบจากช่องเหล่านี้
 	PaymentTermDays int
 	VatRegistered   bool       // จด VAT: ใบสั่งซื้อที่สร้างหลังจากนี้คิด VAT ตามอัตราที่ตั้ง
 	TaxType         vo.TaxType // บุคคลธรรมดา (ภ.ง.ด.3) / นิติบุคคล (ภ.ง.ด.53)
 	Status          vo.Status
+	Branches        []SupplierBranch // สาขาเพิ่มเติม (ไม่รวมสาขาหลัก)
 }
 
 // Supplier คือผู้ขาย — แก้สถานะจด VAT ได้ มีผลกับใบสั่งซื้อที่สร้างหลังจากแก้เท่านั้น
@@ -138,9 +141,10 @@ func normalizeSupplier(d SupplierData) (SupplierData, error) {
 	if out.BranchNo, err = vo.BranchNo(d.BranchNo); err != nil {
 		return SupplierData{}, err
 	}
-	if out.Address, err = vo.OptionalText(d.Address, 500); err != nil {
+	if out.AddressDetail, err = thaiaddress.New(d.AddressDetail); err != nil {
 		return SupplierData{}, err
 	}
+	out.Address = out.AddressDetail.Format()
 	if d.PaymentTermDays < 0 || d.PaymentTermDays > 365 {
 		return SupplierData{}, domain.ErrInvalidTerm
 	}
@@ -149,6 +153,9 @@ func normalizeSupplier(d SupplierData) (SupplierData, error) {
 		return SupplierData{}, err
 	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
+		return SupplierData{}, err
+	}
+	if out.Branches, err = normalizeBranches(out.BranchNo, d.Branches); err != nil {
 		return SupplierData{}, err
 	}
 	return out, nil

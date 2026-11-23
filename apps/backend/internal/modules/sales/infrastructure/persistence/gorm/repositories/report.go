@@ -215,7 +215,9 @@ func (r *ReportRepository) taxReport(base func() *gorm.DB, columns string, f dto
 	return res, totals, nil
 }
 
-const taxCustomer = `c.id AS customer_id, c.code AS customer_code, c.name AS customer_name, c.tax_id, c.branch_no, c.tax_type`
+// taxCustomer: ชื่อ / เลขผู้เสียภาษี / สาขาตามใบกำกับภาษี ณ วันออก (bill_to_*) — ไม่ใช่ทะเบียนลูกค้าปัจจุบัน
+const taxCustomer = `c.id AS customer_id, c.code AS customer_code, d.bill_to_name AS customer_name, d.bill_to_tax_id AS tax_id,
+	d.bill_to_branch_no AS branch_no, c.tax_type`
 
 // OutputVat: ใบแจ้งหนี้ / ใบกำกับภาษี (ยังไม่ยกเลิก) ในช่วงวันที่ — ฐาน = ยอดก่อน VAT
 func (r *ReportRepository) OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error) {

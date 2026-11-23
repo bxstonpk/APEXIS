@@ -4,6 +4,7 @@
 package repositories
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
 
 	"github.com/google/uuid"
@@ -26,6 +27,8 @@ type SupplierRepository interface {
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.SupplierID) error // soft delete
 	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.SupplierID) (*entities.Supplier, error)
 	InUse(ctx context.Context, companyID vo.CompanyID, id vo.SupplierID) (bool, error)
+	// TaxIDOwner: รหัสผู้ขายอื่นที่ใช้เลขผู้เสียภาษีนี้อยู่ ("" = ไม่มี) — ใช้แจ้ง error ที่อ่านเข้าใจได้ (DB unique index เป็นตัวกันจริง)
+	TaxIDOwner(ctx context.Context, companyID vo.CompanyID, taxID string, except *vo.SupplierID) (string, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.SupplierID) (dto.Supplier, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.SupplierFilter) (listing.Result[dto.Supplier], error)
 }
@@ -84,4 +87,6 @@ type ReportRepository interface {
 	Outstanding(ctx context.Context, companyID vo.CompanyID, f dto.OutstandingFilter) (listing.Result[dto.OutstandingRow], error)
 	// Aging: ใบแจ้งหนี้ที่ลงบัญชีถึงวันที่ asOf (ยังไม่ยกเลิก) ตามอายุนับจากวันครบกำหนด — แบ่งหน้าใน DB
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
+	// Dashboard: ภาพรวมแอปจัดซื้อในช่วง (aggregate ไม่กี่ query)
+	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
 }

@@ -22,7 +22,6 @@ import (
 	domain "apexis/backend/internal/modules/sales/domain/errors"
 	vo "apexis/backend/internal/modules/sales/domain/value_objects"
 	gp "apexis/backend/internal/modules/sales/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/sales/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/sales/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/sales/infrastructure/services"
 	"apexis/backend/internal/modules/sales/presentation/http/handlers"
@@ -85,7 +84,8 @@ func DocumentTypes() []integration.DocumentType {
 	return out
 }
 
-func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+// Migrate: คืนลูกค้ารหัสซ้ำที่ถูกรวม (finance ต้องปรับ id คู่ค้าในใบรับเงินตาม — ดู main.go)
+func Migrate(db *gorm.DB) ([]integration.PartyMerge, error) { return gp.Migrate(db) }
 
 // ---------- public API สำหรับ finance (เรียกภายใน transaction ของ finance) ----------
 

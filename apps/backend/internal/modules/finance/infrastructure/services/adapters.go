@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"apexis/backend/internal/modules/finance/application/ports"
 	domain "apexis/backend/internal/modules/finance/domain/errors"
@@ -80,6 +81,7 @@ type LedgerAccess interface {
 	ReverseEntry(ctx context.Context, companyID, userID, entryID uuid.UUID, date time.Time, description string) (integration.PostedEntry, error)
 	InvalidPostingAccounts(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID) ([]uuid.UUID, error)
 	JournalUsable(ctx context.Context, companyID, journalID uuid.UUID) (bool, error)
+	AccountBalances(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID, asOf time.Time) (map[uuid.UUID]decimal.Decimal, error)
 }
 
 var _ ports.Ledger = (*Ledger)(nil)
@@ -97,6 +99,19 @@ func (l *Ledger) InvalidAccounts(ctx context.Context, companyID vo.CompanyID, id
 	out := make([]vo.GLAccountID, len(bad))
 	for i, id := range bad {
 		out[i] = vo.GLAccountID(id)
+	}
+	return out, err
+}
+
+func (l *Ledger) Balances(ctx context.Context, companyID vo.CompanyID, ids []vo.GLAccountID, asOf time.Time) (map[vo.GLAccountID]vo.Money, error) {
+	raw := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		raw[i] = uuid.UUID(id)
+	}
+	b, err := l.ledger.AccountBalances(ctx, uuid.UUID(companyID), raw, asOf)
+	out := make(map[vo.GLAccountID]vo.Money, len(b))
+	for id, v := range b {
+		out[vo.GLAccountID(id)] = v
 	}
 	return out, err
 }

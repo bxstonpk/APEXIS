@@ -35,6 +35,7 @@ type SalesDocRow struct {
 	CustomerID       uuid.UUID
 	CustomerCode     string
 	CustomerName     string
+	CustomerBranchNo string
 	Reference        string
 	VatRate          decimal.Decimal
 	PriceIncludesVat bool
@@ -48,7 +49,7 @@ type SalesDocRow struct {
 func (r SalesDocRow) summary() dto.SalesDocSummary {
 	out := dto.SalesDocSummary{
 		ID: r.ID.String(), Date: dateUTC(r.DocDate), Customer: dto.Ref{ID: r.CustomerID.String(), Code: r.CustomerCode, Name: r.CustomerName},
-		Reference: r.Reference, VatRate: r.VatRate, PriceIncludesVat: r.PriceIncludesVat,
+		CustomerBranchNo: r.CustomerBranchNo, Reference: r.Reference, VatRate: r.VatRate, PriceIncludesVat: r.PriceIncludesVat,
 		Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross}, Status: r.Status,
 	}
 	if r.DocumentNo != nil {
@@ -58,7 +59,7 @@ func (r SalesDocRow) summary() dto.SalesDocSummary {
 }
 
 func (t salesDocTable) columns() string {
-	return `d.id, d.` + t.noColumn + ` AS document_no, d.doc_date, d.customer_id, c.code AS customer_code, c.name AS customer_name,
+	return `d.id, d.` + t.noColumn + ` AS document_no, d.doc_date, d.customer_id, c.code AS customer_code, c.name AS customer_name, d.customer_branch_no,
 		d.reference, d.vat_rate, d.price_includes_vat, d.total_net, d.total_vat, d.total_gross, d.status`
 }
 
@@ -158,7 +159,7 @@ func (r *QuotationRepository) Update(ctx context.Context, q *entities.Quotation)
 	}
 	m := gp.QuotationToModel(q)
 	res := tx.Model(&models.QuotationModel{}).Where("company_id = ? AND id = ? AND status = 'draft'", m.CompanyID, m.ID).
-		Select("customer_id", "doc_date", "valid_until", "reference", "description", "vat_registered", "vat_rate", "price_includes_vat",
+		Select("customer_id", "customer_branch_no", "doc_date", "valid_until", "reference", "description", "vat_registered", "vat_rate", "price_includes_vat",
 			"payment_term_days", "total_net", "total_vat", "total_gross", "updated_at").Updates(&m)
 	if res.Error != nil {
 		return res.Error
@@ -275,7 +276,7 @@ func (r *OrderRepository) Update(ctx context.Context, o *entities.Order) error {
 	}
 	m := gp.OrderToModel(o)
 	res := tx.Model(&models.OrderModel{}).Where("company_id = ? AND id = ? AND status = 'draft'", m.CompanyID, m.ID).
-		Select("customer_id", "doc_date", "delivery_date", "reference", "description", "vat_registered", "vat_rate", "price_includes_vat",
+		Select("customer_id", "customer_branch_no", "doc_date", "delivery_date", "reference", "description", "vat_registered", "vat_rate", "price_includes_vat",
 			"payment_term_days", "total_net", "total_vat", "total_gross", "updated_at").Updates(&m)
 	if res.Error != nil {
 		return res.Error

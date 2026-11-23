@@ -1,7 +1,9 @@
 package usecases
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -266,8 +268,9 @@ func (uc *DeliveryUseCases) Cancel(ctx context.Context, in dto.ByID[vo.DeliveryI
 
 type InvoiceUseCases struct {
 	base
-	invoices repositories.InvoiceRepository
-	orders   repositories.OrderRepository
+	invoices  repositories.InvoiceRepository
+	orders    repositories.OrderRepository
+	customers repositories.CustomerRepository
 }
 
 func (uc *InvoiceUseCases) Get(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
@@ -360,8 +363,12 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 		if err := o.Invoice(ships, s.QuantityDecimals, in.Data.WithDelivery, uc.now()); err != nil {
 			return err
 		}
+		billTo, err := uc.billTo(ctx, in.CompanyID, st.Data.CustomerID, st.Data.CustomerBranchNo)
+		if err != nil {
+			return err
+		}
 		inv, err := entities.NewInvoice(entities.InvoiceState{
-			CompanyID: in.CompanyID, OrderID: o.ID(), CustomerID: st.Data.CustomerID, Date: in.Data.Date,
+			CompanyID: in.CompanyID, OrderID: o.ID(), CustomerID: st.Data.CustomerID, BillTo: billTo, Date: in.Data.Date,
 			Reference: in.Data.Reference, Description: in.Data.Description, Vat: st.Terms.Vat,
 			WithDelivery: in.Data.WithDelivery, Stock: stock, Lines: lines,
 			Posting: entities.Posting{DocumentNo: no, FiscalYear: period.FiscalYear, PeriodID: period.ID, By: in.UserID, At: uc.now()},
@@ -392,6 +399,20 @@ func (uc *InvoiceUseCases) Create(ctx context.Context, in dto.Create[dto.Invoice
 		return dto.Invoice{}, err
 	}
 	return uc.get(ctx, in.CompanyID, id)
+}
+
+// billTo: ผู้ซื้อ ณ วันออกใบ — ชื่อ / เลขผู้เสียภาษีของลูกค้า + เลขสาขา / ที่อยู่ของสาขาตามใบสั่งขาย
+func (uc *InvoiceUseCases) billTo(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID, branchNo string) (entities.BillTo, error) {
+	c, err := uc.customers.FindByID(ctx, companyID, customerID)
+	if err != nil {
+		return entities.BillTo{}, err
+	}
+	b, err := c.Branch(branchNo)
+	if err != nil {
+		return entities.BillTo{}, err
+	}
+	d := c.Data()
+	return entities.BillTo{Name: d.Name, TaxID: d.TaxID, BranchNo: b.BranchNo, Address: b.Address}, nil
 }
 
 // Cancel: ใบที่รับเงินแล้วต้องยกเลิกใบเสร็จก่อน; รวมใบ = คืนสต็อกด้วย; กลับรายการ ณ วันที่เดิม
@@ -452,6 +473,22 @@ func (uc *ReportUseCases) Outstanding(ctx context.Context, in dto.List[dto.Outst
 			refs[i] = &res.Items[i].Item
 		}
 		return res, uc.itemRefs(ctx, in.CompanyID, refs)
+	})
+}
+
+// Dashboard: ภาพรวมแอปขาย — สิทธิ์เดียวกับรายงาน (sales.report:read), อ่านอย่างเดียว ไม่ใช้ transaction
+func (uc *ReportUseCases) Dashboard(ctx context.Context, in dto.List[dashperiod.Period]) (dto.Dashboard, error) {
+	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Dashboard, error) {
+		// กราฟรายเดือน = ปีบัญชีที่ครอบคลุม end_date (เดือนเริ่มงวด -> สิ้นงวด) เทียบปีก่อนหน้า; ไม่มีปีบัญชี = 12 เดือนล่าสุด
+		p := in.Filter
+		fy, err := uc.org.PeriodAt(ctx, in.CompanyID, p.End)
+		switch {
+		case err == nil:
+			p = p.InFiscalYear(fy.FiscalYear, fy.YearStart)
+		case !errors.Is(err, domain.ErrNoFiscalPeriod):
+			return dto.Dashboard{}, err
+		}
+		return uc.reports.Dashboard(ctx, in.CompanyID, p)
 	})
 }
 

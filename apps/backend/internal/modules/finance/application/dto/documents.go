@@ -253,3 +253,47 @@ type Withholding struct {
 	Rows       listing.Result[WithholdingRow]
 	Totals     WithholdingTotals
 }
+
+// ---------- dashboard ----------
+
+// DashboardCashAccount คือทะเบียนเงินที่ใช้งาน + บัญชีแยกประเภทที่ผูก (ยอดคงเหลือมาจาก ledger)
+type DashboardCashAccount struct {
+	Account     Ref
+	Type        string
+	GLAccountID vo.GLAccountID
+	Balance     vo.Money
+}
+
+// FlowTotals คือยอดเงินเข้า-ออกของช่วง
+type FlowTotals struct {
+	Received      vo.Money // เงินที่ได้รับจริง (หลังภาษีถูกหัก)
+	Paid          vo.Money // เงินที่จ่ายจริง (หลังภาษีหัก ณ ที่จ่าย)
+	TransferCount int64
+	WhtDeducted   vo.Money // ภาษีที่เราหักไว้จากใบจ่าย (ต้องนำส่ง ภ.ง.ด.3 / 53)
+	WhtSuffered   vo.Money // ภาษีที่ลูกค้าหักจากใบรับ
+}
+
+type MonthlyFlow struct {
+	Month    time.Time // วันที่ 1 ของเดือน
+	Received vo.Money
+	Paid     vo.Money
+}
+
+type RecentDocument struct {
+	Kind       string // receipt | payment | transfer
+	ID         string
+	DocumentNo string
+	Date       time.Time
+	Party      string
+	Amount     vo.Money
+}
+
+type FinanceDashboard struct {
+	Start        time.Time
+	End          time.Time
+	CashAccounts []DashboardCashAccount
+	CashTotal    vo.Money
+	Flows        FlowTotals
+	Monthly      []MonthlyFlow
+	Recent       []RecentDocument
+}

@@ -232,6 +232,21 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 	handle("POST "+base+"/cash-transfers", createDoc[requests.Transfer](h, uc.Transfers.Create, responses.FromTransfer))
 	handle("GET "+base+"/cash-transfers/{transferID}", getDoc(h, "transferID", uc.Transfers.Get, responses.FromTransfer))
 	handle("PATCH "+base+"/cash-transfers/{transferID}", cancelDoc(h, "transferID", uc.Transfers.Cancel, responses.FromTransfer))
+
+	// ภาพรวมแอปการเงิน (ต้องมี finance.report:read)
+	handle("GET "+base+"/dashboards/finance", h.Dashboard)
+}
+
+// Dashboard: GET /api/v1/companies/{companyID}/dashboards/finance?start_date=&end_date=
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		start, end, err := requests.ParseDateRange(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		d, err := h.uc.Reports.Dashboard(r.Context(), a, start, end)
+		return one(responses.FromFinanceDashboard(d), err)
+	})
 }
 
 // RegisterReports ลงทะเบียนรายงานของ finance กับ GET /reports?book=

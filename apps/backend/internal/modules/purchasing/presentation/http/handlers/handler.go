@@ -3,6 +3,7 @@
 package handlers
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"context"
 	"errors"
 	"net/http"
@@ -52,6 +53,8 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidVatRate, Status: badRequest},
 	{Err: domain.ErrInvalidLine, Status: badRequest},
 	{Err: domain.ErrInvalidTaxType, Status: badRequest},
+	{Err: thaiaddress.ErrInvalidAddress, Status: badRequest},
+	{Err: domain.ErrDuplicateBranch, Status: badRequest},
 	{Err: errUnauthenticated, Status: http.StatusUnauthorized},
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
 	{Err: domain.ErrSupplierNotFound, Status: notFound},
@@ -61,6 +64,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrItemNotFound, Status: notFound},
 	{Err: domain.ErrCodeExists, Status: conflict},
 	{Err: domain.ErrInUse, Status: conflict},
+	{Err: domain.ErrTaxIDExists, Status: conflict},
 	{Err: domain.ErrInvoiceNoExists, Status: conflict},
 	{Err: domain.ErrDocumentNoUsed, Status: conflict},
 	{Err: domain.ErrCompanyInactive, Status: rejected},
@@ -85,9 +89,10 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrOverPayment, Status: rejected},
 	{Err: domain.ErrInvoiceNotPayable, Status: rejected},
 	{Err: domain.ErrInactiveRef, Status: rejected},
+	{Err: domain.ErrBranchNotFound, Status: rejected},
 	// กฎของ inventory / ledger (สต็อก, งวด, บัญชี) — ข้อความมาจาก domain error ของ module นั้น
 	{Err: integration.ErrRejected, Status: rejected},
-}, requests.ErrValidation, domain.ErrInvalidLine, domain.ErrItemNotFound, domain.ErrItemInactive, domain.ErrOverReceipt,
+}, requests.ErrValidation, thaiaddress.ErrInvalidAddress, domain.ErrDuplicateBranch, domain.ErrTaxIDExists, domain.ErrBranchNotFound, domain.ErrInvalidLine, domain.ErrItemNotFound, domain.ErrItemInactive, domain.ErrOverReceipt,
 	domain.ErrOverInvoice, domain.ErrReceiptInvoiced, domain.ErrSettingsMissing, domain.ErrAccountInvalid, integration.ErrRejected,
 	domain.ErrOverPayment,
 	domain.ErrInvoiceNotPayable, domain.ErrInactiveRef)

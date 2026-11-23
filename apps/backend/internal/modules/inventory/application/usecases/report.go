@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
 
 	"apexis/backend/internal/modules/inventory/application/dto"
@@ -14,6 +15,14 @@ type ReportUseCases struct {
 	stock      repositories.StockRepository
 	items      repositories.ItemRepository
 	warehouses repositories.WarehouseRepository
+}
+
+// Dashboard: ภาพรวมคลังสินค้า — สิทธิ์เดียวกับรายงาน (inventory.report:read), อ่านอย่างเดียว ไม่ใช้ transaction
+func (uc *ReportUseCases) Dashboard(ctx context.Context, in dto.List[dashperiod.Period]) (dto.Dashboard, error) {
+	if err := uc.authorize(ctx, in.Actor, vo.PermReportRead); err != nil {
+		return dto.Dashboard{}, err
+	}
+	return uc.stock.Dashboard(ctx, in.CompanyID, in.Filter)
 }
 
 // StockOnHand ยอดคงเหลือ ณ วันที่ ต่อสินค้า × คลัง — 1 query (แบ่งหน้า + มูลค่ารวมด้วย window function)

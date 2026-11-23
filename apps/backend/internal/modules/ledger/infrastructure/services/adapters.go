@@ -42,6 +42,7 @@ type OrganizationAccess interface {
 	CompanySettings(ctx context.Context, companyID uuid.UUID) (active bool, amountDecimals, quantityDecimals int, err error)
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
+	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
@@ -64,6 +65,14 @@ func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, dat
 		return ports.Period{}, domain.ErrNoFiscalPeriod
 	}
 	return ports.Period{ID: vo.FiscalPeriodID(id), FiscalYear: year, YearStart: yearStart, Open: open}, nil
+}
+
+func (o *Organization) PeriodRange(ctx context.Context, companyID vo.CompanyID, date time.Time) (*ports.PeriodRange, error) {
+	id, year, start, end, open, err := o.org.FiscalPeriodRange(ctx, uuid.UUID(companyID), date)
+	if err != nil || id == uuid.Nil {
+		return nil, err
+	}
+	return &ports.PeriodRange{FiscalYear: year, Start: start, End: end, Open: open}, nil
 }
 
 func (o *Organization) MissingDimensions(ctx context.Context, companyID vo.CompanyID, d ports.Dimensions) ([]string, error) {

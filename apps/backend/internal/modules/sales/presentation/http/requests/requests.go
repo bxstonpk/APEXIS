@@ -3,6 +3,7 @@
 package requests
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"bytes"
 	"errors"
 	"fmt"
@@ -173,15 +174,16 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 
 // Customer: POST / PUT /customers — credit_limit ไม่ส่ง / null = ไม่จำกัด
 type Customer struct {
-	Code            string   `json:"code"`
-	Name            string   `json:"name"`
-	TaxID           string   `json:"tax_id"`
-	BranchNo        string   `json:"branch_no"`
-	Address         string   `json:"address"`
-	PaymentTermDays int      `json:"payment_term_days"`
-	TaxType         string   `json:"tax_type"`
-	CreditLimit     *Decimal `json:"credit_limit"`
-	Status          string   `json:"status"`
+	Code            string            `json:"code"`
+	Name            string            `json:"name"`
+	TaxID           string            `json:"tax_id"`
+	BranchNo        string            `json:"branch_no"`
+	AddressDetail   *thaiaddress.JSON `json:"address_detail"` // ที่อยู่ตามแบบสรรพากร (ไม่ส่ง = ว่าง)
+	PaymentTermDays int               `json:"payment_term_days"`
+	TaxType         string            `json:"tax_type"`
+	CreditLimit     *Decimal          `json:"credit_limit"`
+	Status          string            `json:"status"`
+	Branches        []Branch          `json:"branches"` // สาขาเพิ่มเติม (แทนที่ทั้งชุด; ไม่ส่ง = ไม่มี)
 }
 
 func (r Customer) ToData(isCreate bool) (entities.CustomerData, error) {
@@ -197,9 +199,24 @@ func (r Customer) ToData(isCreate bool) (entities.CustomerData, error) {
 		return entities.CustomerData{}, err
 	}
 	return entities.CustomerData{
-		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address, PaymentTermDays: r.PaymentTermDays,
-		TaxType: vo.TaxType(r.TaxType), CreditLimit: limit, Status: st,
+		Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, AddressDetail: r.AddressDetail.Address(), PaymentTermDays: r.PaymentTermDays,
+		TaxType: vo.TaxType(r.TaxType), CreditLimit: limit, Status: st, Branches: branches(r.Branches),
 	}, nil
+}
+
+// Branch คือสาขาเพิ่มเติมของลูกค้า
+type Branch struct {
+	BranchNo      string            `json:"branch_no"`
+	Name          string            `json:"name"`
+	AddressDetail *thaiaddress.JSON `json:"address_detail"`
+}
+
+func branches(in []Branch) []entities.CustomerBranch {
+	out := make([]entities.CustomerBranch, len(in))
+	for i, b := range in {
+		out[i] = entities.CustomerBranch{BranchNo: b.BranchNo, Name: b.Name, AddressDetail: b.AddressDetail.Address()}
+	}
+	return out
 }
 
 // ---------- ใบเสนอราคา / ใบสั่งขาย ----------
@@ -238,6 +255,7 @@ func lines(in []Line) ([]entities.LineData, error) {
 // Quotation: POST / PUT /quotations
 type Quotation struct {
 	CustomerID       string `json:"customer_id"`
+	CustomerBranchNo string `json:"customer_branch_no"` // ว่าง = สาขาหลัก
 	Date             string `json:"date"`
 	ValidUntil       string `json:"valid_until"`
 	Reference        string `json:"reference"`
@@ -267,7 +285,7 @@ func (r Quotation) ToData() (entities.QuotationData, error) {
 		return entities.QuotationData{}, err
 	}
 	return entities.QuotationData{
-		CustomerID: customer, Date: d, ValidUntil: valid, Reference: r.Reference, Description: r.Description,
+		CustomerID: customer, CustomerBranchNo: r.CustomerBranchNo, Date: d, ValidUntil: valid, Reference: r.Reference, Description: r.Description,
 		PriceIncludesVat: r.PriceIncludesVat, Lines: ls,
 	}, nil
 }
@@ -276,6 +294,7 @@ func (r Quotation) ToData() (entities.QuotationData, error) {
 type Order struct {
 	QuotationID      *string `json:"quotation_id"`
 	CustomerID       string  `json:"customer_id"`
+	CustomerBranchNo string  `json:"customer_branch_no"` // ว่าง = สาขาหลัก (มาจากใบเสนอราคา = ตามใบเสนอราคา)
 	Date             string  `json:"date"`
 	DeliveryDate     *string `json:"delivery_date"`
 	Reference        string  `json:"reference"`
@@ -296,7 +315,7 @@ func (r Order) ToData(allowQuotation bool) (entities.OrderData, error) {
 	if err != nil {
 		return entities.OrderData{}, err
 	}
-	out := entities.OrderData{Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description, PriceIncludesVat: r.PriceIncludesVat}
+	out := entities.OrderData{CustomerBranchNo: r.CustomerBranchNo, Date: d, DeliveryDate: delivery, Reference: r.Reference, Description: r.Description, PriceIncludesVat: r.PriceIncludesVat}
 	if r.QuotationID != nil && *r.QuotationID != "" {
 		if !allowQuotation {
 			return entities.OrderData{}, invalid("quotation_id can only be set when creating a sales order")

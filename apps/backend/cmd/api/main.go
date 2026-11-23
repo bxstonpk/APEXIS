@@ -18,6 +18,7 @@ import (
 	"apexis/backend/internal/modules/organization"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
+	"apexis/backend/internal/modules/taxregistry"
 	"apexis/backend/internal/platform/config"
 	"apexis/backend/internal/platform/database"
 	"apexis/backend/internal/platform/permissions"
@@ -63,10 +64,20 @@ func run(logger *slog.Logger) error {
 	if err := finance.Migrate(db); err != nil {
 		return err
 	}
-	if err := purchasing.Migrate(db); err != nil {
+	// ผู้ขายรหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบจ่ายเงินของ finance ต้องชี้รหัสที่เก็บไว้
+	supplierMerges, err := purchasing.Migrate(db)
+	if err != nil {
 		return err
 	}
-	if err := sales.Migrate(db); err != nil {
+	if err := finance.RemapParties(db, "supplier", supplierMerges); err != nil {
+		return err
+	}
+	// ลูกค้ารหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบรับเงินของ finance ต้องชี้รหัสที่เก็บไว้
+	customerMerges, err := sales.Migrate(db)
+	if err != nil {
+		return err
+	}
+	if err := finance.RemapParties(db, "customer", customerMerges); err != nil {
 		return err
 	}
 	// สิทธิ์เดิมของบทบาทตามความรับผิดชอบที่ย้าย module (รับ / จ่ายเงิน -> finance) — ทำซ้ำได้
@@ -109,6 +120,8 @@ func run(logger *slog.Logger) error {
 	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing
 	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule)
 	financeModule.RegisterRoutes(mux)
+	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
+	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 
 	// รายงานทุก module ผ่าน endpoint เดียว: GET /reports?book=... (หน้ารายงานของ frontend เป็นหน้าเดียว)
 	reportBooks := reports.NewRegistry()

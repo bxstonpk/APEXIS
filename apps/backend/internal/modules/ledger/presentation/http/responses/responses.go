@@ -8,6 +8,7 @@
 package responses
 
 import (
+	"fmt"
 	"time"
 
 	"apexis/backend/internal/modules/ledger/application/dto"
@@ -287,4 +288,79 @@ func FromIncomeStatement(s dto.IncomeStatement) IncomeStatement {
 		Expenses: lines(s.Expenses), TotalExpenses: s.TotalExpenses.String(), NetIncome: s.NetIncome.String(),
 		Suspense: lines(s.Suspense), TotalSuspense: s.TotalSuspense.String(),
 	}
+}
+
+// ---------- dashboard ----------
+
+type IncomeSummary struct {
+	Revenue   string `json:"revenue"`
+	Expense   string `json:"expense"`
+	NetIncome string `json:"net_income"`
+}
+
+type MonthlyIncome struct {
+	Month   string `json:"month"` // YYYY-MM
+	Revenue string `json:"revenue"`
+	Expense string `json:"expense"`
+}
+
+type EntryCounts struct {
+	DraftCount  int64 `json:"draft_count"`
+	PostedCount int64 `json:"posted_count"`
+}
+
+type RecentEntry struct {
+	ID          string `json:"id"`
+	EntryNo     string `json:"entry_no"`
+	Date        string `json:"date"`
+	Description string `json:"description"`
+	Amount      string `json:"amount"`
+}
+
+type DashboardPeriod struct {
+	Name       string `json:"name"` // เช่น "FY2026 2026-11"
+	FiscalYear int    `json:"fiscal_year"`
+	StartDate  string `json:"start_date"`
+	EndDate    string `json:"end_date"`
+	Status     string `json:"status"` // open | closed
+}
+
+type AccountingDashboard struct {
+	StartDate       string           `json:"start_date"`
+	EndDate         string           `json:"end_date"`
+	Income          IncomeSummary    `json:"income"`
+	Previous        IncomeSummary    `json:"previous"`
+	Monthly         []MonthlyIncome  `json:"monthly"`
+	SuspenseBalance string           `json:"suspense_balance"`
+	Entries         EntryCounts      `json:"entries"`
+	RecentEntries   []RecentEntry    `json:"recent_entries"`
+	Period          *DashboardPeriod `json:"period"`
+}
+
+func incomeSummary(s dto.IncomeSummary) IncomeSummary {
+	return IncomeSummary{Revenue: s.Revenue.String(), Expense: s.Expense.String(), NetIncome: s.NetIncome.String()}
+}
+
+func FromAccountingDashboard(d dto.AccountingDashboard) AccountingDashboard {
+	out := AccountingDashboard{
+		StartDate: date(d.Start), EndDate: date(d.End), Income: incomeSummary(d.Income), Previous: incomeSummary(d.Previous),
+		Monthly: make([]MonthlyIncome, len(d.Monthly)), SuspenseBalance: d.SuspenseBalance.String(),
+		Entries:       EntryCounts{DraftCount: d.DraftCount, PostedCount: d.PostedCount},
+		RecentEntries: make([]RecentEntry, len(d.RecentEntries)),
+	}
+	for i, m := range d.Monthly {
+		out.Monthly[i] = MonthlyIncome{Month: m.Month.Format("2006-01"), Revenue: m.Revenue.String(), Expense: m.Expense.String()}
+	}
+	for i, e := range d.RecentEntries {
+		out.RecentEntries[i] = RecentEntry{ID: e.ID, EntryNo: e.EntryNo, Date: date(e.Date), Description: e.Description, Amount: e.Amount.String()}
+	}
+	if p := d.Period; p != nil {
+		status := "closed"
+		if p.Open {
+			status = "open"
+		}
+		out.Period = &DashboardPeriod{Name: fmt.Sprintf("FY%d %s", p.FiscalYear, p.Start.Format("2006-01")), FiscalYear: p.FiscalYear,
+			StartDate: date(p.Start), EndDate: date(p.End), Status: status}
+	}
+	return out
 }

@@ -56,6 +56,8 @@ type Ledger interface {
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
+	// Balances: ยอด (เดบิต - เครดิต) สะสมถึง asOf ของบัญชีแยกประเภท — เรียกครั้งเดียวทุกบัญชี
+	Balances(ctx context.Context, companyID vo.CompanyID, ids []vo.GLAccountID, asOf time.Time) (map[vo.GLAccountID]vo.Money, error)
 }
 
 // ---------- ลูกหนี้ / เจ้าหนี้ (sales / purchasing) ----------

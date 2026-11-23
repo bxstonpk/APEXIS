@@ -37,6 +37,7 @@ type SupplierModel struct {
 	TaxID           string         `gorm:"size:13;not null;default:''"`
 	BranchNo        string         `gorm:"size:5;not null;default:'00000'"`
 	Address         string         `gorm:"size:500;not null;default:''"`
+	AddressDetail   AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
 	PaymentTermDays int            `gorm:"not null;default:0;check:chk_pur_suppliers_term,payment_term_days BETWEEN 0 AND 365"`
 	VatRegistered   bool           `gorm:"not null"`
 	TaxType         string         `gorm:"size:20;not null;default:'juristic';check:chk_pur_suppliers_tax_type,tax_type IN ('individual','juristic')"`
@@ -48,6 +49,19 @@ type SupplierModel struct {
 
 func (SupplierModel) TableName() string { return "purchasing_suppliers" }
 
+// SupplierBranchModel คือสาขาเพิ่มเติมของผู้ขาย (สาขาหลักอยู่ในตารางผู้ขาย) — แทนที่ทั้งชุดตอนบันทึกผู้ขาย
+type SupplierBranchModel struct {
+	SupplierID    uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	BranchNo      string         `gorm:"size:5;primaryKey"`
+	Supplier      *SupplierModel `gorm:"foreignKey:SupplierID;constraint:OnDelete:CASCADE"`
+	Name          string         `gorm:"size:200;not null;default:''"`
+	Address       string         `gorm:"size:500;not null;default:''"`
+	AddressDetail AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
+	Position      int            `gorm:"not null"`
+}
+
+func (SupplierBranchModel) TableName() string { return "purchasing_supplier_branches" }
+
 type OrderModel struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey"`
 	CompanyID        uuid.UUID `gorm:"type:uuid;not null;index:idx_pur_orders_date,priority:1;uniqueIndex:uq_pur_orders_no,priority:1,where:order_no IS NOT NULL"`
@@ -55,6 +69,7 @@ type OrderModel struct {
 	FiscalYear       *int
 	SupplierID       uuid.UUID       `gorm:"type:uuid;not null;index"`
 	Supplier         *SupplierModel  `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
+	SupplierBranchNo string          `gorm:"size:5;not null;default:''"` // ว่าง = สาขาหลักของผู้ขาย
 	OrderDate        time.Time       `gorm:"type:date;not null;index:idx_pur_orders_date,priority:2"`
 	DeliveryDate     *time.Time      `gorm:"type:date"`
 	Reference        string          `gorm:"size:100;not null;default:''"`
@@ -157,6 +172,10 @@ type InvoiceModel struct {
 	SupplierID        uuid.UUID          `gorm:"type:uuid;not null;index;uniqueIndex:uq_pur_invoices_supplier_no,priority:2,where:status = 'posted'"`
 	Supplier          *SupplierModel     `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
 	SupplierInvoiceNo string             `gorm:"size:50;not null;uniqueIndex:uq_pur_invoices_supplier_no,priority:3,where:status = 'posted'"`
+	BillFromName      string             `gorm:"size:200;not null;default:''"`
+	BillFromTaxID     string             `gorm:"size:13;not null;default:''"`
+	BillFromBranchNo  string             `gorm:"size:5;not null;default:''"`
+	BillFromAddress   string             `gorm:"size:500;not null;default:''"`
 	InvoiceDate       time.Time          `gorm:"type:date;not null"`
 	PostingDate       time.Time          `gorm:"type:date;not null;index:idx_pur_invoices_date,priority:2"`
 	DueDate           time.Time          `gorm:"type:date;not null;check:chk_pur_invoices_due,due_date >= posting_date"`
@@ -209,7 +228,7 @@ func (SequenceModel) TableName() string { return "purchasing_number_sequences" }
 
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
-		&SettingsModel{}, &SupplierModel{}, &OrderModel{}, &OrderLineModel{},
+		&SettingsModel{}, &SupplierModel{}, &SupplierBranchModel{}, &OrderModel{}, &OrderLineModel{},
 		&ReceiptModel{}, &ReceiptLineModel{}, &InvoiceModel{}, &InvoiceLineModel{}, &SequenceModel{},
 		&SettlementModel{},
 	); err != nil {
@@ -257,3 +276,20 @@ type SettlementModel struct {
 }
 
 func (SettlementModel) TableName() string { return "purchasing_invoice_settlements" }
+
+// AddressColumns คือที่อยู่ตามแบบสรรพากร (คอลัมน์ addr_*) — คอลัมน์ address เก็บข้อความที่ประกอบแล้ว (พิมพ์ / snapshot)
+type AddressColumns struct {
+	Building    string `gorm:"size:100;not null;default:''"`
+	RoomNo      string `gorm:"size:100;not null;default:''"`
+	FloorNo     string `gorm:"size:100;not null;default:''"`
+	Village     string `gorm:"size:100;not null;default:''"`
+	HouseNo     string `gorm:"size:100;not null;default:''"`
+	Moo         string `gorm:"size:100;not null;default:''"`
+	Soi         string `gorm:"size:100;not null;default:''"`
+	Yaek        string `gorm:"size:100;not null;default:''"`
+	Street      string `gorm:"size:100;not null;default:''"`
+	SubDistrict string `gorm:"size:100;not null;default:''"`
+	District    string `gorm:"size:100;not null;default:''"`
+	Province    string `gorm:"size:100;not null;default:''"`
+	PostalCode  string `gorm:"size:5;not null;default:''"`
+}

@@ -302,6 +302,10 @@ type invoiceRow struct {
 	VatRate           decimal.Decimal
 	PriceIncludesVat  bool
 	CreatedBy         uuid.UUID
+	BillFromName      string
+	BillFromTaxID     string
+	BillFromBranchNo  string
+	BillFromAddress   string
 	Total             int64
 }
 
@@ -315,7 +319,7 @@ func (r invoiceRow) summary() dto.InvoiceSummary {
 
 var (
 	invoiceSummaryColumns = invoiceTable.columns("d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount")
-	invoiceColumns        = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by"
+	invoiceColumns        = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by, d.bill_from_name, d.bill_from_tax_id, d.bill_from_branch_no, d.bill_from_address"
 )
 
 func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error) {
@@ -330,6 +334,7 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	out := dto.Invoice{
 		InvoiceSummary: h.summary(), Description: h.Description, VatRate: h.VatRate, PriceIncludesVat: h.PriceIncludesVat,
 		CreatedBy: h.CreatedBy.String(),
+		BillFrom:  dto.BillFrom{Name: h.BillFromName, TaxID: h.BillFromTaxID, BranchNo: h.BillFromBranchNo, Address: h.BillFromAddress},
 	}
 	var lines []models.InvoiceLineModel
 	if err := database.Conn(ctx, r.db).Where("invoice_id = ?", h.ID).Order("line_no").Find(&lines).Error; err != nil {

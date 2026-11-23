@@ -90,4 +90,8 @@ type ReportRepository interface {
 	SumByAccount(ctx context.Context, companyID vo.CompanyID, accountID *vo.AccountID, buckets []Bucket) (map[vo.AccountID][]Sum, error)
 	// AccountLines คือรายการเคลื่อนไหวของบัญชีในช่วงวันที่ พร้อมยอดสะสม (ไม่รวมยอดยกมา) — แบ่งหน้าใน DB
 	AccountLines(ctx context.Context, companyID vo.CompanyID, accountID vo.AccountID, start, end time.Time, page listing.Page) ([]dto.LedgerLine, int64, error)
+	// EntryActivity: จำนวนรายการร่าง / ที่มีผล (posted / reversed) ที่ลงวันที่ในช่วง — query เดียว (COUNT FILTER)
+	EntryActivity(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (drafts, posted int64, err error)
+	// RecentEntries: รายการที่มีผลล่าสุด (วันที่ / เลขที่ล่าสุดก่อน)
+	RecentEntries(ctx context.Context, companyID vo.CompanyID, limit int) ([]dto.RecentEntry, error)
 }

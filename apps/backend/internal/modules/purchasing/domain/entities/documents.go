@@ -124,11 +124,21 @@ type InvoiceLine struct {
 
 func (l InvoiceLine) Variance() vo.Money { return l.Amounts.Net.Sub(l.Cleared) }
 
+// BillFrom คือชื่อ / เลขผู้เสียภาษี / สาขา / ที่อยู่ของผู้ขายตามใบกำกับภาษี ณ วันบันทึก
+// เก็บไว้ในใบ — แก้ทะเบียนผู้ขายภายหลังไม่กระทบใบที่บันทึกแล้ว
+type BillFrom struct {
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+}
+
 type InvoiceState struct {
 	ID                vo.InvoiceID
 	CompanyID         vo.CompanyID
 	OrderID           vo.OrderID
 	SupplierID        vo.SupplierID
+	BillFrom          BillFrom  // ผู้ขายตามใบกำกับภาษี ณ วันบันทึก
 	SupplierInvoiceNo string    // เลขที่ใบแจ้งหนี้ / ใบกำกับภาษีของผู้ขาย (ไม่ซ้ำต่อผู้ขาย)
 	InvoiceDate       time.Time // วันที่ในใบกำกับภาษี
 	Date              time.Time // วันที่ลงบัญชี

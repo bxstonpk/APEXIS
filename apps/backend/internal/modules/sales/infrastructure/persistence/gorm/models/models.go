@@ -36,6 +36,7 @@ type CustomerModel struct {
 	TaxID           string           `gorm:"size:13;not null;default:''"`
 	BranchNo        string           `gorm:"size:5;not null;default:'00000'"`
 	Address         string           `gorm:"size:500;not null;default:''"`
+	AddressDetail   AddressColumns   `gorm:"embedded;embeddedPrefix:addr_"`
 	PaymentTermDays int              `gorm:"not null;default:0;check:chk_sal_customers_term,payment_term_days BETWEEN 0 AND 365"`
 	TaxType         string           `gorm:"size:20;not null;check:chk_sal_customers_tax_type,tax_type IN ('individual','juristic')"`
 	CreditLimit     *decimal.Decimal `gorm:"type:numeric(24,6);check:chk_sal_customers_credit,credit_limit IS NULL OR credit_limit >= 0"`
@@ -46,6 +47,19 @@ type CustomerModel struct {
 }
 
 func (CustomerModel) TableName() string { return "sales_customers" }
+
+// CustomerBranchModel คือสาขาเพิ่มเติมของลูกค้า (สาขาหลักอยู่ในตารางลูกค้า) — แทนที่ทั้งชุดตอนบันทึกลูกค้า
+type CustomerBranchModel struct {
+	CustomerID    uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	BranchNo      string         `gorm:"size:5;primaryKey"`
+	Customer      *CustomerModel `gorm:"foreignKey:CustomerID;constraint:OnDelete:CASCADE"`
+	Name          string         `gorm:"size:200;not null;default:''"`
+	Address       string         `gorm:"size:500;not null;default:''"`
+	AddressDetail AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
+	Position      int            `gorm:"not null"`
+}
+
+func (CustomerBranchModel) TableName() string { return "sales_customer_branches" }
 
 // LineModel คือบรรทัดราคาของใบเสนอราคา / ใบสั่งขาย (ตารางแยก — ฝังคอลัมน์ร่วม)
 type LineModel struct {
@@ -62,6 +76,7 @@ type LineModel struct {
 // SalesDocModel คือคอลัมน์ร่วมของหัวใบเสนอราคา / ใบสั่งขาย
 type SalesDocModel struct {
 	CustomerID       uuid.UUID       `gorm:"type:uuid;not null;index"`
+	CustomerBranchNo string          `gorm:"size:5;not null;default:''"` // ว่าง = สาขาหลักของลูกค้า
 	Reference        string          `gorm:"size:100;not null;default:''"`
 	Description      string          `gorm:"size:500;not null;default:''"`
 	VatRegistered    bool            `gorm:"not null"`
@@ -192,6 +207,10 @@ type InvoiceModel struct {
 	Order      *OrderModel `gorm:"foreignKey:OrderID;constraint:OnDelete:RESTRICT"`
 	PostedModel
 	StockModel
+	BillToName       string             `gorm:"size:200;not null;default:''"`
+	BillToTaxID      string             `gorm:"size:13;not null;default:''"`
+	BillToBranchNo   string             `gorm:"size:5;not null;default:''"`
+	BillToAddress    string             `gorm:"size:500;not null;default:''"`
 	WithDelivery     bool               `gorm:"not null"`
 	DueDate          time.Time          `gorm:"type:date;not null"`
 	Reference        string             `gorm:"size:100;not null;default:''"`
@@ -252,7 +271,7 @@ func (SequenceModel) TableName() string { return "sales_number_sequences" }
 
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
-		&SettingsModel{}, &CustomerModel{}, &QuotationModel{}, &QuotationLineModel{}, &OrderModel{}, &OrderLineModel{},
+		&SettingsModel{}, &CustomerModel{}, &CustomerBranchModel{}, &QuotationModel{}, &QuotationLineModel{}, &OrderModel{}, &OrderLineModel{},
 		&DeliveryModel{}, &DeliveryLineModel{}, &InvoiceModel{}, &InvoiceLineModel{},
 		&SettlementModel{}, &SequenceModel{},
 	); err != nil {
@@ -268,4 +287,21 @@ func AutoMigrate(db *gorm.DB) error {
 		return db.Migrator().DropColumn(&SettingsModel{}, "wht_account_id")
 	}
 	return nil
+}
+
+// AddressColumns คือที่อยู่ตามแบบสรรพากร (คอลัมน์ addr_*) — คอลัมน์ address เก็บข้อความที่ประกอบแล้ว (พิมพ์ / snapshot)
+type AddressColumns struct {
+	Building    string `gorm:"size:100;not null;default:''"`
+	RoomNo      string `gorm:"size:100;not null;default:''"`
+	FloorNo     string `gorm:"size:100;not null;default:''"`
+	Village     string `gorm:"size:100;not null;default:''"`
+	HouseNo     string `gorm:"size:100;not null;default:''"`
+	Moo         string `gorm:"size:100;not null;default:''"`
+	Soi         string `gorm:"size:100;not null;default:''"`
+	Yaek        string `gorm:"size:100;not null;default:''"`
+	Street      string `gorm:"size:100;not null;default:''"`
+	SubDistrict string `gorm:"size:100;not null;default:''"`
+	District    string `gorm:"size:100;not null;default:''"`
+	Province    string `gorm:"size:100;not null;default:''"`
+	PostalCode  string `gorm:"size:5;not null;default:''"`
 }

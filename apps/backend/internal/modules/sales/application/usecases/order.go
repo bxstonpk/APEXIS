@@ -16,8 +16,9 @@ func decimals(s ports.CompanySettings) entities.Decimals {
 	return entities.Decimals{Quantity: s.QuantityDecimals, Amount: s.AmountDecimals}
 }
 
-// customerTerms: ลูกค้าต้องมีอยู่และ active — VAT จากค่าตั้งขาย ณ ตอนนี้ + เครดิตเทอมของลูกค้า
-func (b base) customerTerms(ctx context.Context, customers repositories.CustomerRepository, companyID vo.CompanyID, id vo.CustomerID, inclusive bool) (*entities.Customer, entities.Terms, error) {
+// customerTerms: ลูกค้าต้องมีอยู่และ active และมีสาขาที่เลือก (*branchNo ว่าง = สาขาหลัก → เขียนเลขสาขาหลักกลับ)
+// VAT จากค่าตั้งขาย ณ ตอนนี้ + เครดิตเทอมของลูกค้า
+func (b base) customerTerms(ctx context.Context, customers repositories.CustomerRepository, companyID vo.CompanyID, id vo.CustomerID, branchNo *string, inclusive bool) (*entities.Customer, entities.Terms, error) {
 	c, err := customers.FindByID(ctx, companyID, id)
 	if err != nil {
 		return nil, entities.Terms{}, err
@@ -25,6 +26,11 @@ func (b base) customerTerms(ctx context.Context, customers repositories.Customer
 	if err := c.EnsureActive(); err != nil {
 		return nil, entities.Terms{}, err
 	}
+	branch, err := c.Branch(*branchNo)
+	if err != nil {
+		return nil, entities.Terms{}, err
+	}
+	*branchNo = branch.BranchNo
 	s, err := b.settings.Get(ctx, companyID)
 	if err != nil {
 		return nil, entities.Terms{}, err
@@ -73,7 +79,7 @@ func (uc *QuotationUseCases) List(ctx context.Context, in dto.List[dto.DocumentF
 func (uc *QuotationUseCases) Create(ctx context.Context, in dto.Create[entities.QuotationData]) (dto.Quotation, error) {
 	var id vo.QuotationID
 	err := uc.writeWith(ctx, in.Actor, vo.PermQuotationManage, func(ctx context.Context, s ports.CompanySettings) error {
-		_, terms, err := uc.customerTerms(ctx, uc.customers, in.CompanyID, in.Data.CustomerID, in.Data.PriceIncludesVat)
+		_, terms, err := uc.customerTerms(ctx, uc.customers, in.CompanyID, in.Data.CustomerID, &in.Data.CustomerBranchNo, in.Data.PriceIncludesVat)
 		if err != nil {
 			return err
 		}
@@ -103,7 +109,7 @@ func (uc *QuotationUseCases) Update(ctx context.Context, in dto.Update[vo.Quotat
 		if err := q.EnsureDraft(); err != nil {
 			return err
 		}
-		_, terms, err := uc.customerTerms(ctx, uc.customers, in.CompanyID, in.Data.CustomerID, in.Data.PriceIncludesVat)
+		_, terms, err := uc.customerTerms(ctx, uc.customers, in.CompanyID, in.Data.CustomerID, &in.Data.CustomerBranchNo, in.Data.PriceIncludesVat)
 		if err != nil {
 			return err
 		}
@@ -206,7 +212,7 @@ func (uc *OrderUseCases) Create(ctx context.Context, in dto.Create[entities.Orde
 				return err
 			}
 			qs := q.State()
-			data.CustomerID, data.PriceIncludesVat, data.Lines, terms = qs.Data.CustomerID, qs.Terms.Vat.Inclusive, qs.Data.Lines, qs.Terms
+			data.CustomerID, data.CustomerBranchNo, data.PriceIncludesVat, data.Lines, terms = qs.Data.CustomerID, qs.Data.CustomerBranchNo, qs.Terms.Vat.Inclusive, qs.Data.Lines, qs.Terms
 			if data.Reference == "" {
 				data.Reference = qs.QuotationNo
 			}
@@ -216,7 +222,7 @@ func (uc *OrderUseCases) Create(ctx context.Context, in dto.Create[entities.Orde
 			quotation = q
 		} else {
 			var err error
-			if _, terms, err = uc.customerTerms(ctx, uc.customers, in.CompanyID, data.CustomerID, data.PriceIncludesVat); err != nil {
+			if _, terms, err = uc.customerTerms(ctx, uc.customers, in.CompanyID, data.CustomerID, &data.CustomerBranchNo, data.PriceIncludesVat); err != nil {
 				return err
 			}
 		}
@@ -261,8 +267,18 @@ func (uc *OrderUseCases) Update(ctx context.Context, in dto.Update[vo.OrderID, e
 		data, terms := in.Data, st.Terms
 		data.QuotationID = st.Data.QuotationID
 		if data.QuotationID != nil {
+			// ลูกค้า / VAT ตามใบเสนอราคา — เปลี่ยนได้เฉพาะสาขาของลูกค้ารายเดิม
 			data.CustomerID, data.PriceIncludesVat = st.Data.CustomerID, st.Data.PriceIncludesVat
-		} else if _, terms, err = uc.customerTerms(ctx, uc.customers, in.CompanyID, data.CustomerID, data.PriceIncludesVat); err != nil {
+			c, err := uc.customers.FindByID(ctx, in.CompanyID, data.CustomerID)
+			if err != nil {
+				return err
+			}
+			b, err := c.Branch(data.CustomerBranchNo)
+			if err != nil {
+				return err
+			}
+			data.CustomerBranchNo = b.BranchNo
+		} else if _, terms, err = uc.customerTerms(ctx, uc.customers, in.CompanyID, data.CustomerID, &data.CustomerBranchNo, data.PriceIncludesVat); err != nil {
 			return err
 		}
 		if err := o.Update(data, terms, decimals(s)); err != nil {

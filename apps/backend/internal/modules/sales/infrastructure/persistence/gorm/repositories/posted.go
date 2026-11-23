@@ -318,9 +318,13 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 		PriceIncludesVat bool
 		Reference        string
 		Description      string
+		BillToName       string
+		BillToTaxID      string
+		BillToBranchNo   string
+		BillToAddress    string
 	}
 	err := invoiceTable.base(ctx, r.db, companyID).
-		Select(invoiceTable.columns(invoiceExtra+", d.warehouse_id, d.system, d.stock_document_no, d.vat_rate, d.price_includes_vat, d.reference, d.description")).
+		Select(invoiceTable.columns(invoiceExtra+", d.warehouse_id, d.system, d.stock_document_no, d.vat_rate, d.price_includes_vat, d.reference, d.description, d.bill_to_name, d.bill_to_tax_id, d.bill_to_branch_no, d.bill_to_address")).
 		Where("d.id = ?", uuidOf(id)).Limit(1).Scan(&rows).Error
 	if err != nil {
 		return dto.Invoice{}, err
@@ -336,7 +340,8 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	out := dto.Invoice{
 		InvoiceSummary: h.InvoiceRow.summary(), StockInfo: stockRow{h.WarehouseID, h.System, h.StockDocumentNo}.dto(),
 		VatRate: h.VatRate, PriceIncludesVat: h.PriceIncludesVat, Reference: h.Reference, Description: h.Description,
-		Lines: make([]dto.InvoiceLine, len(lines)),
+		BillTo: dto.BillTo{Name: h.BillToName, TaxID: h.BillToTaxID, BranchNo: h.BillToBranchNo, Address: h.BillToAddress},
+		Lines:  make([]dto.InvoiceLine, len(lines)),
 	}
 	if !h.WithDelivery {
 		out.StockInfo = dto.StockInfo{}

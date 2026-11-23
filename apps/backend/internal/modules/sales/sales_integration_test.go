@@ -96,7 +96,7 @@ func setup(t *testing.T) (api, string) {
 	for _, migrate := range []func() error{
 		func() error { return identity.Migrate(db) }, func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) }, func() error { return inventory.Migrate(db) },
-		func() error { return finance.Migrate(db) }, func() error { return purchasing.Migrate(db) }, func() error { return sales.Migrate(db) },
+		func() error { return finance.Migrate(db) }, func() error { _, err := purchasing.Migrate(db); return err }, func() error { _, err := sales.Migrate(db); return err },
 	} {
 		if err := migrate(); err != nil {
 			t.Fatal(err)
@@ -161,8 +161,18 @@ func TestSalesFlow(t *testing.T) {
 		"output_vat_account_id": acc["2140"], "cogs_account_id": acc["5100"]}), 200, "settings")
 	rj := a.expect(a.do("POST", base+"/journals", owner, obj{"code": "CRJ", "name": "สมุดรายวันรับ"}), 201, "receipt journal").id()
 	a.expect(a.do("PUT", base+"/finance-settings", owner, obj{"receipt_journal_id": rj, "wht_received_account_id": acc["1170"]}), 200, "finance settings")
-	cust := a.expect(a.do("POST", base+"/customers", owner, obj{"code": "C", "name": "ลูกค้า C", "tax_id": "0105551234567", "payment_term_days": 30,
-		"tax_type": "juristic", "credit_limit": "10000"}), 201, "customer").id()
+	// ที่อยู่ตามแบบสรรพากร: เก็บแยกช่อง + address ประกอบเป็นข้อความ ("-" = ว่าง, กรุงเทพฯ ใช้ แขวง / เขต)
+	custBody := a.expect(a.do("POST", base+"/customers", owner, obj{"code": "C", "name": "ลูกค้า C", "tax_id": "0105551234567", "payment_term_days": 30,
+		"tax_type": "juristic", "credit_limit": "10000", "address_detail": obj{"house_no": "175", "soi": "-", "street": "สาทรใต้",
+			"sub_district": "ทุ่งมหาเมฆ", "district": "สาทร", "province": "กรุงเทพมหานคร", "postal_code": "10120"}}), 201, "customer").data()
+	if custBody["address"] != "เลขที่ 175 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120" ||
+		custBody["address_detail"].(obj)["soi"] != "" || custBody["address_detail"].(obj)["street"] != "สาทรใต้" {
+		t.Fatalf("customer address = %v / %v", custBody["address"], custBody["address_detail"])
+	}
+	cust := custBody["id"].(string)
+	a.expect(a.do("GET", base+"/customers?q=C", owner, nil), 200, "customer list")
+	a.expect(a.do("POST", base+"/customers", owner, obj{"code": "BADADDR", "name": "x", "tax_type": "juristic",
+		"address_detail": obj{"postal_code": "123"}}), 400, "bad postal code")
 	cash := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "CASH", "name": "เงินสด", "type": "cash", "gl_account_id": acc["1101"]}), 201, "cash").id()
 	bank := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "BANK", "name": "ธนาคาร", "type": "bank", "bank_name": "BBL", "account_no": "111-1-11111-1", "gl_account_id": acc["1102"]}), 201, "bank").id()
 

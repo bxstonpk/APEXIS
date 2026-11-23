@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"apexis/backend/internal/platform/dashperiod"
 	"context"
 
 	"apexis/backend/internal/modules/purchasing/application/dto"
@@ -31,6 +32,13 @@ func (uc *ReportUseCases) Outstanding(ctx context.Context, in dto.List[dto.Outst
 }
 
 // Aging: อายุเจ้าหนี้ ณ วันที่
+// Dashboard: ภาพรวมแอปจัดซื้อ — สิทธิ์เดียวกับรายงาน (purchasing.report:read), อ่านอย่างเดียว ไม่ใช้ transaction
+func (uc *ReportUseCases) Dashboard(ctx context.Context, in dto.List[dashperiod.Period]) (dto.Dashboard, error) {
+	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Dashboard, error) {
+		return uc.reports.Dashboard(ctx, in.CompanyID, in.Filter)
+	})
+}
+
 func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter]) (dto.Aging, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Aging, error) {
 		rows, totals, err := uc.reports.Aging(ctx, in.CompanyID, in.Filter)

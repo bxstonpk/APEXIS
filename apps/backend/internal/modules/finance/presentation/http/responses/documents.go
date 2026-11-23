@@ -237,3 +237,66 @@ func FromWithholding(book string, w dto.Withholding) WithholdingBody {
 func meta[T any](r listing.Result[T]) httpx.Meta {
 	return httpx.Meta{Page: r.Page.Number, PageSize: r.Page.Size, Total: r.Total}
 }
+
+// ---------- dashboard ----------
+
+type DashboardCashAccount struct {
+	Account Ref    `json:"account"`
+	Type    string `json:"type"`
+	Balance string `json:"balance"`
+}
+
+type MonthlyFlow struct {
+	Month    string `json:"month"` // YYYY-MM
+	Received string `json:"received"`
+	Paid     string `json:"paid"`
+}
+
+type DashboardWht struct {
+	Deducted string `json:"deducted"` // หักจากใบจ่าย (นำส่ง ภ.ง.ด.3 / 53)
+	Suffered string `json:"suffered"` // ถูกหักจากใบรับ
+}
+
+type RecentDocument struct {
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	DocumentNo string `json:"document_no"`
+	Date       string `json:"date"`
+	Party      string `json:"party"`
+	Amount     string `json:"amount"`
+}
+
+type FinanceDashboard struct {
+	StartDate     string                 `json:"start_date"`
+	EndDate       string                 `json:"end_date"`
+	CashAccounts  []DashboardCashAccount `json:"cash_accounts"`
+	CashTotal     string                 `json:"cash_total"`
+	Received      string                 `json:"received"`
+	Paid          string                 `json:"paid"`
+	NetFlow       string                 `json:"net_flow"`
+	TransferCount int64                  `json:"transfer_count"`
+	Monthly       []MonthlyFlow          `json:"monthly"`
+	Wht           DashboardWht           `json:"wht"`
+	Recent        []RecentDocument       `json:"recent"`
+}
+
+func FromFinanceDashboard(d dto.FinanceDashboard) FinanceDashboard {
+	f := d.Flows
+	out := FinanceDashboard{
+		StartDate: date(d.Start), EndDate: date(d.End), CashAccounts: make([]DashboardCashAccount, len(d.CashAccounts)),
+		CashTotal: str(d.CashTotal), Received: str(f.Received), Paid: str(f.Paid), NetFlow: str(f.Received.Sub(f.Paid)),
+		TransferCount: f.TransferCount, Monthly: make([]MonthlyFlow, len(d.Monthly)),
+		Wht:    DashboardWht{Deducted: str(f.WhtDeducted), Suffered: str(f.WhtSuffered)},
+		Recent: make([]RecentDocument, len(d.Recent)),
+	}
+	for i, c := range d.CashAccounts {
+		out.CashAccounts[i] = DashboardCashAccount{Account: ref(c.Account), Type: c.Type, Balance: str(c.Balance)}
+	}
+	for i, m := range d.Monthly {
+		out.Monthly[i] = MonthlyFlow{Month: m.Month.Format("2006-01"), Received: str(m.Received), Paid: str(m.Paid)}
+	}
+	for i, x := range d.Recent {
+		out.Recent[i] = RecentDocument{Kind: x.Kind, ID: x.ID, DocumentNo: x.DocumentNo, Date: date(x.Date), Party: x.Party, Amount: str(x.Amount)}
+	}
+	return out
+}

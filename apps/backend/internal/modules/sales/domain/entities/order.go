@@ -15,6 +15,7 @@ import (
 
 type QuotationData struct {
 	CustomerID       vo.CustomerID
+	CustomerBranchNo string // สาขาลูกค้า (ว่าง = สาขาหลัก) — use case ตรวจกับทะเบียนลูกค้าแล้ว
 	Date             time.Time
 	ValidUntil       time.Time
 	Reference        string
@@ -119,6 +120,7 @@ func (q *Quotation) Convert(orderID vo.OrderID, date time.Time) error {
 
 type OrderData struct {
 	CustomerID       vo.CustomerID
+	CustomerBranchNo string // สาขาลูกค้า (ว่าง = สาขาหลัก) — ใบส่งของ / ใบกำกับภาษีใช้สาขานี้
 	QuotationID      *vo.QuotationID
 	Date             time.Time
 	DeliveryDate     *time.Time

@@ -128,6 +128,15 @@ func IsUniqueViolation(err error) bool {
 	return errors.Is(err, gorm.ErrDuplicatedKey) || (errors.As(err, &pgErr) && pgErr.Code == "23505")
 }
 
+// UniqueConstraint: ชื่อ unique index ที่ถูกละเมิด (ว่าง = ไม่ใช่ / ไม่ทราบ) — ใช้แยกว่า "รหัสซ้ำ" หรือ "เลขผู้เสียภาษีซ้ำ"
+func UniqueConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return pgErr.ConstraintName
+	}
+	return ""
+}
+
 func IsForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.Is(err, gorm.ErrForeignKeyViolated) || (errors.As(err, &pgErr) && pgErr.Code == "23503")

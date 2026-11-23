@@ -27,6 +27,7 @@ type CompanySettings struct {
 type Period struct {
 	ID         vo.FiscalPeriodID
 	FiscalYear int
+	YearStart  time.Time // วันแรกของปีบัญชี
 	Open       bool
 }
 

@@ -5,6 +5,7 @@
 package responses
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -62,23 +63,44 @@ func FromSettings(s dto.Settings) Settings {
 }
 
 type Supplier struct {
-	ID              string `json:"id"`
-	Code            string `json:"code"`
-	Name            string `json:"name"`
-	TaxID           string `json:"tax_id"`
-	BranchNo        string `json:"branch_no"`
-	Address         string `json:"address"`
-	PaymentTermDays int    `json:"payment_term_days"`
-	VatRegistered   bool   `json:"vat_registered"`
-	TaxType         string `json:"tax_type"`
-	Status          string `json:"status"`
+	ID              string           `json:"id"`
+	Code            string           `json:"code"`
+	Name            string           `json:"name"`
+	TaxID           string           `json:"tax_id"`
+	BranchNo        string           `json:"branch_no"`
+	Address         string           `json:"address"`
+	AddressDetail   thaiaddress.JSON `json:"address_detail"`
+	PaymentTermDays int              `json:"payment_term_days"`
+	VatRegistered   bool             `json:"vat_registered"`
+	TaxType         string           `json:"tax_type"`
+	Status          string           `json:"status"`
+	Branches        []Branch         `json:"branches,omitempty"` // เฉพาะ GET รายตัว
 }
 
 func FromSupplier(s dto.Supplier) Supplier {
 	return Supplier{
-		ID: s.ID, Code: s.Code, Name: s.Name, TaxID: s.TaxID, BranchNo: s.BranchNo, Address: s.Address,
+		ID: s.ID, Code: s.Code, Name: s.Name, TaxID: s.TaxID, BranchNo: s.BranchNo, Address: s.Address, AddressDetail: thaiaddress.ToJSON(s.AddressDetail),
 		PaymentTermDays: s.PaymentTermDays, VatRegistered: s.VatRegistered, TaxType: s.TaxType, Status: s.Status,
+		Branches: branchList(s.Branches),
 	}
+}
+
+type Branch struct {
+	BranchNo      string           `json:"branch_no"`
+	Name          string           `json:"name"`
+	Address       string           `json:"address"`
+	AddressDetail thaiaddress.JSON `json:"address_detail"`
+}
+
+func branchList(in []dto.SupplierBranch) []Branch {
+	if in == nil {
+		return nil
+	}
+	out := make([]Branch, len(in))
+	for i, b := range in {
+		out[i] = Branch{BranchNo: b.BranchNo, Name: b.Name, Address: b.Address, AddressDetail: thaiaddress.ToJSON(b.AddressDetail)}
+	}
+	return out
 }
 
 // ---------- ใบสั่งซื้อ ----------
@@ -89,6 +111,7 @@ type OrderSummary struct {
 	Date             string  `json:"date"`
 	DeliveryDate     *string `json:"delivery_date"`
 	Supplier         Ref     `json:"supplier"`
+	SupplierBranchNo string  `json:"supplier_branch_no"`
 	Reference        string  `json:"reference"`
 	VatRate          string  `json:"vat_rate"`
 	PriceIncludesVat bool    `json:"price_includes_vat"`
@@ -98,7 +121,7 @@ type OrderSummary struct {
 
 func FromOrderSummary(o dto.OrderSummary) OrderSummary {
 	out := OrderSummary{
-		ID: o.ID, Date: date(o.Date), DeliveryDate: optDate(o.DeliveryDate), Supplier: ref(o.Supplier), Reference: o.Reference,
+		ID: o.ID, Date: date(o.Date), DeliveryDate: optDate(o.DeliveryDate), Supplier: ref(o.Supplier), SupplierBranchNo: o.SupplierBranchNo, Reference: o.Reference,
 		VatRate: str(o.VatRate), PriceIncludesVat: o.PriceIncludesVat, Totals: totals(o.Totals), Status: o.Status,
 	}
 	if o.OrderNo != "" {
@@ -248,8 +271,17 @@ type InvoiceLine struct {
 	VarianceAccountID *string `json:"price_variance_account_id"`
 }
 
+// BillFrom คือผู้ขายตามใบกำกับภาษี ณ วันบันทึก (ชื่อ / เลขผู้เสียภาษี / สาขา / ที่อยู่)
+type BillFrom struct {
+	Name     string `json:"name"`
+	TaxID    string `json:"tax_id"`
+	BranchNo string `json:"branch_no"`
+	Address  string `json:"address"`
+}
+
 type Invoice struct {
 	InvoiceSummary
+	BillFrom         BillFrom      `json:"bill_from"`
 	Description      string        `json:"description"`
 	VatRate          string        `json:"vat_rate"`
 	PriceIncludesVat bool          `json:"price_includes_vat"`
@@ -261,6 +293,7 @@ func FromInvoice(i dto.Invoice) Invoice {
 	out := Invoice{
 		InvoiceSummary: FromInvoiceSummary(i.InvoiceSummary), Description: i.Description, VatRate: str(i.VatRate),
 		PriceIncludesVat: i.PriceIncludesVat, CreatedBy: i.CreatedBy, Lines: make([]InvoiceLine, len(i.Lines)),
+		BillFrom: BillFrom{Name: i.BillFrom.Name, TaxID: i.BillFrom.TaxID, BranchNo: i.BillFrom.BranchNo, Address: i.BillFrom.Address},
 	}
 	for n, l := range i.Lines {
 		line := InvoiceLine{
@@ -356,4 +389,68 @@ func FromAging(book string, a dto.Aging) AgingBody {
 		Data: Aging{Book: book, AsOf: date(a.AsOf), Rows: rows, Totals: agingAmounts(a.Totals)},
 		Meta: httpx.Meta{Page: a.Rows.Page.Number, PageSize: a.Rows.Page.Size, Total: a.Rows.Total},
 	}
+}
+
+// ---------- ภาพรวม (dashboard) ----------
+
+type MonthNet struct {
+	Month string `json:"month"`
+	Net   string `json:"net"`
+}
+
+type Aging5 struct {
+	NotDue     string `json:"not_due"`
+	Days1To30  string `json:"days_1_30"`
+	Days31To60 string `json:"days_31_60"`
+	Days61To90 string `json:"days_61_90"`
+	Over90     string `json:"over_90"`
+}
+
+type Comparison struct {
+	Current  string `json:"current"`
+	Previous string `json:"previous"`
+}
+
+type TopSupplier struct {
+	Supplier Ref    `json:"supplier"`
+	Net      string `json:"net"`
+}
+
+type Dashboard struct {
+	StartDate    string     `json:"start_date"`
+	EndDate      string     `json:"end_date"`
+	Purchases    Comparison `json:"purchases"`
+	InvoiceCount int64      `json:"invoice_count"`
+	Monthly      []MonthNet `json:"monthly"`
+	Orders       struct {
+		DraftCount     int64 `json:"draft_count"`
+		ToReceiveCount int64 `json:"to_receive_count"`
+		ToInvoiceCount int64 `json:"to_invoice_count"`
+	} `json:"orders"`
+	Payables struct {
+		Outstanding string `json:"outstanding"`
+		Overdue     string `json:"overdue"`
+		Due7Days    string `json:"due_7_days"`
+		Aging       Aging5 `json:"aging"`
+	} `json:"payables"`
+	TopSuppliers []TopSupplier `json:"top_suppliers"`
+}
+
+func FromDashboard(d dto.Dashboard) Dashboard {
+	out := Dashboard{
+		StartDate: date(d.Period.Start), EndDate: date(d.Period.End),
+		Purchases:    Comparison{Current: str(d.PurchasesCurrent), Previous: str(d.PurchasesPrevious)},
+		InvoiceCount: d.InvoiceCount, Monthly: make([]MonthNet, len(d.Monthly)), TopSuppliers: make([]TopSupplier, len(d.TopSuppliers)),
+	}
+	for i, m := range d.Monthly {
+		out.Monthly[i] = MonthNet{Month: m.Month, Net: str(m.Net)}
+	}
+	out.Orders.DraftCount, out.Orders.ToReceiveCount, out.Orders.ToInvoiceCount = d.OrderDraftCount, d.OrderToReceiveCount, d.OrderToInvoiceCount
+	p := d.Payables
+	out.Payables.Outstanding, out.Payables.Overdue, out.Payables.Due7Days = str(p.Outstanding), str(p.Overdue), str(p.Due7Days)
+	out.Payables.Aging = Aging5{NotDue: str(p.NotDue), Days1To30: str(p.Days1To30), Days31To60: str(p.Days31To60), Days61To90: str(p.Days61To90), Over90: str(p.Over90)}
+	for i, s := range d.TopSuppliers {
+		out.TopSuppliers[i] = TopSupplier{Supplier: ref(s.Supplier), Net: str(s.Net)}
+	}
+	return out
 }

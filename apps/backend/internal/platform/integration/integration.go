@@ -158,3 +158,10 @@ type OpenInvoice struct {
 	Gross       decimal.Decimal
 	Outstanding decimal.Decimal
 }
+
+// PartyMerge คือคู่ค้ารหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ที่ถูกรวมตอน migrate — From ถูกลบ, เอกสารย้ายไป To
+// module ที่เก็บ id คู่ค้าไว้ในเอกสารของตัวเอง (เช่น finance) ใช้รายการนี้ปรับ id ตาม
+type PartyMerge struct {
+	From uuid.UUID
+	To   uuid.UUID
+}

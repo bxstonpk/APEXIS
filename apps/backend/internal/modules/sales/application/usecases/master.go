@@ -89,6 +89,9 @@ func (uc *CustomerUseCases) Create(ctx context.Context, in dto.Create[entities.C
 		if err != nil {
 			return err
 		}
+		if err := uc.ensureTaxIDFree(ctx, in.CompanyID, c, nil); err != nil {
+			return err
+		}
 		id = c.ID()
 		return uc.repo.Create(ctx, c)
 	})
@@ -107,12 +110,28 @@ func (uc *CustomerUseCases) Update(ctx context.Context, in dto.Update[vo.Custome
 		if err := c.Update(in.Data, s.AmountDecimals); err != nil {
 			return err
 		}
+		if err := uc.ensureTaxIDFree(ctx, in.CompanyID, c, &in.ID); err != nil {
+			return err
+		}
 		return uc.repo.Update(ctx, c)
 	})
 	if err != nil {
 		return dto.Customer{}, err
 	}
 	return uc.repo.Get(ctx, in.CompanyID, in.ID)
+}
+
+// ensureTaxIDFree: เลขผู้เสียภาษี 1 เลข = ลูกค้า 1 รหัส — ซ้ำ = แจ้งรหัสเดิมให้ไปเพิ่มสาขาที่รหัสนั้น
+// (ตรวจก่อนเพื่อข้อความที่ชัด; unique index ใน DB กันกรณีบันทึกพร้อมกัน)
+func (uc *CustomerUseCases) ensureTaxIDFree(ctx context.Context, companyID vo.CompanyID, c *entities.Customer, except *vo.CustomerID) error {
+	code, err := uc.repo.TaxIDOwner(ctx, companyID, c.Data().TaxID, except)
+	if err != nil {
+		return err
+	}
+	if code != "" {
+		return fmt.Errorf("%w: customer %s", domain.ErrTaxIDExists, code)
+	}
+	return nil
 }
 
 // Delete: ลูกค้าที่มีเอกสารแล้วลบไม่ได้ (ปิดใช้งานแทน)

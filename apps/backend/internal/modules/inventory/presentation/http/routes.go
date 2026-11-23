@@ -34,6 +34,7 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("DELETE "+base+"/stock-documents/{documentID}", h.DeleteDocument)
 
 	// ค่าตั้งบัญชีสินค้า + ระบบบัญชี (perpetual / periodic) ตั้งแต่ปีบัญชี
+	handle("GET "+base+"/dashboards/inventory", h.Dashboard)
 	handle("GET "+base+"/inventory-settings", h.GetSettings)
 	handle("PUT "+base+"/inventory-settings", h.UpdateSettings)
 	handle("PUT "+base+"/inventory-settings/accounting-systems/{fiscalYear}", h.SetAccountingSystem)

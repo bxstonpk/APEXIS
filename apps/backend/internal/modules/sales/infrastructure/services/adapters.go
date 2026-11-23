@@ -75,14 +75,14 @@ func (o *Organization) CompanySettings(ctx context.Context, companyID vo.Company
 }
 
 func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (ports.Period, error) {
-	id, year, _, open, err := o.org.FiscalPeriodAt(ctx, uuid.UUID(companyID), date)
+	id, year, yearStart, open, err := o.org.FiscalPeriodAt(ctx, uuid.UUID(companyID), date)
 	if err != nil {
 		return ports.Period{}, err
 	}
 	if id == uuid.Nil {
 		return ports.Period{}, domain.ErrNoFiscalPeriod
 	}
-	return ports.Period{ID: vo.FiscalPeriodID(id), FiscalYear: year, Open: open}, nil
+	return ports.Period{ID: vo.FiscalPeriodID(id), FiscalYear: year, YearStart: yearStart, Open: open}, nil
 }
 
 func (o *Organization) DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType vo.DocType) (numbering.Format, error) {

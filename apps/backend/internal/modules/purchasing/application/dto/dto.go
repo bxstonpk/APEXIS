@@ -2,6 +2,7 @@
 package dto
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"time"
 
 	"github.com/google/uuid"
@@ -143,10 +144,19 @@ type Supplier struct {
 	TaxID           string
 	BranchNo        string
 	Address         string
+	AddressDetail   thaiaddress.Address
 	PaymentTermDays int
 	VatRegistered   bool
 	TaxType         string
 	Status          string
+	Branches        []SupplierBranch // สาขาเพิ่มเติม — เฉพาะ Get (รายการไม่โหลด)
+}
+
+type SupplierBranch struct {
+	BranchNo      string
+	Name          string
+	Address       string
+	AddressDetail thaiaddress.Address
 }
 
 type Totals struct {
@@ -161,6 +171,7 @@ type OrderSummary struct {
 	Date             time.Time
 	DeliveryDate     *time.Time
 	Supplier         Ref
+	SupplierBranchNo string
 	Reference        string
 	VatRate          vo.Money
 	PriceIncludesVat bool
@@ -250,8 +261,17 @@ type InvoiceLine struct {
 	VarianceAccountID string
 }
 
+// BillFrom คือผู้ขายตามใบกำกับภาษี ณ วันบันทึก
+type BillFrom struct {
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
+}
+
 type Invoice struct {
 	InvoiceSummary
+	BillFrom         BillFrom
 	Description      string
 	VatRate          vo.Money
 	PriceIncludesVat bool

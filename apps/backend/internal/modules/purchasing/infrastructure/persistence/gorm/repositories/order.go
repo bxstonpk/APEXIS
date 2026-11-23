@@ -50,7 +50,7 @@ func (r *OrderRepository) Update(ctx context.Context, o *entities.Order) error {
 	res := tx.Model(&models.OrderModel{}).
 		Where("company_id = ? AND id = ? AND status = ?", m.CompanyID, m.ID, vo.OrderDraft).
 		Updates(map[string]any{
-			"supplier_id": m.SupplierID, "order_date": m.OrderDate, "delivery_date": m.DeliveryDate, "reference": m.Reference,
+			"supplier_id": m.SupplierID, "supplier_branch_no": m.SupplierBranchNo, "order_date": m.OrderDate, "delivery_date": m.DeliveryDate, "reference": m.Reference,
 			"description": m.Description, "vat_registered": m.VatRegistered, "vat_rate": m.VatRate,
 			"price_includes_vat": m.PriceIncludesVat, "payment_term_days": m.PaymentTermDays,
 			"total_net": m.TotalNet, "total_vat": m.TotalVat, "total_gross": m.TotalGross, "updated_at": time.Now().UTC(),
@@ -140,6 +140,7 @@ type orderRow struct {
 	SupplierID       uuid.UUID
 	SupplierCode     string
 	SupplierName     string
+	SupplierBranchNo string
 	Reference        string
 	Description      string
 	VatRegistered    bool
@@ -169,7 +170,7 @@ func dateOpt(t *time.Time) *time.Time {
 func (r orderRow) summary() dto.OrderSummary {
 	out := dto.OrderSummary{
 		ID: r.ID.String(), Date: gp.DateUTC(r.OrderDate), DeliveryDate: dateOpt(r.DeliveryDate),
-		Supplier: dto.Ref{ID: r.SupplierID.String(), Code: r.SupplierCode, Name: r.SupplierName}, Reference: r.Reference,
+		Supplier: dto.Ref{ID: r.SupplierID.String(), Code: r.SupplierCode, Name: r.SupplierName}, SupplierBranchNo: r.SupplierBranchNo, Reference: r.Reference,
 		VatRate: r.VatRate, PriceIncludesVat: r.PriceIncludesVat,
 		Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross}, Status: r.Status,
 	}
@@ -179,7 +180,7 @@ func (r orderRow) summary() dto.OrderSummary {
 	return out
 }
 
-const orderSummaryColumns = `o.id, o.order_no, o.order_date, o.delivery_date, o.supplier_id, s.code AS supplier_code, s.name AS supplier_name,
+const orderSummaryColumns = `o.id, o.order_no, o.order_date, o.delivery_date, o.supplier_id, s.code AS supplier_code, s.name AS supplier_name, o.supplier_branch_no,
 	o.reference, o.vat_rate, o.price_includes_vat, o.total_net, o.total_vat, o.total_gross, o.status`
 
 const orderColumns = orderSummaryColumns + `, o.description, o.vat_registered, o.payment_term_days, o.created_by,

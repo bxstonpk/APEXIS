@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"context"
 	"time"
 
@@ -55,32 +56,75 @@ type CustomerRepository struct{ db *gorm.DB }
 
 func NewCustomerRepository(db *gorm.DB) *CustomerRepository { return &CustomerRepository{db: db} }
 
+// TaxIDIndex คือ unique index "เลขผู้เสียภาษี 1 เลข = ลูกค้า 1 รหัส" (สร้างใน Migrate หลังรวมรหัสซ้ำ)
+const TaxIDIndex = "uq_sal_customers_tax_id"
+
+func customerUniqueErr(err error) error {
+	if !database.IsUniqueViolation(err) {
+		return err
+	}
+	if database.UniqueConstraint(err) == TaxIDIndex {
+		return domain.ErrTaxIDExists
+	}
+	return domain.ErrCodeExists
+}
+
 func (r *CustomerRepository) Create(ctx context.Context, c *entities.Customer) error {
 	m := gp.CustomerToModel(c)
 	if err := database.Conn(ctx, r.db).Create(&m).Error; err != nil {
-		if database.IsUniqueViolation(err) {
-			return domain.ErrCodeExists
-		}
+		return customerUniqueErr(err)
+	}
+	return r.saveBranches(ctx, c)
+}
+
+// saveBranches แทนที่สาขาเพิ่มเติมทั้งชุด (ภายใน transaction ของ use case) — เอกสารอ้างสาขาด้วยเลขสาขา จึงไม่มี FK ไปที่สาขา
+func (r *CustomerRepository) saveBranches(ctx context.Context, c *entities.Customer) error {
+	conn := database.Conn(ctx, r.db)
+	if err := conn.Where("customer_id = ?", uuidOf(c.ID())).Delete(&models.CustomerBranchModel{}).Error; err != nil {
 		return err
 	}
-	return nil
+	ms := gp.CustomerBranchesToModel(c)
+	if len(ms) == 0 {
+		return nil
+	}
+	return conn.CreateInBatches(&ms, 200).Error
+}
+
+func (r *CustomerRepository) branches(ctx context.Context, id uuid.UUID) ([]models.CustomerBranchModel, error) {
+	var ms []models.CustomerBranchModel
+	err := database.Conn(ctx, r.db).Where("customer_id = ?", id).Order("position, branch_no").Find(&ms).Error
+	return ms, err
+}
+
+// TaxIDOwner: รหัสลูกค้า (ที่ยังไม่ถูกลบ) ที่ใช้เลขผู้เสียภาษีนี้อยู่ นอกจาก except — ไม่มี = ""
+func (r *CustomerRepository) TaxIDOwner(ctx context.Context, companyID vo.CompanyID, taxID string, except *vo.CustomerID) (string, error) {
+	if taxID == "" {
+		return "", nil
+	}
+	q := database.Conn(ctx, r.db).Model(&models.CustomerModel{}).Select("code").
+		Where("company_id = ? AND tax_id = ?", uuidOf(companyID), taxID)
+	if except != nil {
+		q = q.Where("id <> ?", uuidOf(*except))
+	}
+	var codes []string
+	if err := q.Limit(1).Pluck("code", &codes).Error; err != nil || len(codes) == 0 {
+		return "", err
+	}
+	return codes[0], nil
 }
 
 func (r *CustomerRepository) Update(ctx context.Context, c *entities.Customer) error {
 	m := gp.CustomerToModel(c)
 	res := database.Conn(ctx, r.db).Model(&m).Where("company_id = ?", m.CompanyID).
-		Select("code", "name", "tax_id", "branch_no", "address", "payment_term_days", "tax_type", "credit_limit", "status", "updated_at").
+		Select("code", "name", "tax_id", "branch_no", "address", "addr_building", "addr_room_no", "addr_floor_no", "addr_village", "addr_house_no", "addr_moo", "addr_soi", "addr_yaek", "addr_street", "addr_sub_district", "addr_district", "addr_province", "addr_postal_code", "payment_term_days", "tax_type", "credit_limit", "status", "updated_at").
 		Updates(&m)
 	if res.Error != nil {
-		if database.IsUniqueViolation(res.Error) {
-			return domain.ErrCodeExists
-		}
-		return res.Error
+		return customerUniqueErr(res.Error)
 	}
 	if res.RowsAffected == 0 {
 		return domain.ErrCustomerNotFound
 	}
-	return nil
+	return r.saveBranches(ctx, c)
 }
 
 func (r *CustomerRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.CustomerID) error {
@@ -103,7 +147,11 @@ func (r *CustomerRepository) FindByID(ctx context.Context, companyID vo.CompanyI
 	if err != nil {
 		return nil, err
 	}
-	return gp.CustomerToEntity(m), nil
+	branches, err := r.branches(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	return gp.CustomerToEntity(m, branches...), nil
 }
 
 // InUse: มีใบเสนอราคา / ใบสั่งขาย / ใบแจ้งหนี้ของลูกค้านี้ — query เดียว
@@ -123,6 +171,7 @@ type customerRow struct {
 	TaxID           string
 	BranchNo        string
 	Address         string
+	AddressDetail   models.AddressColumns `gorm:"embedded;embeddedPrefix:addr_"`
 	PaymentTermDays int
 	TaxType         string
 	CreditLimit     *decimal.Decimal
@@ -132,12 +181,12 @@ type customerRow struct {
 
 func (r customerRow) dto() dto.Customer {
 	return dto.Customer{
-		ID: r.ID.String(), Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address,
+		ID: r.ID.String(), Code: r.Code, Name: r.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Address: r.Address, AddressDetail: thaiaddress.Address(r.AddressDetail),
 		PaymentTermDays: r.PaymentTermDays, TaxType: r.TaxType, CreditLimit: r.CreditLimit, Status: r.Status,
 	}
 }
 
-const customerColumns = "c.id, c.code, c.name, c.tax_id, c.branch_no, c.address, c.payment_term_days, c.tax_type, c.credit_limit, c.status"
+const customerColumns = "c.id, c.code, c.name, c.tax_id, c.branch_no, c.address, c.addr_building, c.addr_room_no, c.addr_floor_no, c.addr_village, c.addr_house_no, c.addr_moo, c.addr_soi, c.addr_yaek, c.addr_street, c.addr_sub_district, c.addr_district, c.addr_province, c.addr_postal_code, c.payment_term_days, c.tax_type, c.credit_limit, c.status"
 
 func (r *CustomerRepository) base(ctx context.Context, companyID vo.CompanyID) *gorm.DB {
 	return database.Conn(ctx, r.db).Table("sales_customers AS c").Where("c.company_id = ? AND c.deleted_at IS NULL", uuidOf(companyID))
@@ -151,7 +200,16 @@ func (r *CustomerRepository) Get(ctx context.Context, companyID vo.CompanyID, id
 	if len(rows) == 0 {
 		return dto.Customer{}, domain.ErrCustomerNotFound
 	}
-	return rows[0].dto(), nil
+	out := rows[0].dto()
+	branches, err := r.branches(ctx, rows[0].ID)
+	if err != nil {
+		return dto.Customer{}, err
+	}
+	out.Branches = make([]dto.CustomerBranch, len(branches))
+	for i, b := range branches {
+		out.Branches[i] = dto.CustomerBranch{BranchNo: b.BranchNo, Name: b.Name, Address: b.Address, AddressDetail: thaiaddress.Address(b.AddressDetail)}
+	}
+	return out, nil
 }
 
 func (r *CustomerRepository) List(ctx context.Context, companyID vo.CompanyID, f dto.CustomerFilter) (listing.Result[dto.Customer], error) {

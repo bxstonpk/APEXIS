@@ -29,7 +29,6 @@ import (
 	domain "apexis/backend/internal/modules/purchasing/domain/errors"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	gp "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm"
-	"apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/models"
 	gormrepo "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/repositories"
 	"apexis/backend/internal/modules/purchasing/infrastructure/services"
 	purchasinghttp "apexis/backend/internal/modules/purchasing/presentation/http"
@@ -97,7 +96,8 @@ func DocumentTypes() []integration.DocumentType {
 }
 
 // Migrate สร้างตารางของ purchasing
-func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+// Migrate: คืนผู้ขายรหัสซ้ำที่ถูกรวม (finance ต้องปรับ id คู่ค้าในใบจ่ายเงินตาม — ดู main.go)
+func Migrate(db *gorm.DB) ([]integration.PartyMerge, error) { return gp.Migrate(db) }
 
 // ---------- public API สำหรับ finance (เรียกภายใน transaction ของ finance) ----------
 

@@ -144,6 +144,7 @@ type InvoiceState struct {
 	CompanyID    vo.CompanyID
 	OrderID      vo.OrderID
 	CustomerID   vo.CustomerID
+	BillTo       BillTo // ผู้ซื้อตามใบกำกับภาษี ณ วันออก
 	Date         time.Time
 	DueDate      time.Time // วันที่ + เครดิตเทอมตามใบสั่งขาย
 	Reference    string
@@ -157,6 +158,15 @@ type InvoiceState struct {
 	Status       vo.DocStatus
 	Posting      Posting
 	Cancellation *Cancellation
+}
+
+// BillTo คือชื่อ / เลขผู้เสียภาษี / สาขา / ที่อยู่ของผู้ซื้อ ณ วันออกใบกำกับภาษี (ม.86/4)
+// เก็บไว้ในใบ — แก้ทะเบียนลูกค้าภายหลังไม่กระทบใบที่ออกแล้ว
+type BillTo struct {
+	Name     string
+	TaxID    string
+	BranchNo string
+	Address  string
 }
 
 // Invoice คือใบแจ้งหนี้ / ใบกำกับภาษี — ลงบัญชีทันที: Dr ลูกหนี้ / Cr รายได้ + ภาษีขาย

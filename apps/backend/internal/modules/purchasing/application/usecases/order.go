@@ -37,6 +37,9 @@ func (uc *OrderUseCases) Create(ctx context.Context, in dto.Create[entities.Orde
 		if err != nil {
 			return err
 		}
+		if err := uc.resolveBranch(ctx, in.CompanyID, &in.Data); err != nil {
+			return err
+		}
 		o, err := entities.NewOrder(in.CompanyID, in.UserID, in.Data, terms, entities.Decimals{Quantity: s.QuantityDecimals, Amount: s.AmountDecimals})
 		if err != nil {
 			return err
@@ -73,6 +76,9 @@ func (uc *OrderUseCases) Update(ctx context.Context, in dto.Update[vo.OrderID, e
 				return domain.ErrVatNotApplicable
 			}
 			terms.Vat.Inclusive = in.Data.PriceIncludesVat
+		}
+		if err := uc.resolveBranch(ctx, in.CompanyID, &in.Data); err != nil {
+			return err
 		}
 		if err := o.Update(in.Data, terms, entities.Decimals{Quantity: s.QuantityDecimals, Amount: s.AmountDecimals}); err != nil {
 			return err
@@ -179,6 +185,20 @@ func (uc *OrderUseCases) terms(ctx context.Context, companyID vo.CompanyID, d en
 		return entities.Terms{}, err
 	}
 	return entities.SupplierTerms(s, settings.VatRate, d.PriceIncludesVat)
+}
+
+// resolveBranch: สาขาผู้ขายต้องมีในทะเบียน (ว่าง = สาขาหลัก → เขียนเลขสาขาหลักกลับ)
+func (uc *OrderUseCases) resolveBranch(ctx context.Context, companyID vo.CompanyID, d *entities.OrderData) error {
+	s, err := uc.suppliers.FindByID(ctx, companyID, d.SupplierID)
+	if err != nil {
+		return err
+	}
+	b, err := s.Branch(d.SupplierBranchNo)
+	if err != nil {
+		return err
+	}
+	d.SupplierBranchNo = b.BranchNo
+	return nil
 }
 
 // checkItems: สินค้าทุกบรรทัดต้องมีอยู่และ active — 1 query ไม่ว่ามีกี่บรรทัด

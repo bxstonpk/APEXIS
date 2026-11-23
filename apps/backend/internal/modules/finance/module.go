@@ -91,6 +91,23 @@ func DocumentTypes() []integration.DocumentType {
 
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
 
+// RemapParties: ลูกค้า / ผู้ขายรหัสซ้ำที่ sales / purchasing รวมตอน migrate — ใบรับเงิน (customer) / ใบจ่ายเงิน (supplier)
+// ชี้ไปรหัสที่เก็บไว้ (ชื่อ / เลขผู้เสียภาษี ณ วันเอกสารใน party_* ไม่เปลี่ยน)
+func RemapParties(db *gorm.DB, kind string, merges []integration.PartyMerge) error {
+	table := map[string]string{"customer": "finance_receipts", "supplier": "finance_payments"}[kind]
+	if table == "" || len(merges) == 0 {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, m := range merges {
+			if err := tx.Exec("UPDATE "+table+" SET party_id = ? WHERE party_id = ?", m.To, m.From).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {
 	out := make([]string, len(vo.AllPermissions))

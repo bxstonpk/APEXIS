@@ -299,3 +299,56 @@ func FromClosing(c dto.Closing) Closing {
 		CancelledBy: c.CancelledBy, CancelledAt: c.CancelledAt,
 	}
 }
+
+// ---------- ภาพรวม (dashboard) ----------
+
+type WarehouseValue struct {
+	Warehouse Ref    `json:"warehouse"`
+	Value     string `json:"value"`
+}
+
+type BelowReorder struct {
+	Item         Ref    `json:"item"`
+	OnHand       string `json:"on_hand"`
+	ReorderPoint string `json:"reorder_point"`
+}
+
+type MonthFlow struct {
+	Month    string `json:"month"`
+	InValue  string `json:"in_value"`
+	OutValue string `json:"out_value"`
+}
+
+type Dashboard struct {
+	StartDate         string           `json:"start_date"`
+	EndDate           string           `json:"end_date"`
+	StockValue        string           `json:"stock_value"`
+	StockItemCount    int64            `json:"stock_item_count"`
+	Warehouses        []WarehouseValue `json:"warehouses"`
+	BelowReorderCount int64            `json:"below_reorder_count"`
+	BelowReorder      []BelowReorder   `json:"below_reorder"`
+	Movements         struct {
+		ReceiptCount int64 `json:"receipt_count"`
+		IssueCount   int64 `json:"issue_count"`
+	} `json:"movements"`
+	Monthly []MonthFlow `json:"monthly"`
+}
+
+func FromDashboard(d dto.Dashboard) Dashboard {
+	out := Dashboard{
+		StartDate: date(d.Period.Start), EndDate: date(d.Period.End), StockValue: d.StockValue.String(), StockItemCount: d.StockItemCount,
+		Warehouses: make([]WarehouseValue, len(d.Warehouses)), BelowReorderCount: d.BelowReorderCount,
+		BelowReorder: make([]BelowReorder, len(d.BelowReorder)), Monthly: make([]MonthFlow, len(d.Monthly)),
+	}
+	for i, w := range d.Warehouses {
+		out.Warehouses[i] = WarehouseValue{Warehouse: ref(w.Warehouse), Value: w.Value.String()}
+	}
+	for i, b := range d.BelowReorder {
+		out.BelowReorder[i] = BelowReorder{Item: ref(b.Item), OnHand: b.OnHand.String(), ReorderPoint: b.ReorderPoint.String()}
+	}
+	out.Movements.ReceiptCount, out.Movements.IssueCount = d.ReceiptCount, d.IssueCount
+	for i, m := range d.Monthly {
+		out.Monthly[i] = MonthFlow{Month: m.Month, InValue: m.InValue.String(), OutValue: m.OutValue.String()}
+	}
+	return out
+}

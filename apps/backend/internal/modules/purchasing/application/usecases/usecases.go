@@ -60,7 +60,7 @@ func New(d Deps) *UseCases {
 		Suppliers:   &SupplierUseCases{base: b, repo: d.Suppliers},
 		Orders:      &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers},
 		Receipts:    &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
-		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders},
+		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, suppliers: d.Suppliers},
 		Reports:     &ReportUseCases{base: b, reports: d.Reports},
 		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, suppliers: d.Suppliers, settlements: d.Settlements},
 	}

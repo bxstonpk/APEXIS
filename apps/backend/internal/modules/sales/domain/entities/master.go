@@ -4,6 +4,7 @@
 package entities
 
 import (
+	"apexis/backend/internal/platform/thaiaddress"
 	"fmt"
 	"strings"
 	"time"
@@ -91,10 +92,12 @@ type CustomerData struct {
 	TaxID           string
 	BranchNo        string
 	Address         string
+	AddressDetail   thaiaddress.Address // ที่อยู่ตามแบบสรรพากร — Address = ข้อความที่ประกอบจากช่องเหล่านี้
 	PaymentTermDays int
 	TaxType         vo.TaxType
 	CreditLimit     *vo.Money // nil = ไม่จำกัด
 	Status          vo.Status
+	Branches        []CustomerBranch // สาขาเพิ่มเติม (ไม่รวมสาขาหลัก)
 }
 
 type Customer struct {
@@ -160,9 +163,10 @@ func normalizeCustomer(d CustomerData, amountDecimals int) (CustomerData, error)
 	if out.BranchNo, err = vo.BranchNo(d.BranchNo); err != nil {
 		return CustomerData{}, err
 	}
-	if out.Address, err = vo.OptionalText(d.Address, 500); err != nil {
+	if out.AddressDetail, err = thaiaddress.New(d.AddressDetail); err != nil {
 		return CustomerData{}, err
 	}
+	out.Address = out.AddressDetail.Format()
 	if d.PaymentTermDays < 0 || d.PaymentTermDays > 365 {
 		return CustomerData{}, domain.ErrInvalidTerm
 	}
@@ -178,6 +182,9 @@ func normalizeCustomer(d CustomerData, amountDecimals int) (CustomerData, error)
 		out.CreditLimit = &v
 	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
+		return CustomerData{}, err
+	}
+	if out.Branches, err = normalizeBranches(out.BranchNo, d.Branches); err != nil {
 		return CustomerData{}, err
 	}
 	return out, nil

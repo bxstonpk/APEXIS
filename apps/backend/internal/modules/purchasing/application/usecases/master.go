@@ -95,7 +95,12 @@ func (uc *SupplierUseCases) Create(ctx context.Context, in dto.Create[entities.S
 	if err != nil {
 		return dto.Supplier{}, err
 	}
-	if err := uc.write(ctx, in.Actor, vo.PermSupplierManage, func(ctx context.Context) error { return uc.repo.Create(ctx, s) }); err != nil {
+	if err := uc.write(ctx, in.Actor, vo.PermSupplierManage, func(ctx context.Context) error {
+		if err := uc.ensureTaxIDFree(ctx, in.CompanyID, s, nil); err != nil {
+			return err
+		}
+		return uc.repo.Create(ctx, s)
+	}); err != nil {
 		return dto.Supplier{}, err
 	}
 	return uc.repo.Get(ctx, in.CompanyID, s.ID())
@@ -109,6 +114,9 @@ func (uc *SupplierUseCases) Update(ctx context.Context, in dto.Update[vo.Supplie
 			return err
 		}
 		if err := s.Update(in.Data); err != nil {
+			return err
+		}
+		if err := uc.ensureTaxIDFree(ctx, in.CompanyID, s, &in.ID); err != nil {
 			return err
 		}
 		return uc.repo.Update(ctx, s)
@@ -134,4 +142,17 @@ func (uc *SupplierUseCases) Delete(ctx context.Context, in dto.ByID[vo.SupplierI
 		}
 		return uc.repo.Delete(ctx, in.CompanyID, in.ID)
 	})
+}
+
+// ensureTaxIDFree: เลขผู้เสียภาษี 1 เลข = ผู้ขาย 1 รหัส — ซ้ำ = แจ้งรหัสเดิมให้ไปเพิ่มสาขาที่รหัสนั้น
+// (ตรวจก่อนเพื่อข้อความที่ชัด; unique index ใน DB กันกรณีบันทึกพร้อมกัน)
+func (uc *SupplierUseCases) ensureTaxIDFree(ctx context.Context, companyID vo.CompanyID, s *entities.Supplier, except *vo.SupplierID) error {
+	code, err := uc.repo.TaxIDOwner(ctx, companyID, s.Data().TaxID, except)
+	if err != nil {
+		return err
+	}
+	if code != "" {
+		return fmt.Errorf("%w: supplier %s", domain.ErrTaxIDExists, code)
+	}
+	return nil
 }

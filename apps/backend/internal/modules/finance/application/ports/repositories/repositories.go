@@ -6,6 +6,7 @@ package repositories
 
 import (
 	"context"
+	"time"
 
 	"apexis/backend/internal/modules/finance/application/dto"
 	"apexis/backend/internal/modules/finance/domain/entities"
@@ -73,4 +74,12 @@ type ReportRepository interface {
 	WithholdingPaid(ctx context.Context, companyID vo.CompanyID, f dto.WithholdingFilter) (listing.Result[dto.WithholdingRow], dto.WithholdingTotals, error)
 	// WithholdingReceived: ใบรับ (ยังไม่ยกเลิก) ที่ลูกค้าหักภาษีไว้ + ยอดรวม — query เดียว
 	WithholdingReceived(ctx context.Context, companyID vo.CompanyID, f dto.WithholdingFilter) (listing.Result[dto.WithholdingRow], dto.WithholdingTotals, error)
+	// ActiveCashAccounts: ทะเบียนเงินที่ใช้งาน (เรียงตามรหัส) พร้อมบัญชีแยกประเภทที่ผูก
+	ActiveCashAccounts(ctx context.Context, companyID vo.CompanyID) ([]dto.DashboardCashAccount, error)
+	// FlowTotals: ยอดรับ / จ่าย / ภาษี / จำนวนโอนของช่วง — query เดียว (UNION ALL + FILTER)
+	FlowTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.FlowTotals, error)
+	// MonthlyFlows: ยอดรับ / จ่ายรายเดือนของ [from, to] — query เดียว (GROUP BY เดือน) — เดือนที่ไม่มีรายการไม่อยู่ในผล
+	MonthlyFlows(ctx context.Context, companyID vo.CompanyID, from, to time.Time) ([]dto.MonthlyFlow, error)
+	// RecentDocuments: เอกสารรับ / จ่าย / โอนที่ยังไม่ยกเลิกล่าสุด — query เดียว (UNION ALL)
+	RecentDocuments(ctx context.Context, companyID vo.CompanyID, limit int) ([]dto.RecentDocument, error)
 }

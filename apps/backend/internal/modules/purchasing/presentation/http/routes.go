@@ -13,6 +13,7 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	const base = "/api/v1/companies/{companyID}"
 	handle := func(pattern string, fn nethttp.HandlerFunc) { mux.Handle(pattern, authenticate(fn)) }
 
+	handle("GET "+base+"/dashboards/purchasing", h.Dashboard)
 	handle("GET "+base+"/purchasing-settings", h.GetSettings)
 	handle("PUT "+base+"/purchasing-settings", h.UpdateSettings)
 
