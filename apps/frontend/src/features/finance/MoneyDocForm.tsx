@@ -281,14 +281,14 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
         )}
       </FormSection>
 
-      <section aria-labelledby="doc-lines" className="flex flex-col gap-3">
+      <section aria-labelledby="doc-lines" className="flex min-w-0 flex-col gap-3">
         <div>
           <h2 id="doc-lines" className="text-[15px] font-semibold">
             {isParty ? t.sections.invoices : t.sections.lines}
           </h2>
           {isParty && <p className="mt-0.5 text-[13px] text-ink-muted">{t.sections.invoicesHint}</p>}
         </div>
-        <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+        <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
           {isParty ? (
             !party || loadingInvoices || !invoices?.length ? (
               <p className="px-4 py-10 text-center text-sm text-ink-muted" aria-live="polite">

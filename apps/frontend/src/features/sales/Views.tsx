@@ -29,7 +29,7 @@ export function LinesTable({ rows, totals, vatRate, inclusive }: { rows: Row[]; 
   const num = 'px-3 py-2.5 text-right tabular-nums'
   const priced = rows.some((r) => r.unitPrice !== undefined)
   return (
-    <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+    <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
       <table className="w-full min-w-[40rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-line bg-subtle">

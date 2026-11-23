@@ -72,7 +72,7 @@ export default async function Page({ params, searchParams }: Props) {
         {report && <ReportActions rows={csv} filename={`${book}_${start}_${end}.csv`} />}
       </header>
 
-      <Form action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
+      <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-64" />
         {paid && <SelectField name="form" label={t.fields.form} defaultValue={form} options={Object.entries(t.forms).map(([value, label]) => ({ value, label }))} />}
         <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />
@@ -82,7 +82,7 @@ export default async function Page({ params, searchParams }: Props) {
 
       {'error' in res && <Alert tone="error">{res.error}</Alert>}
       {report && (
-        <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card print:border-0 print:shadow-none">
+        <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card print:border-0 print:shadow-none">
           <table className="w-full min-w-[52rem] border-collapse text-sm print:text-[11px]">
             <thead>
               <tr className="border-b border-line bg-subtle print:bg-transparent">

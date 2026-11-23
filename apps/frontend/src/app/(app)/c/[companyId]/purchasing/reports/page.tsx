@@ -129,7 +129,7 @@ export default async function Page({ params, searchParams }: Props) {
         </div>
         {'data' in res && <ReportActions rows={csv} filename={`${book}_${end}.csv`} />}
       </header>
-      <Form action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
+      <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-72" />
         {book === 'ap-aging' && <TextField name="end_date" type="date" label={t.fields.asOf} defaultValue={end} />}
         <Button type="submit">{texts.reports.run}</Button>

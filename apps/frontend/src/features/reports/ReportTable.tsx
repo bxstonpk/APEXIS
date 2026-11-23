@@ -6,7 +6,7 @@ const th = 'px-3 py-2.5 text-left text-[13px] font-medium text-ink-muted print:p
 
 export function ReportTable({ minWidth, head, numHead, empty, foot, children }: { minWidth: string; head: string[]; numHead: string[]; empty: boolean; foot?: ReactNode; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card print:border-0 print:shadow-none">
+    <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card print:border-0 print:shadow-none">
       <table className="w-full border-collapse text-sm print:text-[11px]" style={{ minWidth }}>
         <thead>
           <tr className="border-b border-line bg-subtle print:bg-transparent">

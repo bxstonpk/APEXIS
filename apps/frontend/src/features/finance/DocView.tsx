@@ -113,7 +113,7 @@ export function MoneyDocView({
         ]}
       />
 
-      <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-subtle">
@@ -161,7 +161,7 @@ export function MoneyDocView({
         </table>
       </div>
 
-      <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full min-w-[32rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-subtle">

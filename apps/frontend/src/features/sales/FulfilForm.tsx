@@ -132,11 +132,11 @@ export function FulfilForm({
         <TextField label={t.fields.description} value={head.description} maxLength={500} onChange={(e) => setHead((h) => ({ ...h, description: e.target.value }))} />
       </FormSection>
 
-      <section aria-labelledby="fulfil-lines" className="flex flex-col gap-3">
+      <section aria-labelledby="fulfil-lines" className="flex min-w-0 flex-col gap-3">
         <h2 id="fulfil-lines" className="text-[15px] font-semibold">
           {t.sections.fulfil}
         </h2>
-        <div className="overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+        <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
           <table className="w-full min-w-[44rem] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-subtle text-left text-[13px] text-ink-muted">
