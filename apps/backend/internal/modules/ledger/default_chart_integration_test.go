@@ -74,8 +74,9 @@ func TestDefaultChart(t *testing.T) {
 	if bs["total_assets"] != "1000" || bs["total_suspense"] != "-1000" || bs["total_liabilities_and_equity"] != "0" || len(objs(bs["suspense"])) == 0 {
 		t.Fatalf("balance sheet with pending receipt = %v", bs)
 	}
-	if is := a.expect(a.do("GET", base+"/reports?book=income-statement&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "income").data(); is["net_income"] != "0" {
-		t.Fatalf("suspense leaked into income statement: %v", is)
+	if is := a.expect(a.do("GET", base+"/reports?book=income-statement&start_date=2026-01-01&end_date=2026-12-31", owner, nil), 200, "income").data(); is["net_income"] != "0" ||
+		is["total_suspense"] != "-1000" || len(objs(is["suspense"])) == 0 {
+		t.Fatalf("suspense must be shown separately, not in net income: %v", is)
 	}
 
 	post("2026-03-05", ln(pending["id"].(string), "1000", nil), ln(revenue, nil, "1000"))

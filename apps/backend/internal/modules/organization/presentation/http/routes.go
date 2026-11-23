@@ -17,6 +17,7 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("POST /api/v1/companies", h.CreateCompany)
 	handle("GET /api/v1/me/companies", h.ListMyCompanies)
 	handle("GET /api/v1/me/companies/{companyID}", h.GetMyCompany)
+	handle("GET /api/v1/me/companies/{companyID}/letterhead", h.GetLetterhead)
 	handle("GET "+base, h.GetCompany)
 	handle("PUT "+base, h.UpdateCompany)
 

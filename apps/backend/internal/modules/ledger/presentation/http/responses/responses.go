@@ -276,6 +276,8 @@ type IncomeStatement struct {
 	Expenses      []StatementLine `json:"expenses"`
 	TotalExpenses string          `json:"total_expenses"`
 	NetIncome     string          `json:"net_income"`
+	Suspense      []StatementLine `json:"suspense"` // บัญชีพัก: เคลื่อนไหวในช่วง เดบิตเป็นบวก — ไม่รวมใน net_income
+	TotalSuspense string          `json:"total_suspense"`
 }
 
 func FromIncomeStatement(s dto.IncomeStatement) IncomeStatement {
@@ -283,5 +285,6 @@ func FromIncomeStatement(s dto.IncomeStatement) IncomeStatement {
 		StartDate: date(s.Start), EndDate: date(s.End),
 		Revenue: lines(s.Revenue), TotalRevenue: s.TotalRevenue.String(),
 		Expenses: lines(s.Expenses), TotalExpenses: s.TotalExpenses.String(), NetIncome: s.NetIncome.String(),
+		Suspense: lines(s.Suspense), TotalSuspense: s.TotalSuspense.String(),
 	}
 }

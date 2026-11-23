@@ -262,4 +262,8 @@ type IncomeStatement struct {
 	Expenses      []services.StatementLine
 	TotalExpenses vo.Money
 	NetIncome     vo.Money
+	// Suspense: ยอดเคลื่อนไหวของบัญชีพักในช่วง (เดบิตเป็นบวก) — แสดงแยก ไม่รวมใน NetIncome
+	// (ยอดคงเหลือของบัญชีพักอยู่ในงบแสดงฐานะการเงิน)
+	Suspense      []services.StatementLine
+	TotalSuspense vo.Money
 }

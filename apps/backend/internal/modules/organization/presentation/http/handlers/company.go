@@ -50,6 +50,18 @@ func (h *Handler) GetMyCompany(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/v1/me/companies/{companyID}/letterhead — หัวเอกสารสำหรับพิมพ์ (สมาชิกทุกคน)
+func (h *Handler) GetLetterhead(w http.ResponseWriter, r *http.Request) {
+	h.serveUser(w, r, http.StatusOK, func(userID vo.UserID) (any, error) {
+		companyID, err := pathID[vo.CompanyID](r, "companyID")
+		if err != nil {
+			return nil, err
+		}
+		c, err := h.uc.Companies.Letterhead(r.Context(), userID, companyID)
+		return one(responses.FromLetterhead(c), err)
+	})
+}
+
 // GET /api/v1/companies/{companyID}
 func (h *Handler) GetCompany(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
