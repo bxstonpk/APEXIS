@@ -178,7 +178,7 @@ export function CustomerForm({
 
 // ---------------------------------------------------------------- ค่าตั้งการขาย
 
-type AccountKey = 'journal_id' | 'ar_account_id' | 'output_vat_account_id' | 'revenue_account_id' | 'cogs_account_id'
+type AccountKey = 'journal_id' | 'ar_account_id' | 'output_vat_account_id' | 'revenue_account_id' | 'cogs_account_id' | 'sales_returns_account_id'
 
 export function SalesSettingsForm({
   apiPath,
@@ -267,6 +267,7 @@ export function SalesSettingsForm({
         {account('output_vat_account_id', f.outputVat, 'liability')}
         {account('revenue_account_id', f.revenue, 'revenue')}
         {account('cogs_account_id', f.cogs, 'expense')}
+        {account('sales_returns_account_id', f.salesReturns, 'revenue')}
       </FormSection>
       {canManage && (
         <FormBar>

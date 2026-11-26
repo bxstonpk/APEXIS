@@ -42,6 +42,7 @@ export type PurchasingSettings = {
   ap_account_id: string | null
   input_vat_account_id: string | null
   price_variance_account_id: string | null
+  purchase_returns_account_id: string | null
 }
 
 export type PurchaseOrderSummary = {
@@ -107,7 +108,10 @@ export type SupplierInvoiceSummary = PostedDoc & {
   invoice_date: string
   due_date: string
   totals: Totals
+  /** จ่ายแล้ว (ใบสำคัญจ่าย) */
   paid_amount: string
+  /** ลดหนี้แล้ว (รวม VAT) — outstanding = ยอดรวม − จ่าย − ลดหนี้ */
+  credited_amount: string
   outstanding: string
 }
 
@@ -116,7 +120,18 @@ export type SupplierInvoice = SupplierInvoiceSummary & {
   description: string
   vat_rate: string
   price_includes_vat: boolean
-  lines: { order_line_no: number; item: Ref; quantity: string; unit_price: string; amounts: Totals; grir_cleared: string; price_variance: string }[]
+  lines: {
+    line_no: number
+    order_line_no: number
+    item: Ref
+    quantity: string
+    unit_price: string
+    amounts: Totals
+    grir_cleared: string
+    price_variance: string
+    returned_quantity: string
+    credited_amount: string
+  }[]
 }
 
 export type PurchasingOutstandingRow = {
@@ -142,6 +157,23 @@ export type ApAging = {
 
 export const PURCHASE_DOC_QUERY_KEYS = ['q', 'status', 'supplier_id', 'start_date', 'end_date', 'sort', 'page', 'page_size'] as const
 
+/** GET /reports?book=input-vat — ใบลดหนี้ผู้ขายเป็นยอดติดลบ */
+export type InputVatRow = {
+  date: string
+  document_id: string
+  document_no: string
+  kind: 'invoice' | 'credit_note'
+  tax_invoice_no: string
+  tax_invoice_date: string
+  reference_no: string
+  supplier: Ref
+  tax_id: string
+  branch_no: string
+  base: string
+  tax: string
+}
+export type InputVatReport = { book: string; start_date: string; end_date: string; rows: InputVatRow[]; total_base: string; total_tax: string }
+
 export const docPerms = {
   orderRead: 'purchasing.order:read',
   orderManage: 'purchasing.order:manage',
@@ -159,6 +191,7 @@ export const purchasingDocsApi = {
   orders: (c: string) => `/companies/${c}/purchase-orders`,
   receipts: (c: string) => `/companies/${c}/goods-receipts`,
   invoices: (c: string) => `/companies/${c}/supplier-invoices`,
+  creditNotes: (c: string) => `/companies/${c}/supplier-credit-notes`,
   settings: (c: string) => `/companies/${c}/purchasing-settings`,
   reports: (c: string) => `/companies/${c}/reports`,
   items: (c: string) => `/companies/${c}/items`,

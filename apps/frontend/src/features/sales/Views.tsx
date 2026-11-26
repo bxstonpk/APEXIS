@@ -59,7 +59,7 @@ export function LinesTable({ rows, totals, vatRate, inclusive }: { rows: Row[]; 
                 {r.description && <span className="block text-[12px] text-ink-muted">{r.description}</span>}
                 {r.extra}
               </td>
-              <td className={num}>{formatAmount(r.quantity)}</td>
+              <td className={num}>{r.quantity === '' ? '–' : formatAmount(r.quantity)}</td>
               {priced && (
                 <>
                   <td className={num}>{formatAmount(r.unitPrice)}</td>

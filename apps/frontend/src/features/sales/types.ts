@@ -31,6 +31,7 @@ export type SalesSettings = {
   output_vat_account_id: string | null
   revenue_account_id: string | null
   cogs_account_id: string | null
+  sales_returns_account_id: string | null
 }
 
 export type SalesDocSummary = {
@@ -93,7 +94,8 @@ export type Delivery = PostedSummary & {
   lines: { order_line_no: number; item: Ref; quantity: string; cost: string }[]
 }
 
-export type InvoiceSummary = PostedSummary & { with_delivery: boolean; due_date: string; totals: Totals; received_amount: string; outstanding: string }
+/** received_amount = รับเงินแล้ว (ใบเสร็จ), credited_amount = ลดหนี้แล้ว (รวม VAT), outstanding = ยอดรวม − รับ − ลดหนี้ */
+export type InvoiceSummary = PostedSummary & { with_delivery: boolean; due_date: string; totals: Totals; received_amount: string; credited_amount: string; outstanding: string }
 
 export type Invoice = InvoiceSummary & {
   /** ผู้ซื้อตามใบกำกับภาษี ณ วันออก */
@@ -104,7 +106,20 @@ export type Invoice = InvoiceSummary & {
   price_includes_vat: boolean
   reference: string
   description: string
-  lines: { order_line_no: number; item: Ref; quantity: string; unit_price: string; amounts: Totals; revenue_account_id: string; cost: string }[]
+  lines: {
+    line_no: number
+    order_line_no: number
+    item: Ref
+    quantity: string
+    unit_price: string
+    amounts: Totals
+    revenue_account_id: string
+    cost: string
+    /** คืนแล้ว (ใบลดหนี้ชนิดรับคืน) */
+    returned_quantity: string
+    /** ลดหนี้แล้ว (ก่อน VAT) */
+    credited_amount: string
+  }[]
 }
 
 /** GET /me/companies/{id}/letterhead */
@@ -139,6 +154,7 @@ export const salesApi = {
   orders: (c: string) => `/companies/${c}/sales-orders`,
   deliveries: (c: string) => `/companies/${c}/deliveries`,
   invoices: (c: string) => `/companies/${c}/sales-invoices`,
+  creditNotes: (c: string) => `/companies/${c}/sales-credit-notes`,
   settings: (c: string) => `/companies/${c}/sales-settings`,
   reports: (c: string) => `/companies/${c}/reports`,
   items: (c: string) => `/companies/${c}/items`,
@@ -169,5 +185,18 @@ export type OutstandingRow = {
 export type AgingAmounts = { not_due: string; days_1_30: string; days_31_60: string; days_61_90: string; over_90: string; total: string }
 export type Aging = { book: string; as_of: string; rows: (AgingAmounts & { customer: Ref })[]; totals: AgingAmounts }
 
-export type TaxRow = { date: string; document_id: string; document_no: string; customer: Ref; tax_id: string; branch_no: string; tax_type: string; base: string; tax: string }
+/** kind = credit_note: ยอดติดลบ, reference_no = เลขที่ใบกำกับเดิม */
+export type TaxRow = {
+  date: string
+  document_id: string
+  document_no: string
+  kind: 'invoice' | 'credit_note'
+  reference_no: string
+  customer: Ref
+  tax_id: string
+  branch_no: string
+  tax_type: string
+  base: string
+  tax: string
+}
 export type TaxReport = { book: string; start_date: string; end_date: string; rows: TaxRow[]; total_base: string; total_tax: string }

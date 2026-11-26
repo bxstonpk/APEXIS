@@ -38,6 +38,8 @@ export default async function Page({ params, searchParams }: Props) {
         listHref={listHref}
         entryHref={entryHref}
         canCancel={can(ctx.permissions, perms.paymentPost)}
+        printHref={d.status === 'posted' && d.wht_certificate_no ? `${financePage(companyId, 'payments')}/${d.id}/wht-certificate` : null}
+        printLabel={t.whtCertificate.print}
       />
     </FormPage>
   )

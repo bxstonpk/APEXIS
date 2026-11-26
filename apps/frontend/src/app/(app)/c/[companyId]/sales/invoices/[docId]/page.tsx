@@ -34,6 +34,8 @@ export default async function Page({ params, searchParams }: Props) {
   const actions: DocAction[] = []
   if (posted && can(ctx.permissions, perms.invoicePost)) actions.push({ kind: 'patch', status: 'cancelled', label: a.cancelDoc, confirm: a.confirm.cancelDoc, danger: true })
   actions.push({ kind: 'link', href: `${path}/${inv.id}/print`, label: a.print, icon: 'print' })
+  if (posted && toUnits(inv.outstanding) > 0n && can(ctx.permissions, perms.invoicePost))
+    actions.push({ kind: 'link', href: `${salesPage(companyId, 'credit-notes')}/new?invoice_id=${inv.id}`, label: texts.creditNotes.sales.create, icon: 'invoice' })
   if (posted && toUnits(inv.outstanding) > 0n && can(ctx.permissions, 'finance.receipt:post'))
     actions.push({ kind: 'link', href: `${companyPath(companyId, 'finance', 'receipts')}/new`, label: a.receive, icon: 'receive', primary: true })
 
@@ -55,13 +57,27 @@ export default async function Page({ params, searchParams }: Props) {
             [t.columns.order, inv.order ? <EntryLink key="o" href={`${salesPage(companyId, 'orders')}/${inv.order.id}`} no={inv.order.order_no} /> : ''],
             [t.fields.entry, <EntryLink key="e" href={entryHref} no={inv.entry_no} />],
             [t.fields.received, formatAmount(inv.received_amount)],
+            [texts.creditNotes.columns.total, toUnits(inv.credited_amount) > 0n ? <EntryLink key="cn" href={`${salesPage(companyId, 'credit-notes')}?invoice_id=${inv.id}`} no={formatAmount(inv.credited_amount)} /> : ''],
             [t.columns.outstanding, posted ? formatAmount(inv.outstanding) : ''],
             [t.fields.stockDocument, inv.with_delivery ? inv.stock_document_no : ''],
             [t.fields.reference, inv.reference],
           ]}
         />
         <LinesTable
-          rows={inv.lines.map((l) => ({ key: l.order_line_no, item: l.item, quantity: l.quantity, unitPrice: l.unit_price, amount: inv.price_includes_vat ? l.amounts.gross : l.amounts.net }))}
+          rows={inv.lines.map((l) => ({
+            key: l.line_no,
+            item: l.item,
+            quantity: l.quantity,
+            unitPrice: l.unit_price,
+            amount: inv.price_includes_vat ? l.amounts.gross : l.amounts.net,
+            extra:
+              toUnits(l.credited_amount) > 0n ? (
+                <span className="mt-1 block text-[12px] text-ink-muted">
+                  {texts.creditNotes.form.credited} {formatAmount(l.credited_amount)}
+                  {toUnits(l.returned_quantity) > 0n && ` · ${texts.creditNotes.form.returned} ${formatAmount(l.returned_quantity)}`}
+                </span>
+              ) : undefined,
+          }))}
           totals={inv.totals}
           vatRate={inv.vat_rate}
           inclusive={inv.price_includes_vat}

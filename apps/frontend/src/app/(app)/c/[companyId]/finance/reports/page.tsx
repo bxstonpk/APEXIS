@@ -4,7 +4,9 @@ import { Alert, Button, Pagination, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
 import { formatAmount, plainAmount } from '@/features/accounting/money'
 import { ReportActions } from '@/features/accounting/ReportActions'
-import { financeApi, financePage, type WithholdingReport } from '@/features/finance/types'
+import Link from 'next/link'
+import { companyPath } from '@/config/apps'
+import { financeApi, financePage, type VatSummary, type WithholdingReport } from '@/features/finance/types'
 import { formatDate, today } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { backendGet, type ListMeta } from '@/lib/server/backend'
@@ -15,9 +17,13 @@ export const metadata: Metadata = { title: texts.finance.reports.pageTitle }
 
 type Props = { params: Promise<{ companyId: string }>; searchParams: Promise<SearchParams> }
 
-const BOOKS = ['withholding-tax', 'withholding-tax-received'] as const
+const BOOKS = ['withholding-tax', 'withholding-tax-received', 'vat-summary'] as const
 
-/** รายงานภาษีหัก ณ ที่จ่าย (ภ.ง.ด.3 / 53) และภาษีถูกหัก — ?book=&form=&start_date=&end_date=&page= ส่งต่อ GET /reports ตรงๆ */
+/**
+ * รายงานภาษีของแอปการเงิน — ?book=&form=&start_date=&end_date=&page= ส่งต่อ GET /reports ตรงๆ
+ * - withholding-tax / withholding-tax-received: ภาษีหัก ณ ที่จ่าย (ภ.ง.ด.3 / 53) และภาษีถูกหัก
+ * - vat-summary: สรุป ภ.พ.30 (ภาษีขาย − ภาษีซื้อ) พร้อมลิงก์ไปรายงานภาษีขาย / ภาษีซื้อรายใบของช่วงเดียวกัน
+ */
 export default async function Page({ params, searchParams }: Props) {
   const { companyId } = await params
   const sp = await searchParams
@@ -33,11 +39,12 @@ export default async function Page({ params, searchParams }: Props) {
   const query = new URLSearchParams({ book, start_date: start, end_date: end, page_size: '100' })
   if (form) query.set('form', form)
   if (param(sp, 'page')) query.set('page', param(sp, 'page'))
-  const res = await backendGet<WithholdingReport>(financeApi.reports(companyId), query).then(
-    (r) => r as { data: WithholdingReport; meta?: ListMeta },
+  const res = await backendGet<WithholdingReport | VatSummary>(financeApi.reports(companyId), query).then(
+    (r) => r as { data: WithholdingReport | VatSummary; meta?: ListMeta },
     (err: unknown) => ({ error: errorMessage(err) }),
   )
-  const report = 'data' in res ? res.data : null
+  if (book === 'vat-summary') return <VatSummaryReport companyId={companyId} company={ctx.company.name} book={book} start={start} end={end} query={query} res={res} />
+  const report = 'data' in res ? (res.data as WithholdingReport) : null
   const paid = book === 'withholding-tax'
   const csv = report
     ? [
@@ -137,6 +144,109 @@ export default async function Page({ params, searchParams }: Props) {
       {'meta' in res && res.meta && res.meta.total > res.meta.page_size && (
         <div className="print:hidden">
           <Pagination page={res.meta.page} pageSize={res.meta.page_size} total={res.meta.total} href={(p) => withQuery(path, current, { page: p })} labels={texts.common.pagination} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** สรุป ภ.พ.30 — ภาษีขาย / ภาษีซื้อ (ใบกำกับหักใบลดหนี้แล้ว) และภาษีที่ต้องชำระหรือชำระเกิน */
+function VatSummaryReport({
+  companyId,
+  company,
+  book,
+  start,
+  end,
+  query,
+  res,
+}: {
+  companyId: string
+  company: string
+  book: string
+  start: string
+  end: string
+  query: URLSearchParams
+  res: { data: WithholdingReport | VatSummary } | { error: string }
+}) {
+  const t = texts.finance.reports
+  const v = t.vat
+  const s = 'data' in res ? (res.data as VatSummary) : null
+  const detail = (app: 'sales' | 'purchasing', b: string) => withQuery(companyPath(companyId, app, 'reports'), new URLSearchParams(), { book: b, start_date: start, end_date: end })
+  const csv = s
+    ? [
+        [company],
+        [t.books[book], `${start} – ${end}`],
+        [],
+        ['', v.base, v.tax, v.documents],
+        [v.output, plainAmount(s.output.base), plainAmount(s.output.tax), String(s.output.documents)],
+        [v.input, plainAmount(s.input.base), plainAmount(s.input.tax), String(s.input.documents)],
+        [v.payable, '', plainAmount(s.payable)],
+        [v.refundable, '', plainAmount(s.refundable)],
+      ]
+    : []
+  const row = 'grid grid-cols-[1fr_auto] items-baseline gap-4 border-b border-line px-5 py-3 last:border-b-0'
+  const sections = s
+    ? ([
+        ['output', s.output, detail('sales', 'output-vat'), v.outputDetail, v.salesBase],
+        ['input', s.input, detail('purchasing', 'input-vat'), v.inputDetail, v.purchaseBase],
+      ] as const)
+    : []
+  return (
+    <div className="flex flex-col gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4">
+        <div>
+          <p className="text-[13px] text-ink-muted print:text-ink">{company}</p>
+          <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{t.books[book]}</h1>
+          <p className="mt-1 text-sm text-ink-muted">{format(texts.reports.period, { start: formatDate(start), end: formatDate(end) })}</p>
+        </div>
+        {s && <ReportActions rows={csv} filename={`${book}_${start}_${end}.csv`} />}
+      </header>
+      <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
+        <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-64" />
+        <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />
+        <TextField name="end_date" type="date" label={t.fields.end} defaultValue={end} />
+        <Button type="submit">{texts.reports.run}</Button>
+      </Form>
+      {'error' in res && <Alert tone="error">{res.error}</Alert>}
+      {s && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {sections.map(([k, x, href, label, baseLabel]) => (
+            <section key={k} className="rounded-(--radius-panel) border border-line bg-surface shadow-card">
+              <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+                <h2 className="text-[15px] font-semibold">{v[k]}</h2>
+                <Link href={href} className="text-[13px] font-medium text-primary hover:underline print:hidden">
+                  {label}
+                </Link>
+              </header>
+              <dl>
+                <div className={row}>
+                  <dt className="text-ink-muted">{baseLabel}</dt>
+                  <dd className="tabular-nums">{formatAmount(x.base)}</dd>
+                </div>
+                <div className={row}>
+                  <dt className="text-ink-muted">{v[k]}</dt>
+                  <dd className="text-[17px] font-semibold tabular-nums">{formatAmount(x.tax)}</dd>
+                </div>
+                <div className={row}>
+                  <dt className="text-ink-muted">{v.documents}</dt>
+                  <dd className="tabular-nums">{x.documents.toLocaleString('th-TH')}</dd>
+                </div>
+              </dl>
+            </section>
+          ))}
+          <section className="rounded-(--radius-panel) border border-line bg-surface p-5 shadow-card lg:col-span-2">
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-[13px] text-ink-muted">{v.payable}</dt>
+                <dd className="mt-1 text-[24px] font-semibold tabular-nums">{formatAmount(s.payable, { dashZero: true })}</dd>
+              </div>
+              <div>
+                <dt className="text-[13px] text-ink-muted">{v.refundable}</dt>
+                <dd className="mt-1 text-[24px] font-semibold tabular-nums">{formatAmount(s.refundable, { dashZero: true })}</dd>
+              </div>
+            </dl>
+            <p className="mt-4 text-[13px] leading-relaxed text-ink-muted">{v.note}</p>
+          </section>
         </div>
       )}
     </div>

@@ -126,12 +126,12 @@ export default async function Page({ params, searchParams }: Props) {
 
   if ('data' in res && book === 'output-vat') {
     const x = res.data as TaxReport
-    const invoiceHref = (id: string) => `${salesPage(companyId, 'invoices')}/${id}`
+    const docHref = (r: TaxReport['rows'][number]) => `${salesPage(companyId, r.kind === 'credit_note' ? 'credit-notes' : 'invoices')}/${r.document_id}`
     csv = [
       ...head,
-      [c.date, c.no, c.customer, c.taxId, c.branch, c.base, c.tax],
-      ...x.rows.map((r) => [r.date, r.document_no, r.customer.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
-      ['', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
+      [c.date, c.no, c.refNo, c.customer, c.taxId, c.branch, c.base, c.tax],
+      ...x.rows.map((r) => [r.date, r.document_no, r.reference_no, r.customer.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
+      ['', '', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
     ]
     table = (
       <Table
@@ -153,9 +153,14 @@ export default async function Page({ params, searchParams }: Props) {
           <tr key={`${r.document_id}-${i}`} className="border-b border-line break-inside-avoid">
             <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date)}</td>
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
-              <Link href={invoiceHref(r.document_id)} className="text-primary hover:underline print:text-ink">
+              <Link href={docHref(r)} className="text-primary hover:underline print:text-ink">
                 {r.document_no}
               </Link>
+              {r.kind === 'credit_note' && (
+                <span className="block font-sans text-[12px] text-ink-muted">
+                  {texts.creditNotes.print.title} · {r.reference_no}
+                </span>
+              )}
             </td>
             <td className="px-3 py-2">{r.customer.name}</td>
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
