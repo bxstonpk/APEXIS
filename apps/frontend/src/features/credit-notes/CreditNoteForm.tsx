@@ -28,6 +28,7 @@ export function CreditNoteForm({
   warehousesApi,
   docsPath,
   invoiceHref,
+  allowanceOnly = false,
 }: {
   mode: 'sales' | 'purchasing'
   invoice: CreditableInvoice
@@ -35,12 +36,14 @@ export function CreditNoteForm({
   warehousesApi: string
   docsPath: string
   invoiceHref: string
+  /** ใบแจ้งหนี้ขายบริการ — ไม่มีสินค้ารับคืน จึงลดราคา / ส่วนลดได้อย่างเดียว */
+  allowanceOnly?: boolean
 }) {
   const t = texts.creditNotes
   const f = t.form
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
-  const [kind, setKind] = useState<CreditKind>('return')
+  const [kind, setKind] = useState<CreditKind>(allowanceOnly ? 'allowance' : 'return')
   const [head, setHead] = useState({ date: today(), docDate: today(), supplierNo: '', reason: '', description: '' })
   const [warehouse, setWarehouse] = useState<{ id: string; code: string; name: string } | null>(null)
   const [qty, setQty] = useState<Record<number, string>>({})
@@ -141,20 +144,17 @@ export function CreditNoteForm({
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
-      <FormSection title={texts.sales.sections.header} description={`${f.forInvoice} ${invoice.no} · ${invoice.party}`}>
+      <FormSection title={texts.sales.sections.header}>
         <fieldset className="flex flex-col gap-2 sm:col-span-2">
           <legend className="mb-1 text-[13px] font-medium">{f.kind}</legend>
           <div className="grid gap-2 sm:grid-cols-2">
-            {(['return', 'allowance'] as const).map((k) => (
+            {(allowanceOnly ? (['allowance'] as const) : (['return', 'allowance'] as const)).map((k) => (
               <label
                 key={k}
                 className={`flex cursor-pointer items-start gap-3 rounded-(--radius-control) border p-3 text-sm transition-colors ${kind === k ? 'border-primary bg-primary-soft' : 'border-line hover:border-ink-subtle'}`}
               >
                 <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} className="mt-0.5 size-4 accent-primary" />
-                <span>
-                  <span className="block font-medium">{t.kinds[mode][k]}</span>
-                  <span className="block text-[13px] text-ink-muted">{t.kindHints[mode][k]}</span>
-                </span>
+                <span className="block font-medium">{t.kinds[mode][k]}</span>
               </label>
             ))}
           </div>
@@ -182,9 +182,7 @@ export function CreditNoteForm({
         />
         {kind === 'return' && (
           <ReferenceSelect
-            label={purchasing ? f.warehouseOut : f.warehouseIn}
-            hint={f.warehouseHint}
-            source={warehousesApi}
+            label={purchasing ? f.warehouseOut : f.warehouseIn}            source={warehousesApi}
             params={{ status: 'active' }}
             value={warehouse}
             onChange={setWarehouse}
@@ -193,9 +191,7 @@ export function CreditNoteForm({
         )}
         <TextField
           label={f.reason}
-          required
-          hint={f.reasonHint}
-          value={head.reason}
+          required          value={head.reason}
           maxLength={500}
           error={errors.reason}
           className="sm:col-span-2"

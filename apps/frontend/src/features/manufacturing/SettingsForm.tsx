@@ -57,12 +57,12 @@ export function MfgSettingsForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={readOnly} />
-      <FormSection title={t.accounts} description={t.accountsHint}>
+      <FormSection title={t.accounts}>
         {account('wip_account_id', f.wip, 'asset')}
         {account('conversion_account_id', f.conversion, 'expense')}
         <ReferenceSelect label={f.journal} source={journalsApi} params={{ status: 'active' }} value={v.journal_id} onChange={set('journal_id')} disabled={readOnly} texts={texts.reference} />
       </FormSection>
-      <FormSection title={t.defaults} description={t.defaultsHint}>
+      <FormSection title={t.defaults}>
         <ReferenceSelect
           label={f.warehouse}
           source={warehousesApi}

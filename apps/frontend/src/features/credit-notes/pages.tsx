@@ -115,7 +115,7 @@ export async function CreditNoteList({ mode, companyId, sp }: { mode: CreditMode
   ]
   return (
     <>
-      <ListHeader title={page.heading} description={page.description} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={page.heading} count={list.error ? undefined : list.meta.total} />
       <ListToolbar q={param(sp, 'q')} keep={{ sort: param(sp, 'sort'), page_size: param(sp, 'page_size') }}>
         <SelectField
           name="status"
@@ -153,15 +153,20 @@ function creditable(mode: CreditMode, inv: Invoice | SupplierInvoice): Creditabl
   }
 }
 
-/** หน้าออกใบลดหนี้จาก ?invoice_id= — ใบกำกับต้องผ่านรายการแล้วและยังมียอดค้าง */
-export async function CreditNoteNewPage({ mode, companyId, invoiceId }: { mode: CreditMode; companyId: string; invoiceId: string }) {
+/**
+ * หน้าออกใบลดหนี้จาก ?invoice_id= — ใบกำกับต้องผ่านรายการแล้วและยังมียอดค้าง
+ * ขาย ?kind=service_invoice = จากใบแจ้งหนี้ค่าบริการ (ลดราคา / ส่วนลดอย่างเดียว; ภาษียังไม่ถึงกำหนด = ใบลดหนี้ที่ไม่ใช่ใบกำกับภาษี)
+ */
+export async function CreditNoteNewPage({ mode, companyId, invoiceId, invoiceKind = '' }: { mode: CreditMode; companyId: string; invoiceId: string; invoiceKind?: string }) {
   const ctx = await getCompanyContext(companyId)
   if (!ctx) return null
-  const c = cfg(mode, companyId)
+  const service = mode === 'sales' && invoiceKind === 'service_invoice'
+  const base = cfg(mode, companyId)
+  const c = service ? { ...base, invoicesApi: salesApi.serviceInvoices(companyId), invoicesPath: salesPage(companyId, 'service-invoices') } : base
   if (!can(ctx.permissions, c.post)) return <NoPermission />
   const t = texts.creditNotes
   const page = t[mode]
-  if (!invoiceId) return <MessagePanel title={page.notFound} description={page.pickInvoice} />
+  if (!invoiceId) return <MessagePanel title={page.notFound} />
   const notFound = mode === 'sales' ? texts.sales.invoices.notFound : texts.purchasing.invoices.notFound
   const res = await loadItem<Invoice | SupplierInvoice>(c.invoicesApi, invoiceId, notFound)
   if ('panel' in res) return res.panel
@@ -177,9 +182,10 @@ export async function CreditNoteNewPage({ mode, companyId, invoiceId }: { mode: 
           warehousesApi={c.warehousesApi}
           docsPath={c.path}
           invoiceHref={`${c.invoicesPath}/${inv.id}`}
+          allowanceOnly={service}
         />
       ) : (
-        <MessagePanel title={t.form.overOutstanding.replace(' ({amount})', '')} description={page.pickInvoice} />
+        <MessagePanel title={t.form.overOutstanding.replace(' ({amount})', '')} />
       )}
     </FormPage>
   )
@@ -207,9 +213,11 @@ export async function CreditNoteViewPage({ mode, companyId, docId, sp }: { mode:
   const party = sales ? sales.bill_to : pur!.bill_from
   const partyRef = sales ? sales.customer : pur!.supplier
   const invoiceNo = pur ? `${d.invoice.document_no} · ${pur.invoice.supplier_invoice_no}` : d.invoice.document_no
+  const invoicesPath = sales?.invoice.kind === 'service_invoice' ? salesPage(companyId, 'service-invoices') : c.invoicesPath
   const facts: [string, React.ReactNode][] = [
     [mode === 'sales' ? texts.sales.fields.customer : texts.purchasing.facts.billFrom, [`${partyRef.code} ${party.name || partyRef.name}`, party.tax_id, branchLabel(party.branch_no)].filter(Boolean).join(' · ')],
-    [f.invoice, <EntryLink key="i" href={`${c.invoicesPath}/${d.invoice.id}`} no={invoiceNo} />],
+    [f.invoice, <EntryLink key="i" href={`${invoicesPath}/${d.invoice.id}`} no={invoiceNo} />],
+    ...(sales?.vat_kind ? ([[texts.sales.fields.vatStatus, texts.creditNotes.vatKinds[sales.vat_kind] ?? sales.vat_kind]] as [string, string][]) : []),
     ...(sales ? ([[f.invoiceDate, dateText(sales.invoice_date)]] as [string, string][]) : []),
     ...(pur
       ? ([

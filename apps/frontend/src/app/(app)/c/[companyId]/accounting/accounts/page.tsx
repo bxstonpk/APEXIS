@@ -76,7 +76,7 @@ export default async function AccountsPage({ params, searchParams }: Props) {
     ]
     return (
       <>
-        <ListHeader title={t.heading} description={t.description} createHref={createHref} count={list.error ? undefined : list.meta.total} />
+        <ListHeader title={t.heading}createHref={createHref} count={list.error ? undefined : list.meta.total} />
         {toolbar}
         <p className="mb-3 text-[13px]">
           <Link href={path} className="font-medium text-primary hover:underline">
@@ -95,14 +95,14 @@ export default async function AccountsPage({ params, searchParams }: Props) {
   if (!Array.isArray(tree)) {
     return (
       <>
-        <ListHeader title={t.heading} description={t.description} createHref={createHref} />
+        <ListHeader title={t.heading}createHref={createHref} />
         <Alert tone="error">{errorMessage(tree)}</Alert>
       </>
     )
   }
   return (
     <>
-      <ListHeader title={t.heading} description={t.description} createHref={tree.length > 0 && createHref} count={tree.length} />
+      <ListHeader title={t.heading}createHref={tree.length > 0 && createHref} count={tree.length} />
       {tree.length === 0 ? (
         <DefaultChartPanel apiPath={ledgerApi.accountDefaults(companyId)} createHref={createHref} businessType={ctx.company.business_type} />
       ) : (

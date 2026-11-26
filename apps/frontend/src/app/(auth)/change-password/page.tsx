@@ -20,8 +20,7 @@ export default async function ChangePasswordPage({ searchParams }: { searchParam
         <KeyRound aria-hidden className="size-5" />
       </span>
       <h1 className="text-2xl font-semibold tracking-tight">{t.heading}</h1>
-      <p className="mt-1.5 text-sm text-ink-muted">{user.email}</p>
-      <p className="mt-3 mb-8 text-sm text-ink-muted">{t.forcedDescription}</p>
+      <p className="mt-1.5 mb-8 text-sm text-ink-muted">{user.email}</p>
       <ChangePasswordForm redirectTo={target} email={user.email} />
     </AuthLayout>
   )

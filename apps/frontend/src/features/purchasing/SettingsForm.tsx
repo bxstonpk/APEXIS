@@ -67,10 +67,10 @@ export function PurchasingSettingsForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={readOnly} />
-      <FormSection title={t.vat} description={t.vatHint}>
+      <FormSection title={t.vat}>
         <TextField label={f.vatRate} required inputMode="decimal" value={rate} disabled={readOnly} error={rateError} onChange={(e) => setRate(e.target.value)} />
       </FormSection>
-      <FormSection title={t.accounts} description={t.accountsHint}>
+      <FormSection title={t.accounts}>
         <ReferenceSelect label={f.journal} source={journalsApi} params={{ status: 'active' }} value={v.journal_id} onChange={set('journal_id')} disabled={readOnly} texts={texts.reference} />
         {account('grir_account_id', f.grir, 'liability')}
         {account('ap_account_id', f.ap, 'liability')}

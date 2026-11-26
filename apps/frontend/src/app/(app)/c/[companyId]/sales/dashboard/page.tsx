@@ -31,7 +31,7 @@ export default async function Page({ params, searchParams }: Props) {
   const prev = d?.previous_year ?? null
   return (
     <div className="flex flex-col gap-6">
-      <DashboardHeader company={ctx.company.name} title={t.title} description={t.description} period={period} />
+      <DashboardHeader company={ctx.company.name} title={t.title} period={period} />
       {error && <DashboardError message={error} />}
       {d && (
         <>
@@ -58,8 +58,8 @@ export default async function Page({ params, searchParams }: Props) {
             />
             <KpiCard
               label={t.toDeliver}
-              value={String(d.orders.to_deliver_count)}
-              sub={format(t.toDeliverSub, { invoice: String(d.orders.to_invoice_count), draft: String(d.orders.draft_count) })}
+              value={String(d.orders.to_invoice_count)}
+              sub={format(t.toDeliverSub, { draft: String(d.orders.draft_count) })}
               href={`${salesPage(companyId, 'reports')}?book=outstanding-sales-orders`}
             />
           </KpiGrid>
@@ -81,7 +81,7 @@ export default async function Page({ params, searchParams }: Props) {
                 ...(fy && prev ? [{ key: 'prev', label: format(t.fiscalYear, { year: String(fy.year + 542) }) }] : []),
               ]}
             />
-            <Panel title={t.aging} description={t.agingHint}>
+            <Panel title={t.aging}>
               <AgingList aging={d.receivables.aging} href={`${salesPage(companyId, 'reports')}?book=ar-aging&end_date=${period.end}`} />
             </Panel>
             <Panel

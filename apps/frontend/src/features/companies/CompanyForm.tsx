@@ -58,9 +58,7 @@ export function CompanyForm() {
       {formError && <Alert tone="error">{formError}</Alert>}
       <TextField
         label={t.code}
-        required
-        hint={t.codeHint}
-        value={values.code}
+        required        value={values.code}
         maxLength={20}
         autoComplete="off"
         error={errors.code}
@@ -83,7 +81,6 @@ export function CompanyForm() {
       />
       <BusinessTypePicker
         label={t.businessType}
-        hint={t.businessTypeHint}
         value={values.businessType}
         error={errors.businessType}
         onChange={(businessType) => {

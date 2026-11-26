@@ -103,7 +103,7 @@ export function CustomerForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={t.sections.tax} description={t.sections.taxHint}>
+      <FormSection title={t.sections.tax}>
         <VatLookup
           source={lookupApi}
           taxId={v.tax_id}
@@ -117,9 +117,7 @@ export function CustomerForm({
           autoFetch={!item}
         />
         <TextField
-          label={f.branchNo}
-          hint={t.branchHint}
-          value={v.branch_no}
+          label={f.branchNo}          value={v.branch_no}
           maxLength={5}
           inputMode="numeric"
           disabled={readOnly}
@@ -134,15 +132,15 @@ export function CustomerForm({
           onChange={(e) => set('tax_type', e.target.value)}
         />
       </FormSection>
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
       </FormSection>
-      <FormSection title={texts.partners.address.section} description={texts.partners.address.sectionHint}>
+      <FormSection title={texts.partners.address.section}>
         <ThaiAddressFields value={address} onChange={setAddress} disabled={readOnly} postalError={errors.postal} />
       </FormSection>
-      <FormSection title={texts.partners.branches.section} description={texts.partners.branches.sectionHint}>
+      <FormSection title={texts.partners.branches.section}>
         <BranchesEditor value={branches} onChange={setBranches} errors={branchErrs} disabled={readOnly} />
       </FormSection>
       <FormSection title={t.sections.credit}>
@@ -155,9 +153,7 @@ export function CustomerForm({
           onChange={(e) => set('payment_term_days', e.target.value.replace(/\D/g, ''))}
         />
         <TextField
-          label={f.creditLimit}
-          hint={t.creditHint}
-          inputMode="decimal"
+          label={f.creditLimit}          inputMode="decimal"
           value={v.credit_limit}
           disabled={readOnly}
           error={errors.credit}
@@ -178,7 +174,15 @@ export function CustomerForm({
 
 // ---------------------------------------------------------------- ค่าตั้งการขาย
 
-type AccountKey = 'journal_id' | 'ar_account_id' | 'output_vat_account_id' | 'revenue_account_id' | 'cogs_account_id' | 'sales_returns_account_id'
+type AccountKey =
+  | 'journal_id'
+  | 'ar_account_id'
+  | 'output_vat_account_id'
+  | 'undue_output_vat_account_id'
+  | 'deposit_account_id'
+  | 'revenue_account_id'
+  | 'cogs_account_id'
+  | 'sales_returns_account_id'
 
 export function SalesSettingsForm({
   apiPath,
@@ -238,7 +242,7 @@ export function SalesSettingsForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={readOnly} />
-      <FormSection title={t.vat} description={t.vatHint}>
+      <FormSection title={t.vat}>
         <label className="flex cursor-pointer items-center gap-3 sm:col-span-2">
           <input
             type="checkbox"
@@ -261,10 +265,12 @@ export function SalesSettingsForm({
           />
         )}
       </FormSection>
-      <FormSection title={t.accounts} description={t.accountsHint}>
+      <FormSection title={t.accounts}>
         <ReferenceSelect label={f.journal} source={journalsApi} params={{ status: 'active' }} value={v.journal_id} onChange={set('journal_id')} disabled={readOnly} texts={texts.reference} />
         {account('ar_account_id', f.ar, 'asset')}
         {account('output_vat_account_id', f.outputVat, 'liability')}
+        {account('undue_output_vat_account_id', f.undueOutputVat, 'liability')}
+        {account('deposit_account_id', f.deposit, 'liability')}
         {account('revenue_account_id', f.revenue, 'revenue')}
         {account('cogs_account_id', f.cogs, 'expense')}
         {account('sales_returns_account_id', f.salesReturns, 'revenue')}

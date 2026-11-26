@@ -114,7 +114,6 @@ export function CostCard({ order }: { order: ProductionOrder }) {
         <dt className="text-ink-muted">{t.unit}</dt>
         <dd className="text-right tabular-nums">{order.status === 'completed' ? formatAmount(c.unit_cost) : '–'}</dd>
       </dl>
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">{t.hint}</p>
     </section>
   )
 }
@@ -150,7 +149,6 @@ export function Movements({ companyId, movements }: { companyId: string; movemen
           ))}
         </ol>
       )}
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">{t.periodicHint}</p>
     </section>
   )
 }

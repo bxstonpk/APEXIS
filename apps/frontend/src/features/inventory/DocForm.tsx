@@ -138,7 +138,7 @@ export function StockDocForm({
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
-      <FormSection title={t.fields.type} description={t.typeHints[type]}>
+      <FormSection title={t.fields.type}>
         <fieldset className="grid gap-2 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-4">
           <legend className="sr-only">{t.fields.type}</legend>
           {TYPES.map((k) => (

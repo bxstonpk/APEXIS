@@ -40,7 +40,6 @@ async function AppShellContent({ companyId, appKey, children }: { companyId: str
     return (
       <MessagePanel
         title={texts.companies.unavailable}
-        description={texts.companies.unavailableDescription}
         action={<ButtonLink href={appConfig.routes.companies}>{texts.companies.heading}</ButtonLink>}
       />
     )
@@ -52,9 +51,7 @@ async function AppShellContent({ companyId, appKey, children }: { companyId: str
   if (def && !appAvailableFor(def, businessType)) {
     return (
       <MessagePanel
-        title={format(texts.businessTypes.appUnavailable, { type: businessTypeName(businessType) })}
-        description={texts.businessTypes.appUnavailableDescription}
-        action={<ButtonLink href={launcher}>{texts.launcher.pageTitle}</ButtonLink>}
+        title={format(texts.businessTypes.appUnavailable, { type: businessTypeName(businessType) })}        action={<ButtonLink href={launcher}>{texts.launcher.pageTitle}</ButtonLink>}
       />
     )
   }

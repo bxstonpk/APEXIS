@@ -48,9 +48,7 @@ function CodeNameFields({
     <>
       <TextField
         label={labels.code}
-        required
-        hint={texts.branches.form.codeHint}
-        value={values.code}
+        required        value={values.code}
         maxLength={20}
         autoComplete="off"
         disabled={readOnly}
@@ -84,11 +82,11 @@ export function BusinessUnitForm({ canManage, listHref, apiPath, item }: CommonP
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <CodeNameFields values={v} set={(k, val) => setV((s) => ({ ...s, [k]: val }))} errors={errors} labels={t} readOnly={readOnly} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => setV((x) => ({ ...x, status: s }))} />}
       </FormSection>
-      <FormSection title={texts.common.sections.relations} description={texts.common.sections.relationsHint}>
+      <FormSection title={texts.common.sections.relations}>
         <ReferenceSelect
           label={t.parent}
           source={apiPath}
@@ -143,11 +141,11 @@ export function DepartmentForm({ companyId, canManage, listHref, apiPath, item }
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <CodeNameFields values={v} set={(k, val) => setV((s) => ({ ...s, [k]: val }))} errors={errors} labels={t} readOnly={readOnly} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => setV((x) => ({ ...x, status: s }))} />}
       </FormSection>
-      <FormSection title={texts.common.sections.relations} description={texts.common.sections.relationsHint}>
+      <FormSection title={texts.common.sections.relations}>
         <ReferenceSelect label={t.parent} source={apiPath} params={{ status: 'active' }} value={parent} onChange={setParent} excludeId={item?.id} disabled={readOnly} texts={refTexts} />
         <ReferenceSelect label={t.businessUnit} source={`${base}/business-units`} params={{ status: 'active' }} value={unit} onChange={setUnit} disabled={readOnly} texts={refTexts} />
         <ReferenceSelect label={t.branch} source={`${base}/branches`} params={{ status: 'active' }} value={branch} onChange={setBranch} disabled={readOnly} texts={refTexts} />
@@ -200,11 +198,11 @@ export function CostCenterForm({ companyId, canManage, listHref, apiPath, item, 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <CodeNameFields values={v} set={(k, val) => setV((s) => ({ ...s, [k]: val }))} errors={errors} labels={t} readOnly={readOnly} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => setV((x) => ({ ...x, status: s }))} />}
       </FormSection>
-      <FormSection title={texts.common.sections.relations} description={texts.common.sections.relationsHint}>
+      <FormSection title={texts.common.sections.relations}>
         <ReferenceSelect
           label={t.department}
           source={`/companies/${companyId}/departments`}
@@ -216,12 +214,10 @@ export function CostCenterForm({ companyId, canManage, listHref, apiPath, item, 
           className="sm:col-span-2"
         />
       </FormSection>
-      <FormSection title={texts.common.sections.period} description={texts.common.sections.periodHint}>
+      <FormSection title={texts.common.sections.period}>
         <TextField label={t.validFrom} required type="date" value={v.valid_from} disabled={readOnly} error={errors.valid_from} onChange={(e) => setV((s) => ({ ...s, valid_from: e.target.value }))} />
         <TextField
-          label={t.validTo}
-          hint={t.validToHint}
-          type="date"
+          label={t.validTo}          type="date"
           value={v.valid_to}
           min={v.valid_from || undefined}
           disabled={readOnly}
@@ -283,7 +279,7 @@ export function ProjectSiteForm({ companyId, canManage, listHref, apiPath, item,
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <CodeNameFields values={v} set={(k, val) => setV((s) => ({ ...s, [k]: val }))} errors={errors} labels={t} readOnly={readOnly} />
         <SelectField
           label={t.status}
@@ -293,16 +289,14 @@ export function ProjectSiteForm({ companyId, canManage, listHref, apiPath, item,
           onChange={(e) => setV((s) => ({ ...s, status: e.target.value }))}
         />
       </FormSection>
-      <FormSection title={texts.common.sections.relations} description={texts.common.sections.relationsHint}>
+      <FormSection title={texts.common.sections.relations}>
         <ReferenceSelect label={t.branch} source={`${base}/branches`} params={{ status: 'active' }} value={branch} onChange={setBranch} disabled={readOnly} texts={refTexts} />
         <ReferenceSelect label={t.costCenter} source={`${base}/cost-centers`} params={{ status: 'active' }} value={costCenter} onChange={setCostCenter} disabled={readOnly} texts={refTexts} />
       </FormSection>
-      <FormSection title={texts.common.sections.period} description={texts.common.sections.periodHint}>
+      <FormSection title={texts.common.sections.period}>
         <TextField label={t.startDate} required type="date" value={v.start_date} disabled={readOnly} error={errors.start_date} onChange={(e) => setV((s) => ({ ...s, start_date: e.target.value }))} />
         <TextField
-          label={t.endDate}
-          hint={t.endDateHint}
-          type="date"
+          label={t.endDate}          type="date"
           value={v.end_date}
           min={v.start_date || undefined}
           disabled={readOnly}
@@ -310,7 +304,7 @@ export function ProjectSiteForm({ companyId, canManage, listHref, apiPath, item,
           onChange={(e) => setV((s) => ({ ...s, end_date: e.target.value }))}
         />
       </FormSection>
-      <FormSection title={t.address} description={texts.common.sections.addressHint}>
+      <FormSection title={t.address}>
         <AddressFields value={address} onChange={setAddress} disabled={readOnly} errors={errors} />
       </FormSection>
       <FormActions

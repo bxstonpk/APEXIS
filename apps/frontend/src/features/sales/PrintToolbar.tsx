@@ -13,8 +13,7 @@ export function PrintToolbar({ backHref }: { backHref: string }) {
         <ArrowLeft aria-hidden />
         {p.back}
       </ButtonLink>
-      <p className="order-last w-full text-[13px] text-ink-muted sm:order-none sm:w-auto sm:flex-1">{p.hint}</p>
-      <Button onClick={() => window.print()} className="ml-auto sm:ml-0">
+      <Button onClick={() => window.print()} className="ml-auto">
         <Printer aria-hidden />
         {p.printNow}
       </Button>

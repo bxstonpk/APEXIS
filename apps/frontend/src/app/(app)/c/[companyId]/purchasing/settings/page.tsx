@@ -34,7 +34,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     loadRef(accounts, s.purchase_returns_account_id ?? ''),
   ])
   return (
-    <FormPage title={t.heading} description={t.description}>
+    <FormPage title={t.heading}>
       <PurchasingSettingsForm
         apiPath={purchasingDocsApi.settings(companyId)}
         journalsApi={purchasingDocsApi.journals(companyId)}

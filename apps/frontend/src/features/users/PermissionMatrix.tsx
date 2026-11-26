@@ -50,7 +50,7 @@ export function PermissionMatrix({
                       {texts.roles.matrix.resource}
                     </th>
                     {g.actions.map((a) => (
-                      <th key={a} scope="col" title={t.actionHints[a]} className="h-9 w-28 border-b border-line px-2 text-center font-medium">
+                      <th key={a} scope="col" className="h-9 w-28 border-b border-line px-2 text-center font-medium">
                         {label(t.actions, a)}
                       </th>
                     ))}

@@ -4,7 +4,7 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { apiRequest } from '@/lib/http'
 import { cx } from '@/lib/cx'
-import { errorClass, FieldLabel, fieldFrameClass, hintClass, inputTextClass } from '../TextField/TextField'
+import { errorClass, FieldLabel, fieldFrameClass, inputTextClass } from '../TextField/TextField'
 
 export type RefOption = { id: string; code: string; name: string }
 
@@ -24,7 +24,6 @@ export type ReferenceSelectProps = {
   excludeId?: string
   disabled?: boolean
   error?: string
-  hint?: string
   hideLabel?: boolean
   required?: boolean
   className?: string
@@ -55,7 +54,6 @@ export function ReferenceSelect({
   excludeId,
   disabled,
   error,
-  hint,
   hideLabel,
   required,
   className,
@@ -140,7 +138,7 @@ export function ReferenceSelect({
     }
   }
 
-  const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined
+  const describedBy = error ? `${id}-error` : undefined
   const activeId = open && active >= 0 ? `${id}-opt-${active}` : undefined
 
   return (
@@ -217,11 +215,6 @@ export function ReferenceSelect({
             ))
           )}
         </ul>
-      )}
-      {hint && !error && (
-        <p id={`${id}-hint`} className={hintClass}>
-          {hint}
-        </p>
       )}
       {error && (
         <p id={`${id}-error`} className={errorClass}>

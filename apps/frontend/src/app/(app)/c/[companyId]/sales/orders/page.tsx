@@ -23,9 +23,7 @@ export default async function Page({ params, searchParams }: Props) {
       kind="order"
       path={path}
       apiPath={salesApi.orders(companyId)}
-      heading={t.heading}
-      description={t.description}
-      createHref={can(ctx.permissions, perms.orderManage) && `${path}/new`}
+      heading={t.heading}      createHref={can(ctx.permissions, perms.orderManage) && `${path}/new`}
     />
   )
 }

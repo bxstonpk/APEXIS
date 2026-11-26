@@ -116,7 +116,7 @@ export function OrderForm({
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
-      <FormSection title={f.item} description={t.bomHint}>
+      <FormSection title={f.item}>
         <ReferenceSelect
           label={f.item}
           required
@@ -135,8 +135,7 @@ export function OrderForm({
           value={bom}
           onChange={setBom}
           disabled={!item}
-          error={errors.bom}
-          hint={noBom ? t.noBom : undefined}
+          error={errors.bom ?? (noBom ? t.noBom : undefined)}
           texts={texts.reference}
         />
         <TextField
@@ -172,12 +171,9 @@ export function OrderForm({
 
       {order && materials.length > 0 && (
         <section aria-labelledby="order-materials" className="flex min-w-0 flex-col gap-3">
-          <div>
-            <h2 id="order-materials" className="text-[15px] font-semibold">
-              {t.materials.title}
-            </h2>
-            <p className="mt-1 text-[13px] text-ink-muted">{t.materials.editHint}</p>
-          </div>
+          <h2 id="order-materials" className="text-[15px] font-semibold">
+            {t.materials.title}
+          </h2>
           <EditTable head={[['#', 'w-10 text-center'], [t.materials.item, ''], [t.materials.required, 'w-44 text-right']]}>
             {materials.map((m, i) => (
               <tr key={m.item.id} className="border-b border-line align-top last:border-b-0">

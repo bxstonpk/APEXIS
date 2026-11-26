@@ -102,14 +102,12 @@ export function MemberAddForm({ apiPath, listHref, roles }: { apiPath: string; l
     <form method="post" noValidate onSubmit={submit} className="flex flex-col gap-6">
       {formError && <Alert tone="error">{formError}</Alert>}
 
-      <FormSection title={t.sections.account} description={t.sections.accountHint}>
+      <FormSection title={t.sections.account}>
         <TextField
           label={t.fields.email}
           required
           type="email"
-          autoComplete="off"
-          hint={t.fields.emailHint}
-          value={email}
+          autoComplete="off"          value={email}
           maxLength={320}
           error={errors.email}
           onChange={(e) => changeEmail(e.target.value)}
@@ -134,9 +132,7 @@ export function MemberAddForm({ apiPath, listHref, roles }: { apiPath: string; l
               <TextField
                 label={t.newAccount.password}
                 required
-                autoComplete="new-password"
-                hint={t.newAccount.passwordHint}
-                value={account.password}
+                autoComplete="new-password"                value={account.password}
                 maxLength={72}
                 error={errors.password}
                 className="font-mono"
@@ -157,7 +153,7 @@ export function MemberAddForm({ apiPath, listHref, roles }: { apiPath: string; l
         )}
       </FormSection>
 
-      <FormSection title={t.sections.roles} description={t.sections.rolesHint}>
+      <FormSection title={t.sections.roles}>
         <RoleChecklist roles={roles} selected={roleIds} onChange={setRoleIds} error={errors.roles} />
       </FormSection>
 

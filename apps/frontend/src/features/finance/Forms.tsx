@@ -74,7 +74,7 @@ export function CashAccountForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <SelectField
@@ -87,9 +87,7 @@ export function CashAccountForm({
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
         <ReferenceSelect
           label={f.glAccount}
-          required
-          hint={t.glHint}
-          source={accountsApi}
+          required          source={accountsApi}
           params={{ postable: 'true', status: 'active', type: 'asset' }}
           value={gl}
           onChange={setGl}
@@ -153,14 +151,12 @@ export function WhtTypeForm({ apiPath, listHref, canManage, item }: { apiPath: s
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={`${t.description} — ${t.incomeTypeHint}`}>
+      <FormSection title={texts.branches.form.general}>
         <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField
           label={f.rate}
-          required
-          hint={t.rateHint}
-          inputMode="decimal"
+          required          inputMode="decimal"
           value={v.rate}
           disabled={readOnly}
           error={errors.rate}
@@ -240,12 +236,12 @@ export function FinanceSettingsForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={readOnly} />
-      <FormSection title={t.journals} description={t.journalsHint}>
+      <FormSection title={t.journals}>
         {journal('receipt_journal_id', f.receiptJournal)}
         {journal('payment_journal_id', f.paymentJournal)}
         {journal('transfer_journal_id', f.transferJournal)}
       </FormSection>
-      <FormSection title={t.accounts} description={t.accountsHint}>
+      <FormSection title={t.accounts}>
         {account('wht_received_account_id', f.whtReceived, 'asset')}
         {account('wht_pnd3_account_id', f.whtPnd3, 'liability')}
         {account('wht_pnd53_account_id', f.whtPnd53, 'liability')}
@@ -306,7 +302,7 @@ export function TransferForm({ apiPath, cashApi, docsPath, listHref }: { apiPath
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={false} />
-      <FormSection title={t.transfers.heading} description={t.transfers.description}>
+      <FormSection title={t.transfers.heading}>
         <ReferenceSelect label={t.fields.from} required source={cashApi} params={{ status: 'active' }} value={from} onChange={setFrom} error={errors.from} texts={texts.reference} />
         <ReferenceSelect label={t.fields.to} required source={cashApi} params={{ status: 'active' }} value={to} onChange={setTo} error={errors.to} texts={texts.reference} />
         <TextField
@@ -323,7 +319,6 @@ export function TransferForm({ apiPath, cashApi, docsPath, listHref }: { apiPath
         <TextField label={t.fields.description} value={v.description} maxLength={500} onChange={(e) => set('description', e.target.value)} />
       </FormSection>
       <FormBar>
-        <p className="hidden text-[13px] text-ink-muted sm:block">{t.actions.saveHint}</p>
         <div className="ml-auto flex gap-2">
           <ButtonLink href={listHref} variant="secondary">
             {texts.common.cancel}

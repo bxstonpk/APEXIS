@@ -43,7 +43,7 @@ export default async function FiscalYearsPage({ params, searchParams }: Props) {
 
   return (
     <>
-      <ListHeader title={texts.fiscalYears.heading} description={texts.fiscalYears.description} createHref={can(ctx.permissions, r.manage) && `${path}/new`} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={texts.fiscalYears.heading} createHref={can(ctx.permissions, r.manage) && `${path}/new`} count={list.error ? undefined : list.meta.total} />
       <Form action="" className="mb-4 flex items-end gap-2">
         <TextField name="year" label={f.year} inputMode="numeric" maxLength={4} defaultValue={param(sp, 'year')} className="w-40" />
         <Button type="submit" variant="secondary" className="px-4">

@@ -27,7 +27,7 @@ export default async function Page({ params, searchParams }: Props) {
   const reportsHref = `${inventoryPage(companyId, 'reports')}?book=stock-on-hand&end_date=${period.end}`
   return (
     <div className="flex flex-col gap-6">
-      <DashboardHeader company={ctx.company.name} title={t.title} description={t.description} period={period} />
+      <DashboardHeader company={ctx.company.name} title={t.title} period={period} />
       {error && <DashboardError message={error} />}
       {d && (
         <>
@@ -55,7 +55,7 @@ export default async function Page({ params, searchParams }: Props) {
             <Panel title={t.warehouses}>
               <BarList rows={d.warehouses.map((w) => ({ key: w.warehouse.id, label: `${w.warehouse.code} · ${w.warehouse.name}`, value: w.value }))} />
             </Panel>
-            <Panel title={t.reorder} description={t.reorderHint} className="lg:col-span-3">
+            <Panel title={t.reorder} className="lg:col-span-3">
               <RowList
                 empty={t.reorderEmpty}
                 rows={d.below_reorder.map((r) => ({

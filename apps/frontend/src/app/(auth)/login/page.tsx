@@ -19,8 +19,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const t = texts.auth.login
   return (
     <AuthLayout>
-      <h1 className="text-2xl font-semibold tracking-tight">{t.heading}</h1>
-      <p className="mt-1.5 mb-8 text-sm text-ink-muted">{t.description}</p>
+      <h1 className="mb-8 text-2xl font-semibold tracking-tight">{t.heading}</h1>
       <LoginPanel redirectTo={target} />
     </AuthLayout>
   )

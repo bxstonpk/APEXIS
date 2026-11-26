@@ -1,17 +1,18 @@
 'use client'
 
-import { CircleAlert, CircleCheck, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Alert, Button, ButtonLink, ReferenceSelect, SelectField, TextField } from '@/components'
+import { Alert, Badge, Button, ButtonLink, ReferenceSelect, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
-import { formatAmount, normalizeAmount, toString, toUnits } from '@/features/accounting/money'
+import { formatAmount, normalizeAmount, toUnits } from '@/features/accounting/money'
 import { FormBar, FormSection } from '@/features/forms/FormParts'
 import { cx } from '@/lib/cx'
 import { formatDate, today } from '@/lib/format'
 import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 import { focusFirstInvalid, requiredMessage } from '@/lib/validation'
+import { methodLine, methodsBody, MethodsBalance, MethodsEditor, methodsTotal, validateMethods, type MethodLine } from './MethodsEditor'
 import type { OpenInvoice, Ref, WhtType } from './types'
 
 /**
@@ -21,6 +22,9 @@ import type { OpenInvoice, Ref, WhtType } from './types'
  * - ภาษีหัก ณ ที่จ่าย: รับเงิน = กรอกยอดที่ลูกค้าหัก, จ่ายเงิน = เลือกประเภท (คำนวณตัวอย่างจากยอดก่อน VAT — backend คำนวณจริงอีกครั้ง)
  * - ช่องทาง: หลายบัญชีเงินสด / ธนาคาร — สถานะ "ตรง / ต่าง" แสดงทั้งไอคอนและข้อความ, ปุ่ม "ใส่ยอดที่เหลือ"
  * - บันทึก = ลงบัญชีทันที (backend ตรวจกฎทั้งหมดซ้ำใน transaction เดียว)
+ * - รับชำระหนี้ลูกค้า: เลือกใบวางบิลเพื่อเลือกใบแจ้งหนี้ให้อัตโนมัติ (?customer_id=&billing_note_id= จากหน้าใบวางบิล),
+ *   ใบแจ้งหนี้แสดงชนิด (ขายสินค้า / ใบแจ้งหนี้ / มัดจำ) และภาษียังไม่ถึงกำหนด (รับเงินครั้งนี้ = ใบเสร็จรับเงิน / ใบกำกับภาษี)
+ *   — การรับเงินทั้งหมดยืนยันที่การเงิน (แอปขายออกเอกสารอย่างเดียว)
  */
 
 export type MoneyDocMode = 'receipt' | 'payment'
@@ -32,15 +36,15 @@ export type MoneyDocApi = {
   accounts: string
   cashAccounts: string
   whtTypes?: string // จ่ายเงินเท่านั้น
+  /** รับชำระหนี้ลูกค้า: ใบวางบิลของลูกค้า (GET /billing-notes?customer_id=&status=open) */
+  billingNotes?: string
 }
 
 type Selected = { on: boolean; amount: string; wht: string; whtType: string }
 type OtherLine = { key: number; account: Ref | null; description: string; amount: string; wht: string; whtType: string }
-type MethodLine = { key: number; cash: Ref | null; amount: string; reference: string }
 
 let nextKey = 1
 const otherLine = (): OtherLine => ({ key: nextKey++, account: null, description: '', amount: '', wht: '', whtType: '' })
-const methodLine = (): MethodLine => ({ key: nextKey++, cash: null, amount: '', reference: '' })
 
 /** ปัดหน่วยย่อย (สเกล 10^6) เป็นทศนิยม 2 ตำแหน่ง แบบปัดครึ่งขึ้น */
 function round2(units: bigint): bigint {
@@ -57,19 +61,38 @@ export function previewWht(amount: bigint, rate: bigint, invoice?: { net: bigint
   return round2((base * rate) / (100n * SCALE))
 }
 
-export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDocMode; api: MoneyDocApi; docsPath: string; listHref: string }) {
+type BillingNoteOption = { id: string; document_no: string; due_date: string; outstanding: string }
+
+export function MoneyDocForm({
+  mode,
+  api,
+  docsPath,
+  listHref,
+  initialParty = null,
+  initialBillingNote = '',
+}: {
+  mode: MoneyDocMode
+  api: MoneyDocApi
+  docsPath: string
+  listHref: string
+  initialParty?: Ref | null
+  /** ?billing_note_id= — เลือกใบแจ้งหนี้ตามใบวางบิลให้ตั้งแต่เปิดหน้า */
+  initialBillingNote?: string
+}) {
   const t = texts.finance
+  const tr = texts.finance.receipts
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const partyKind = mode === 'receipt' ? 'customer' : 'supplier'
   const kinds = mode === 'receipt' ? t.kinds.receipt : t.kinds.payment
-  const kindHints = mode === 'receipt' ? t.kindHints.receipt : t.kindHints.payment
   const partyLabel = mode === 'receipt' ? t.fields.customer : t.fields.supplier
 
   const [kind, setKind] = useState<string>(partyKind)
   const [head, setHead] = useState({ date: today(), description: '' })
-  const [party, setParty] = useState<Ref | null>(null)
+  const [party, setParty] = useState<Ref | null>(initialParty)
   const [payee, setPayee] = useState({ name: '', tax_id: '', branch_no: '', address: '', tax_type: '' })
+  const [notes, setNotes] = useState<BillingNoteOption[]>([])
+  const [note, setNote] = useState(initialBillingNote)
   const [invoices, setInvoices] = useState<OpenInvoice[] | null>(null)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [selected, setSelected] = useState<Record<string, Selected>>({})
@@ -87,6 +110,23 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
     apiRequest<WhtType[]>(`${api.whtTypes}?page_size=100`).then(setWhtTypes, () => setWhtTypes([]))
   }, [api.whtTypes])
 
+  // ใบวางบิลที่ยังค้างของลูกค้า (เฉพาะแอปขาย)
+  useEffect(() => {
+    if (!api.billingNotes || !party) {
+      setNotes([])
+      return
+    }
+    let live = true
+    apiRequest<BillingNoteOption[]>(`${api.billingNotes}?customer_id=${encodeURIComponent(party.id)}&status=open&page_size=50`).then(
+      (rows) => live && setNotes(rows),
+      () => live && setNotes([]),
+    )
+    return () => {
+      live = false
+    }
+  }, [api.billingNotes, party])
+
+  // ใบแจ้งหนี้ค้าง — มีใบวางบิล = เฉพาะใบในใบวางบิลและเลือกให้พร้อมยอดค้าง
   useEffect(() => {
     if (!party) {
       setInvoices(null)
@@ -94,14 +134,20 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
     }
     let live = true
     setLoadingInvoices(true)
-    apiRequest<OpenInvoice[]>(`${api.open}?${partyKind}_id=${encodeURIComponent(party.id)}`)
-      .then((rows) => live && (setInvoices(rows), setSelected({})))
+    const q = new URLSearchParams({ [`${partyKind}_id`]: party.id })
+    if (note) q.set('billing_note_id', note)
+    apiRequest<OpenInvoice[]>(`${api.open}?${q.toString()}`)
+      .then((rows) => {
+        if (!live) return
+        setInvoices(rows)
+        setSelected(note ? Object.fromEntries(rows.map((r) => [r.id, { on: true, amount: r.outstanding, wht: '', whtType: '' }])) : {})
+      })
       .catch((err: unknown) => live && (setInvoices([]), setFormError(errorMessage(err))))
       .finally(() => live && setLoadingInvoices(false))
     return () => {
       live = false
     }
-  }, [party, api.open, partyKind])
+  }, [party, note, api.open, partyKind])
 
   const rateOf = (id: string) => toUnits(whtTypes.find((w) => w.id === id)?.rate ?? '0')
 
@@ -123,19 +169,13 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
   const amount = lineTotals.reduce((a, l) => a + l.amount, 0n)
   const wht = lineTotals.reduce((a, l) => a + l.wht, 0n)
   const net = amount - wht
-  const methodsTotal = methods.reduce((a, m) => a + toUnits(m.amount), 0n)
-  const diff = net - methodsTotal
-  const balanced = net > 0n && diff === 0n
+  const paid = methodsTotal(methods)
+  const balanced = net > 0n && net === paid
 
   const setSel = (id: string, patch: Partial<Selected>) =>
     setSelected((s) => ({ ...s, [id]: { on: false, amount: '', wht: '', whtType: '', ...s[id], ...patch } }))
   const toggle = (inv: OpenInvoice, on: boolean) => setSel(inv.id, on ? { on, amount: selected[inv.id]?.amount || inv.outstanding } : { on })
   const allOn = !!invoices?.length && invoices.every((inv) => selected[inv.id]?.on)
-
-  function fillRemaining() {
-    if (diff === 0n || methods.length === 0) return
-    setMethods((ms) => ms.map((m, i) => (i === ms.length - 1 ? { ...m, amount: toString(toUnits(m.amount) + diff) } : m)))
-  }
 
   function validate() {
     const e: Record<string, string> = {}
@@ -158,11 +198,7 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
       }
     }
     if (lineTotals.length === 0) e.lines = t.errors.noLines
-    for (const m of methods) {
-      if (!m.cash) e[`cash-${m.key}`] = requiredMessage(t.fields.cashAccount)
-      const n = normalizeAmount(m.amount)
-      if (!n || toUnits(n) <= 0n) e[`mamt-${m.key}`] = t.errors.amountRequired
-    }
+    Object.assign(e, validateMethods(methods))
     if (!e.lines && !balanced) e.methods = t.errors.methodsMismatch
     setErrors(e)
     return Object.keys(e).length === 0
@@ -177,10 +213,11 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
       kind,
       date: head.date,
       description: head.description.trim(),
-      methods: methods.map((m) => ({ cash_account_id: m.cash!.id, amount: normalizeAmount(m.amount), reference: m.reference.trim() })),
+      methods: methodsBody(methods),
     }
     if (isParty) {
       body[`${partyKind}_id`] = party!.id
+      if (note) body.billing_note_id = note
       body.lines = (invoices ?? [])
         .filter((inv) => selected[inv.id]?.on)
         .map((inv) => {
@@ -210,15 +247,13 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
     }
   }
 
-  /** ป้ายของช่องในแถวช่องทาง: จอกว้างซ่อน (มีหัวคอลัมน์แล้ว) แต่ screen reader ยังอ่านชื่อเต็ม */
-  const methodLabel = 'sm:[&>span:first-child]:sr-only'
   const amountField = 'w-36 [&_input]:text-right [&_input]:tabular-nums'
 
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       {formError && <Alert tone="error">{formError}</Alert>}
 
-      <FormSection title={t.fields.kind} description={kindHints[kind]}>
+      <FormSection title={t.fields.kind}>
         <fieldset className="sm:col-span-2">
           <legend className="sr-only">{t.fields.kind}</legend>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -231,10 +266,7 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
                 )}
               >
                 <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} className="mt-1 size-4 accent-primary" />
-                <span>
-                  <span className="block text-sm font-medium">{label}</span>
-                  <span className="block text-[13px] text-ink-muted">{kindHints[k]}</span>
-                </span>
+                <span className="block text-sm font-medium">{label}</span>
               </label>
             ))}
           </div>
@@ -243,19 +275,36 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
         <TextField label={t.fields.description} value={head.description} maxLength={500} onChange={(e) => setHead((h) => ({ ...h, description: e.target.value }))} />
       </FormSection>
 
-      <FormSection title={t.sections.party} description={!isParty && mode === 'payment' ? t.payeeHint : t.sections.partyHint}>
+      <FormSection title={t.sections.party}>
         {isParty ? (
-          <ReferenceSelect
-            label={partyLabel}
-            required
-            source={api.parties}
-            params={{ status: 'active' }}
-            value={party}
-            onChange={setParty}
-            error={errors.party}
-            texts={texts.reference}
-            className="sm:col-span-2"
-          />
+          <>
+            <ReferenceSelect
+              label={partyLabel}
+              required
+              source={api.parties}
+              params={{ status: 'active' }}
+              value={party}
+              onChange={(p) => {
+                setParty(p)
+                setNote('')
+              }}
+              error={errors.party}
+              texts={texts.reference}
+              className="sm:col-span-2"
+            />
+            {api.billingNotes && party && (
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <SelectField
+                  label={tr.billingNote}                  value={note}
+                  options={[
+                    { value: '', label: texts.common.none },
+                    ...notes.map((n) => ({ value: n.id, label: `${n.document_no} · ${formatDate(n.due_date)} · ${formatAmount(n.outstanding)}` })),
+                    ...(note && !notes.some((n) => n.id === note) ? [{ value: note, label: note }] : []),
+                  ]}
+                  onChange={(e) => setNote(e.target.value)}
+                />              </div>
+            )}
+          </>
         ) : (
           <>
             <TextField
@@ -282,12 +331,9 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
       </FormSection>
 
       <section aria-labelledby="doc-lines" className="flex min-w-0 flex-col gap-3">
-        <div>
-          <h2 id="doc-lines" className="text-[15px] font-semibold">
-            {isParty ? t.sections.invoices : t.sections.lines}
-          </h2>
-          {isParty && <p className="mt-0.5 text-[13px] text-ink-muted">{t.sections.invoicesHint}</p>}
-        </div>
+        <h2 id="doc-lines" className="text-[15px] font-semibold">
+          {isParty ? t.sections.invoices : t.sections.lines}
+        </h2>
         <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
           {isParty ? (
             !party || loadingInvoices || !invoices?.length ? (
@@ -327,20 +373,33 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
                 <tbody>
                   {invoices.map((inv) => {
                     const s = selected[inv.id]
+                    const undue = toUnits(inv.vat_undue ?? '0') > 0n && !inv.tax_invoice
                     return (
-                      <tr key={inv.id} className={cx('border-b border-line last:border-b-0', s?.on && 'bg-primary-soft/30')}>
+                      <tr key={inv.id} className={cx('border-b border-line align-top last:border-b-0', s?.on && 'bg-primary-soft/30')}>
                         <td className="px-3 py-2">
                           <input
                             type="checkbox"
                             aria-label={format(t.invoices.select, { no: inv.document_no })}
                             checked={!!s?.on}
                             onChange={(e) => toggle(inv, e.target.checked)}
-                            className="size-4 cursor-pointer accent-primary"
+                            className="mt-2.5 size-4 cursor-pointer accent-primary"
                           />
                         </td>
                         <td className="px-2 py-2">
                           <span className="font-mono text-[13px]">{inv.document_no}</span>
                           {inv.partner_ref && <span className="block text-[12px] text-ink-muted">{inv.partner_ref}</span>}
+                          {(inv.kind || undue || inv.tax_invoice) && (
+                            <span className="mt-1 flex flex-wrap gap-1">
+                              {inv.kind && <Badge tone={inv.kind === 'service_invoice' ? 'info' : 'neutral'}>{tr.kindBadge[inv.kind] ?? inv.kind}</Badge>}
+                              {undue && (
+                                <Badge tone="warning">
+                                  {format(tr.vatUndue, { vat: formatAmount(inv.vat_undue) })}
+                                  <span className="sr-only"> — {tr.vatUndueHint}</span>
+                                </Badge>
+                              )}
+                              {inv.tax_invoice && <Badge tone="success">{tr.taxInvoiceIssued}</Badge>}
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-2 whitespace-nowrap">{formatDate(inv.due_date)}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{formatAmount(inv.outstanding)}</td>
@@ -487,74 +546,10 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
 
       <section aria-labelledby="doc-methods" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex flex-col gap-3">
-          <div>
-            <h2 id="doc-methods" className="text-[15px] font-semibold">
-              {t.sections.methods}
-            </h2>
-            <p className="mt-0.5 text-[13px] text-ink-muted">{t.sections.methodsHint}</p>
-          </div>
-          <div className="flex flex-col gap-3 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card">
-            <div aria-hidden className="hidden gap-3 text-[13px] font-medium text-ink-muted sm:grid sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,10rem)_2.5rem]">
-              <span>{t.fields.cashAccount}</span>
-              <span className="text-right">{t.fields.amount}</span>
-              <span>{t.fields.reference}</span>
-            </div>
-            {methods.map((m, i) => {
-              const n = i + 1
-              const up = (patch: Partial<MethodLine>) => setMethods((ms) => ms.map((x) => (x.key === m.key ? { ...x, ...patch } : x)))
-              return (
-                <div key={m.key} className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,10rem)_2.5rem]">
-                  <ReferenceSelect
-                    label={`${t.fields.cashAccount} ${format(t.lines.method, { n })}`}
-                    className={methodLabel}
-                    source={api.cashAccounts}
-                    params={{ status: 'active' }}
-                    value={m.cash}
-                    onChange={(c) => up({ cash: c })}
-                    error={errors[`cash-${m.key}`]}
-                    texts={texts.reference}
-                  />
-                  <TextField
-                    label={`${t.fields.amount} ${format(t.lines.method, { n })}`}
-                    inputMode="decimal"
-                    value={m.amount}
-                    error={errors[`mamt-${m.key}`]}
-                    className={`${methodLabel} [&_input]:text-right [&_input]:tabular-nums`}
-                    onChange={(e) => up({ amount: e.target.value })}
-                  />
-                  <TextField
-                    label={`${t.fields.reference} ${format(t.lines.method, { n })}`}
-                    className={methodLabel}
-                    value={m.reference}
-                    maxLength={50}
-                    onChange={(e) => up({ reference: e.target.value })}
-                  />
-                  <button
-                    type="button"
-                    aria-label={format(t.lines.removeMethod, { n })}
-                    disabled={methods.length <= 1}
-                    onClick={() => setMethods((ms) => ms.filter((x) => x.key !== m.key))}
-                    className={cx(
-                      'flex size-10 cursor-pointer items-center justify-center rounded-(--radius-control) text-ink-subtle hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-40',
-                                    )}
-                  >
-                    <Trash2 aria-hidden className="size-4" />
-                  </button>
-                </div>
-              )
-            })}
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setMethods((ms) => [...ms, methodLine()])}>
-                <Plus aria-hidden />
-                {t.lines.addMethod}
-              </Button>
-              {diff !== 0n && net > 0n && (
-                <Button size="sm" variant="ghost" onClick={fillRemaining}>
-                  {t.totals.fill}
-                </Button>
-              )}
-            </div>
-          </div>
+          <h2 id="doc-methods" className="text-[15px] font-semibold">
+            {t.sections.methods}
+          </h2>
+          <MethodsEditor methods={methods} onChange={setMethods} cashAccountsApi={api.cashAccounts} target={net} errors={errors} />
         </div>
 
         <aside aria-label={t.totals.net} className="h-fit rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card lg:mt-12">
@@ -576,34 +571,14 @@ export function MoneyDocForm({ mode, api, docsPath, listHref }: { mode: MoneyDoc
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-ink-muted">{t.totals.methods}</dt>
-              <dd className="tabular-nums">{formatAmount(methodsTotal)}</dd>
+              <dd className="tabular-nums">{formatAmount(paid)}</dd>
             </div>
           </dl>
-          <p aria-live="polite" className="mt-3 text-[13px] font-medium">
-            {balanced ? (
-              <span className="inline-flex items-center gap-1.5 text-success">
-                <CircleCheck aria-hidden className="size-4" />
-                {t.totals.balanced}
-              </span>
-            ) : (
-              net > 0n && (
-                <span className="inline-flex items-center gap-1.5 text-warning">
-                  <CircleAlert aria-hidden className="size-4" />
-                  {format(t.totals.unbalanced, { amount: formatAmount(diff < 0n ? -diff : diff) })}
-                </span>
-              )
-            )}
-          </p>
-          {errors.methods && (
-            <p role="alert" className="mt-1 text-[13px] text-danger">
-              {errors.methods}
-            </p>
-          )}
+          <MethodsBalance target={net} total={paid} error={errors.methods} />
         </aside>
       </section>
 
       <FormBar>
-        <p className="hidden text-[13px] text-ink-muted sm:block">{t.actions.saveHint}</p>
         <div className="ml-auto flex gap-2">
           <ButtonLink href={listHref} variant="secondary">
             {texts.common.cancel}

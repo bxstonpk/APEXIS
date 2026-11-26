@@ -37,7 +37,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     loadRef(accounts, s.wht_pnd53_account_id ?? ''),
   ])
   return (
-    <FormPage title={t.heading} description={t.description}>
+    <FormPage title={t.heading}>
       <FinanceSettingsForm
         apiPath={financeApi.settings(companyId)}
         journalsApi={journals}

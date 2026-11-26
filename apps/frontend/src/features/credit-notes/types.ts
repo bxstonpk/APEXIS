@@ -1,3 +1,5 @@
+import { texts } from '@/config'
+
 /** ใบลดหนี้ (ขาย / จัดซื้อ) — ชนิดและรูปแบบใบกำกับต้นทางที่ฟอร์มใช้ */
 export type CreditKind = 'return' | 'allowance'
 
@@ -45,7 +47,10 @@ export type SalesCreditNoteSummary = {
   id: string
   document_no: string
   date: string
-  invoice: { id: string; document_no: string }
+  /** kind = ชนิดใบต้นทาง: invoice = ขายสินค้า, service_invoice = ใบแจ้งหนี้ค่าบริการ */
+  invoice: { id: string; document_no: string; kind?: 'invoice' | 'service_invoice' }
+  /** output = ลดภาษีขาย (ใบลดหนี้ / ใบกำกับภาษี), undue = ลดภาษีขายยังไม่ถึงกำหนด (ใบลดหนี้อย่างเดียว ไม่เข้ารายงานภาษีขาย) */
+  vat_kind?: 'output' | 'undue'
   customer: Ref
   kind: CreditKind
   reason: string
@@ -101,6 +106,12 @@ export type SupplierCreditNote = SupplierCreditNoteSummary & {
   stock_document_no: string
   created_by: string
   lines: (CreditNoteLine & { stock: boolean; price_variance: string })[]
+}
+
+/** ชื่อใบลดหนี้ขายที่พิมพ์ — มี VAT และลดภาษีขาย = ใบลดหนี้ / ใบกำกับภาษี; ไม่มี VAT หรือภาษียังไม่ถึงกำหนด = ใบลดหนี้ */
+export function creditNotePrintTitle(vat: boolean, vatKind: SalesCreditNote['vat_kind']): string {
+  const p = texts.creditNotes.print
+  return vat && vatKind !== 'undue' ? p.titleVat : p.title
 }
 
 export const CREDIT_QUERY_KEYS = ['q', 'status', 'customer_id', 'supplier_id', 'invoice_id', 'start_date', 'end_date', 'sort', 'page', 'page_size'] as const

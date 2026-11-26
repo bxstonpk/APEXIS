@@ -45,10 +45,7 @@ export function PeriodTable({ apiPath, periods, canClose }: { apiPath: string; p
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-[15px] font-semibold">{t.heading}</h2>
-          {canClose && <p className="mt-0.5 text-[13px] text-ink-muted">{t.orderHint}</p>}
-        </div>
+        <h2 className="text-[15px] font-semibold">{t.heading}</h2>
         <Progress closed={closedCount} total={sorted.length} />
       </div>
       {error && <Alert tone="error">{error}</Alert>}

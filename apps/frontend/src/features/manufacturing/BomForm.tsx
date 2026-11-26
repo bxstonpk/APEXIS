@@ -115,7 +115,7 @@ export function BomForm({
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={t.sections.general} description={t.sections.generalHint}>
+      <FormSection title={t.sections.general}>
         <TextField
           label={f.code}
           required
@@ -160,7 +160,7 @@ export function BomForm({
         </label>
       </FormSection>
 
-      <LinesSection id="bom-components" title={t.sections.components} hint={t.sections.componentsHint}>
+      <LinesSection id="bom-components" title={t.sections.components}>
         <EditTable head={[['#', 'w-10 text-center'], [f.component, 'w-[45%]'], [f.quantity, 'w-36 text-right'], [f.scrap, 'w-28 text-right'], ['', 'w-12']]}>
           {components.map((c, i) => (
             <tr key={c.key} className="border-b border-line align-top last:border-b-0">
@@ -225,7 +225,7 @@ export function BomForm({
         )}
       </LinesSection>
 
-      <LinesSection id="bom-conversion" title={t.sections.conversion} hint={t.sections.conversionHint}>
+      <LinesSection id="bom-conversion" title={t.sections.conversion}>
         {conversions.length === 0 ? (
           <p className="rounded-(--radius-panel) border border-dashed border-line-strong bg-surface px-4 py-5 text-center text-sm text-ink-muted">{t.noConversion}</p>
         ) : (
@@ -296,15 +296,12 @@ export function BomForm({
   )
 }
 
-function LinesSection({ id, title, hint, children }: { id: string; title: string; hint: string; children: ReactNode }) {
+function LinesSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="flex min-w-0 flex-col gap-3">
-      <div>
-        <h2 id={id} className="text-[15px] font-semibold">
-          {title}
-        </h2>
-        <p className="mt-1 text-[13px] text-ink-muted">{hint}</p>
-      </div>
+      <h2 id={id} className="text-[15px] font-semibold">
+        {title}
+      </h2>
       {children}
     </section>
   )

@@ -27,5 +27,5 @@ export async function redirectToFirstMenu(companyId: string, appKey: string): Pr
 
 /** เมนูที่ยังไม่มีหน้าจริง */
 export function ComingSoon() {
-  return <MessagePanel icon="soon" title={texts.common.comingSoon} description={texts.common.comingSoonDescription} />
+  return <MessagePanel icon="soon" title={texts.common.comingSoon} />
 }

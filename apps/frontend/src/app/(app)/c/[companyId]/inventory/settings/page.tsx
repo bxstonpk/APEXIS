@@ -32,7 +32,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     loadRef(invApi.journals(companyId), s.journal_id ?? ''),
   ])
   return (
-    <FormPage title={t.heading} description={t.description}>
+    <FormPage title={t.heading}>
       <InventorySettingsForm
         apiPath={invApi.settings(companyId)}
         systemApi={`${invApi.settings(companyId)}/accounting-systems`}

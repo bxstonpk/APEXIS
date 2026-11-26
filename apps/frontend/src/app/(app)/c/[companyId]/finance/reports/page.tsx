@@ -244,9 +244,7 @@ function VatSummaryReport({
                 <dt className="text-[13px] text-ink-muted">{v.refundable}</dt>
                 <dd className="mt-1 text-[24px] font-semibold tabular-nums">{formatAmount(s.refundable, { dashZero: true })}</dd>
               </div>
-            </dl>
-            <p className="mt-4 text-[13px] leading-relaxed text-ink-muted">{v.note}</p>
-          </section>
+            </dl>          </section>
         </div>
       )}
     </div>

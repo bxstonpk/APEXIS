@@ -41,7 +41,7 @@ export function DefaultChartPanel({ apiPath, createHref, businessType }: { apiPa
         <BookOpenCheck aria-hidden className="size-6" />
       </span>
       <h2 className="mt-4 text-base font-semibold">{t.title}</h2>
-      <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-muted">{format(t.hint, { type })}</p>
+      <p className="mt-1 text-sm text-ink-muted">{type}</p>
       {error && (
         <div className="mt-4 w-full max-w-xl text-left">
           <Alert tone="error">{error}</Alert>

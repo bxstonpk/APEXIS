@@ -31,7 +31,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     loadRef(mfgApi.warehouses(companyId), s.default_warehouse_id ?? ''),
   ])
   return (
-    <FormPage title={t.heading} description={t.description}>
+    <FormPage title={t.heading}>
       <MfgSettingsForm
         apiPath={mfgApi.settings(companyId)}
         accountsApi={mfgApi.accounts(companyId)}

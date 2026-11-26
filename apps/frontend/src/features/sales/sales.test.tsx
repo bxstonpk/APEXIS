@@ -2,10 +2,9 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { texts } from '@/config'
-import { toUnits } from '@/features/accounting/money'
 import { DocActions } from './Actions'
 import { CustomerForm } from './Forms'
-import { FulfilForm, remaining } from './FulfilForm'
+import { SaleForm } from './SaleForm'
 import type { Order } from './types'
 
 const push = vi.fn()
@@ -27,7 +26,7 @@ const t = texts.sales
 const ref = (id: string) => ({ id, code: id.toUpperCase(), name: `สินค้า ${id}` })
 const amounts = { net: '0', vat: '0', gross: '0' }
 
-function order(lines: [string, string, string][]): Order {
+function order(lines: [string, string][]): Order {
   return {
     id: 'o1',
     document_no: 'SO2026-000001',
@@ -47,57 +46,59 @@ function order(lines: [string, string, string][]): Order {
     approved_at: '2026-11-01T00:00:00Z',
     closed_at: null,
     cancelled_at: null,
-    lines: lines.map(([quantity, delivered_quantity, invoiced_quantity], i) => ({
+    lines: lines.map(([quantity, invoiced_quantity], i) => ({
       line_no: i + 1,
       item: ref(`i${i + 1}`),
       description: '',
       quantity,
       unit_price: '100',
       amounts,
-      delivered_quantity,
       invoiced_quantity,
     })),
   }
 }
 
-describe('remaining', () => {
-  const o = order([
-    ['10', '6', '2'],
-    ['5', '5', '5'],
-  ])
-  it('ส่งของ = สั่ง − ส่งแล้ว; ออกบิลจากของที่ส่ง = ส่งแล้ว − ออกบิลแล้ว; ส่งพร้อมออกบิล = สั่ง − ส่งแล้ว', () => {
-    expect(remaining(o, 'delivery', false)).toEqual({ 1: toUnits('4'), 2: 0n })
-    expect(remaining(o, 'invoice', false)).toEqual({ 1: toUnits('4'), 2: 0n })
-    expect(remaining(o, 'invoice', true)).toEqual({ 1: toUnits('4'), 2: 0n })
-    expect(remaining(order([['10', '0', '0']]), 'invoice', false)).toEqual({ 1: 0n })
-  })
-})
+const apis = { submit: '/companies/c1/sales-invoices', customers: '/cu', items: '/it', warehouses: '/w', openDeposits: '/dep/open' }
 
-describe('FulfilForm', () => {
-  it('ยังไม่เคยส่งของ = ตั้งต้นเป็นส่งพร้อมออกบิล และส่งจำนวนคงเหลือทุกบรรทัด', async () => {
+describe('SaleForm จากใบสั่งขาย', () => {
+  it('ตั้งต้นด้วยคงเหลือ (สั่ง − ออกเอกสารแล้ว) แล้วส่ง order_id + บรรทัดที่มีจำนวน', async () => {
     const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === 'POST') return json(201, { data: { id: 'inv1', document_no: 'IV2026-000001' } })
       return json(200, { data: [] })
     })
     vi.stubGlobal('fetch', fetch)
-    render(<FulfilForm mode="invoice" order={order([['3', '0', '0']])} apiPath="/companies/c1/sales-invoices" warehousesApi="/companies/c1/warehouses" docsPath="/c/c1/sales/invoices" orderHref="/o" />)
-    expect(screen.getByRole('checkbox', { name: new RegExp(t.fields.withDelivery.slice(0, 10)) })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: t.actions.invoice }))
+    render(
+      <SaleForm
+        kind="invoice"
+        order={order([
+          ['3', '0'],
+          ['5', '5'],
+        ])}
+        apis={apis}
+        vat={null}
+        docsPath="/c/c1/sales/invoices"
+        listHref="/o"
+      />,
+    )
+    expect(screen.getByLabelText(`${t.lines.thisTime} I1`)).toHaveValue('3')
+    expect(screen.getByLabelText(`${t.lines.thisTime} I2`)).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: t.actions.postSale }))
     const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!
     const body = JSON.parse(String(post[1]!.body))
-    expect(body).toMatchObject({ order_id: 'o1', with_delivery: true, lines: [{ order_line_no: 1, quantity: '3' }] })
+    expect(body).toMatchObject({ order_id: 'o1', lines: [{ order_line_no: 1, quantity: '3' }], deposits: [] })
+    expect(body).not.toHaveProperty('with_delivery')
     expect(push).toHaveBeenCalledWith('/c/c1/sales/invoices/inv1')
   })
 
   it('จำนวนเกินคงเหลือ = แจ้งที่ช่องและไม่ส่ง', async () => {
     const fetch = vi.fn(async () => json(200, { data: [] }))
     vi.stubGlobal('fetch', fetch)
-    render(<FulfilForm mode="delivery" order={order([['10', '6', '0']])} apiPath="/d" warehousesApi="/w" docsPath="/docs" orderHref="/o" />)
+    render(<SaleForm kind="invoice" order={order([['10', '6']])} apis={apis} vat={null} docsPath="/docs" listHref="/o" />)
     const qty = screen.getByLabelText(`${t.lines.thisTime} I1`)
     expect(qty).toHaveValue('4')
     await userEvent.clear(qty)
     await userEvent.type(qty, '5')
-    await userEvent.click(screen.getByRole('button', { name: t.actions.deliver }))
+    await userEvent.click(screen.getByRole('button', { name: t.actions.postSale }))
     expect(screen.getByText(t.lines.overRemaining)).toBeInTheDocument()
     expect((fetch.mock.calls as unknown as [string, RequestInit?][]).some(([, init]) => init?.method === 'POST')).toBe(false)
   })

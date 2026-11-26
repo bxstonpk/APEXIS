@@ -7,7 +7,6 @@ export type TextFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> &
   label: string
   /** ข้อความ error ของช่องนี้ (มาจาก config) — มีค่า = แสดงสถานะผิด */
   error?: string
-  hint?: string
   /** ไอคอนหน้าช่อง เช่น แว่นขยายของช่องค้นหา */
   startAdornment?: ReactNode
   /** ปุ่ม / ไอคอนท้ายช่อง เช่น ปุ่มแสดงรหัสผ่าน */
@@ -50,15 +49,13 @@ export function FieldLabel({ htmlFor, label, required, hidden }: { htmlFor: stri
 
 /** ขนาดตัวอักษรในช่อง: 16px บนมือถือ (iOS ไม่ซูมหน้าเอง), 14px บนจอกว้าง */
 export const inputTextClass = 'text-base text-ink sm:text-sm'
-export const hintClass = 'text-[13px] leading-snug text-ink-muted'
 export const errorClass = 'text-[13px] leading-snug text-danger'
 
-/** ช่องกรอกข้อความพร้อม label / hint / error ที่ผูก aria ให้ครบ */
-export function TextField({ label, error, hint, startAdornment, endAdornment, hideLabel, className, ref, disabled, required, ...input }: TextFieldProps) {
+/** ช่องกรอกข้อความพร้อม label / error ที่ผูก aria ให้ครบ (ไม่มีข้อความอธิบายใต้ช่อง — หน้าจอไม่อธิบาย) */
+export function TextField({ label, error, startAdornment, endAdornment, hideLabel, className, ref, disabled, required, ...input }: TextFieldProps) {
   const id = useId()
-  const hintId = hint ? `${id}-hint` : undefined
   const errorId = error ? `${id}-error` : undefined
-  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
+  const describedBy = errorId
 
   return (
     <div className={cx('flex flex-col gap-1.5', className)}>
@@ -77,11 +74,6 @@ export function TextField({ label, error, hint, startAdornment, endAdornment, hi
         />
         {endAdornment && <span className="flex pr-1">{endAdornment}</span>}
       </div>
-      {hint && !error && (
-        <p id={hintId} className={hintClass}>
-          {hint}
-        </p>
-      )}
       {error && (
         <p id={errorId} className={errorClass}>
           {error}

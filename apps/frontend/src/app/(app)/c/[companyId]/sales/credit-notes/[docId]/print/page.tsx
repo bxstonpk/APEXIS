@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { Alert } from '@/components'
 import { format, texts } from '@/config'
 import { toUnits } from '@/features/accounting/money'
-import type { SalesCreditNote } from '@/features/credit-notes/types'
+import { creditNotePrintTitle, type SalesCreditNote } from '@/features/credit-notes/types'
 import { loadItem } from '@/features/organization/pages'
 import { loadLetterhead } from '@/features/sales/pages'
 import { PrintDocument, printDate } from '@/features/sales/PrintDocument'
@@ -28,6 +28,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   if (!letterhead) return <Alert tone="error">{p.unavailable}</Alert>
   const vat = toUnits(d.vat_rate) > 0n
   return (
+    // ภาษียังไม่ถึงกำหนด (ใบแจ้งหนี้ค่าบริการที่ยังไม่รับเงิน) = ไม่ใช่ใบกำกับภาษี → "ใบลดหนี้"
     <>
       <PrintToolbar backHref={`${salesPage(companyId, 'credit-notes')}/${d.id}`} />
       {d.status === 'cancelled' && (
@@ -37,7 +38,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
       )}
       <PrintDocument
         letterhead={letterhead}
-        title={vat ? c.print.titleVat : c.print.title}
+        title={creditNotePrintTitle(vat, d.vat_kind)}
         docNo={d.document_no}
         info={[
           [p.date, printDate(d.date)],

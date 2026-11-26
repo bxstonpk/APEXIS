@@ -6,12 +6,10 @@ const icons = { info: Info, forbidden: ShieldAlert, soon: Construction } as cons
 /** ข้อความกลางหน้า เช่น ไม่มีสิทธิ์ / กำลังพัฒนา / เปิดบริษัทไม่ได้ */
 export function MessagePanel({
   title,
-  description,
   action,
   icon = 'info',
 }: {
   title: string
-  description?: string
   action?: ReactNode
   icon?: keyof typeof icons
 }) {
@@ -22,7 +20,6 @@ export function MessagePanel({
         <Icon aria-hidden className="size-5" />
       </span>
       <h1 className="mt-4 text-lg font-semibold">{title}</h1>
-      {description && <p className="mt-1.5 text-sm text-ink-muted">{description}</p>}
       {action && <div className="mt-6 flex justify-center">{action}</div>}
     </section>
   )

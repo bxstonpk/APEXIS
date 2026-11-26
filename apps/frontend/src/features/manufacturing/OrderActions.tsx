@@ -143,7 +143,7 @@ export function OrderActions({ apiPath, order, canManage, printHref }: { apiPath
   )
 }
 
-function PanelFrame({ title, hint, onClose, onSubmit, busy, submitLabel, danger, children }: { title: string; hint: string; onClose: () => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; busy: boolean; submitLabel: string; danger?: boolean; children: ReactNode }) {
+function PanelFrame({ title, onClose, onSubmit, busy, submitLabel, danger, children }: { title: string; onClose: () => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; busy: boolean; submitLabel: string; danger?: boolean; children: ReactNode }) {
   const id = useId()
   const headingRef = useRef<HTMLHeadingElement>(null)
   useEffect(() => headingRef.current?.focus(), [])
@@ -158,12 +158,9 @@ function PanelFrame({ title, hint, onClose, onSubmit, busy, submitLabel, danger,
       className="flex flex-col gap-4 rounded-(--radius-panel) border border-primary/30 bg-surface p-5 shadow-card"
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id={id} ref={headingRef} tabIndex={-1} className="text-[15px] font-semibold outline-none">
-            {title}
-          </h2>
-          <p className="mt-1 text-[13px] text-ink-muted">{hint}</p>
-        </div>
+        <h2 id={id} ref={headingRef} tabIndex={-1} className="text-[15px] font-semibold outline-none">
+          {title}
+        </h2>
         <button
           type="button"
           aria-label={texts.manufacturing.orders.actions.close}
@@ -203,9 +200,7 @@ function QuantityPanel({ kind, materials, busy, onClose, onSubmit }: { kind: 'is
   const th = 'px-3 py-2.5 text-[13px] font-medium text-ink-muted'
   return (
     <PanelFrame
-      title={kind === 'issue' ? p.issueTitle : p.returnTitle}
-      hint={kind === 'issue' ? p.issueHint : p.returnHint}
-      onClose={onClose}
+      title={kind === 'issue' ? p.issueTitle : p.returnTitle}      onClose={onClose}
       onSubmit={submit}
       busy={busy}
       submitLabel={kind === 'issue' ? t.actions.issue : t.actions.return}
@@ -278,7 +273,7 @@ function CompletePanel({ order, busy, onClose, onSubmit }: { order: ProductionOr
     void onSubmit({ date, completed_quantity: q })
   }
   return (
-    <PanelFrame title={p.completeTitle} hint={p.completeHint} onClose={onClose} onSubmit={submit} busy={busy} submitLabel={t.actions.complete}>
+    <PanelFrame title={p.completeTitle} onClose={onClose} onSubmit={submit} busy={busy} submitLabel={t.actions.complete}>
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField label={p.date} type="date" required value={date} error={errors.date} onChange={(e) => setDate(e.target.value)} />
         <TextField
@@ -287,7 +282,7 @@ function CompletePanel({ order, busy, onClose, onSubmit }: { order: ProductionOr
           inputMode="decimal"
           value={qty}
           error={errors.qty}
-          hint={order.item.uom}
+          endAdornment={order.item.uom ? <span className="pr-2 text-[13px] text-ink-muted">{order.item.uom}</span> : undefined}
           className="[&_input]:text-right [&_input]:tabular-nums"
           onChange={(e) => setQty(e.target.value)}
         />
@@ -311,7 +306,7 @@ function CancelPanel({ busy, onClose, onSubmit }: { busy: boolean; onClose: () =
     void onSubmit({ reason: reason.trim() })
   }
   return (
-    <PanelFrame title={p.cancelTitle} hint={p.cancelHint} onClose={onClose} onSubmit={submit} busy={busy} submitLabel={t.actions.cancel} danger>
+    <PanelFrame title={p.cancelTitle} onClose={onClose} onSubmit={submit} busy={busy} submitLabel={t.actions.cancel} danger>
       <TextField label={p.reason} required value={reason} maxLength={500} error={error} onChange={(e) => setReason(e.target.value)} />
     </PanelFrame>
   )

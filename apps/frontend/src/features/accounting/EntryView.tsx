@@ -72,7 +72,6 @@ export function EntryView({
   return (
     <div className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
-      {entry.status === 'posted' && <Alert>{t.postedNotice}</Alert>}
       {entry.status === 'reversed' && <Alert>{t.reversedNotice}</Alert>}
 
       <dl className="grid gap-x-8 gap-y-3 rounded-(--radius-panel) border border-line bg-surface p-5 text-sm shadow-card sm:grid-cols-2 lg:grid-cols-3">
@@ -158,9 +157,7 @@ export function EntryView({
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <Undo2 aria-hidden className="size-4" />
             {t.actions.reverseTitle}
-          </h2>
-          <p className="mt-1 text-[13px] text-ink-muted">{t.actions.reverseHint}</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-[12rem_1fr]">
+          </h2>          <div className="mt-4 grid gap-4 sm:grid-cols-[12rem_1fr]">
             <TextField label={t.actions.reverseDate} required type="date" value={rev.date} error={dateError} onChange={(e) => setRev((r) => ({ ...r, date: e.target.value }))} />
             <TextField
               label={t.actions.reverseDescription}

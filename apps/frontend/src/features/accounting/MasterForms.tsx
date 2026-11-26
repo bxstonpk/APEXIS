@@ -2,7 +2,7 @@
 
 import { useId, useState, type FormEvent } from 'react'
 import { ReferenceSelect, SelectField, TextField } from '@/components'
-import { errorClass, FieldLabel, fieldFrameClass, hintClass, inputTextClass } from '@/components/TextField/TextField'
+import { errorClass, FieldLabel, fieldFrameClass, inputTextClass } from '@/components/TextField/TextField'
 import { format, texts } from '@/config'
 import { FormActions, FormNotices, FormSection, StatusSelect } from '@/features/forms/FormParts'
 import { useResourceForm } from '@/features/forms/useResourceForm'
@@ -21,7 +21,6 @@ type CommonProps = { apiPath: string; listHref: string; canManage: boolean }
 /** ช่องข้อความหลายบรรทัดในกรอบเดียวกับช่องอื่น */
 function TextArea({
   label,
-  hint,
   error,
   value,
   onChange,
@@ -30,7 +29,6 @@ function TextArea({
   className,
 }: {
   label: string
-  hint?: string
   error?: string
   value: string
   onChange: (v: string) => void
@@ -49,17 +47,11 @@ function TextArea({
           value={value}
           maxLength={maxLength}
           disabled={disabled}
-          aria-describedby={hint ? `${id}-hint` : undefined}
           aria-invalid={error ? true : undefined}
           onChange={(e) => onChange(e.target.value)}
           className={cx(inputTextClass, 'w-full resize-y bg-transparent px-3 py-2 leading-relaxed outline-none disabled:cursor-not-allowed disabled:text-ink-muted')}
         />
       </div>
-      {hint && !error && (
-        <p id={`${id}-hint`} className={hintClass}>
-          {hint}
-        </p>
-      )}
       {error && <p className={errorClass}>{error}</p>}
     </div>
   )
@@ -109,12 +101,10 @@ export function AccountForm({ apiPath, listHref, canManage, item }: CommonProps 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={t.sections.general} description={t.sections.generalHint}>
+      <FormSection title={t.sections.general}>
         <TextField
           label={f.code}
-          required
-          hint={t.codeHint}
-          value={v.code}
+          required          value={v.code}
           maxLength={20}
           autoComplete="off"
           disabled={readOnly}
@@ -126,7 +116,6 @@ export function AccountForm({ apiPath, listHref, canManage, item }: CommonProps 
         <TextField label={f.nameEn} value={v.name_en} maxLength={200} disabled={readOnly} onChange={(e) => set('name_en', e.target.value)} />
         <TextArea
           label={f.description}
-          hint={t.descriptionHint}
           value={v.description}
           maxLength={500}
           disabled={readOnly}
@@ -134,7 +123,7 @@ export function AccountForm({ apiPath, listHref, canManage, item }: CommonProps 
           onChange={(val) => set('description', val)}
         />
       </FormSection>
-      <FormSection title={t.sections.structure} description={t.sections.structureHint}>
+      <FormSection title={t.sections.structure}>
         <div className="flex flex-col gap-1.5">
           <SelectField
             label={f.type}
@@ -147,7 +136,6 @@ export function AccountForm({ apiPath, listHref, canManage, item }: CommonProps 
               setParent(null) // บัญชีคุมต้องหมวดเดียวกัน
             }}
           />
-          {t.typeHints[v.type] && <p className={hintClass}>{t.typeHints[v.type]}</p>}
         </div>
         <SelectField
           label={f.kind}
@@ -161,9 +149,7 @@ export function AccountForm({ apiPath, listHref, canManage, item }: CommonProps 
         />
         <ReferenceSelect
           key={v.type}
-          label={f.parent}
-          hint={t.parentHint}
-          source={apiPath}
+          label={f.parent}          source={apiPath}
           params={{ postable: 'false', type: v.type }}
           value={parent}
           onChange={setParent}
@@ -219,12 +205,10 @@ export function JournalForm({ apiPath, listHref, canManage, item }: CommonProps 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={t.sections.general} description={t.sections.generalHint}>
+      <FormSection title={t.sections.general}>
         <TextField
           label={f.code}
-          required
-          hint={t.codeHint}
-          value={v.code}
+          required          value={v.code}
           maxLength={10}
           autoComplete="off"
           disabled={readOnly}
@@ -234,11 +218,9 @@ export function JournalForm({ apiPath, listHref, canManage, item }: CommonProps 
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s as 'active' | 'inactive')} />}
       </FormSection>
-      <FormSection title={t.sections.numbering} description={t.sections.numberingHint}>
+      <FormSection title={t.sections.numbering}>
         <TextField
-          label={f.template}
-          hint={format(t.templateHint, { template: DEFAULT_TEMPLATE })}
-          placeholder={DEFAULT_TEMPLATE}
+          label={f.template}          placeholder={DEFAULT_TEMPLATE}
           value={v.template}
           maxLength={60}
           autoComplete="off"
@@ -252,18 +234,6 @@ export function JournalForm({ apiPath, listHref, canManage, item }: CommonProps 
             {preview.ok ? preview.example : '–'}
           </output>
         </div>
-        <details className="text-[13px] text-ink-muted sm:col-span-2">
-          <summary className="cursor-pointer font-medium text-primary">{texts.numbering.helpTitle}</summary>
-          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-            {texts.numbering.help.map(([k, desc]) => (
-              <div key={k} className="contents">
-                <dt className="font-mono text-ink">{k}</dt>
-                <dd>{desc}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-2">{texts.numbering.resetHint}</p>
-        </details>
       </FormSection>
       <FormActions
         listHref={listHref}

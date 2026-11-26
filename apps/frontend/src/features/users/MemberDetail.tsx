@@ -62,9 +62,8 @@ export function MemberDetail({ apiPath, member, roles, canManage, isSelf }: { ap
     <div className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
       {!canManage && <Alert>{texts.common.readOnly}</Alert>}
-      {canManage && isSelf && <Alert>{t.selfHint}</Alert>}
 
-      <FormSection title={t.sections.roles} description={t.sections.rolesHint}>
+      <FormSection title={t.sections.roles}>
         <RoleChecklist roles={roles} selected={roleIds} onChange={setRoleIds} disabled={!editable} error={rolesError} />
         {editable && (
           <div className="flex justify-end gap-2 sm:col-span-2">
@@ -80,7 +79,7 @@ export function MemberDetail({ apiPath, member, roles, canManage, isSelf }: { ap
         )}
       </FormSection>
 
-      <FormSection title={t.sections.status} description={t.sections.statusHint}>
+      <FormSection title={t.sections.status}>
         <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2">
           <p className="text-sm">
             {t.columns.status}: <span className="font-medium">{t.statuses[member.status]}</span>

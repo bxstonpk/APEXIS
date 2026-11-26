@@ -9,5 +9,6 @@ type Props = { params: Promise<{ companyId: string }>; searchParams: Promise<Sea
 
 export default async function Page({ params, searchParams }: Props) {
   const { companyId } = await params
-  return <CreditNoteNewPage mode="sales" companyId={companyId} invoiceId={param(await searchParams, 'invoice_id')} />
+  const sp = await searchParams
+  return <CreditNoteNewPage mode="sales" companyId={companyId} invoiceId={param(sp, 'invoice_id')} invoiceKind={param(sp, 'kind')} />
 }

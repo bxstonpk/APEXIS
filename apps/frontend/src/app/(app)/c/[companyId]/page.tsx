@@ -43,9 +43,7 @@ async function Launcher({ companyId, user }: { companyId: string; user: { name: 
       <div className="flex min-h-full flex-col">
         <TopBar userName={user.name} />
         <MessagePanel
-          title={texts.companies.unavailable}
-          description={texts.companies.unavailableDescription}
-          action={<ButtonLink href={appConfig.routes.companies}>{texts.companies.heading}</ButtonLink>}
+          title={texts.companies.unavailable}          action={<ButtonLink href={appConfig.routes.companies}>{texts.companies.heading}</ButtonLink>}
         />
       </div>
     )

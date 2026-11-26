@@ -27,6 +27,8 @@ export type AppMenuItem = {
   /** key ใน texts.apps[app].menu และ path ต่อจาก /c/{companyId}/{app}/ */
   path: string
   permission: string
+  /** ประเภทธุรกิจที่ใช้เมนูนี้ — ไม่ระบุ = ทุกประเภท (เปิดจาก URL ตรงถูกกันด้วย MenuGuard) */
+  businessTypes?: readonly BusinessType[]
 }
 
 export type AppDefinition = {
@@ -50,8 +52,11 @@ export const apps: readonly AppDefinition[] = [
       { path: 'dashboard', permission: 'sales.report:read' },
       { path: 'quotations', permission: 'sales.quotation:read' },
       { path: 'orders', permission: 'sales.order:read' },
-      { path: 'deliveries', permission: 'sales.delivery:read' },
-      { path: 'invoices', permission: 'sales.invoice:read' },
+      // ขายสินค้า (ภาษีเกิดเมื่อส่งมอบ) / ใบแจ้งหนี้ค่าบริการ (ภาษีเกิดเมื่อรับเงิน) — ตามประเภทธุรกิจ
+      { path: 'invoices', permission: 'sales.invoice:read', businessTypes: ['trading', 'manufacturing'] },
+      { path: 'service-invoices', permission: 'sales.invoice:read', businessTypes: ['service', 'construction'] },
+      { path: 'deposits', permission: 'sales.invoice:read' },
+      { path: 'billing-notes', permission: 'sales.billing_note:read' },
       { path: 'credit-notes', permission: 'sales.invoice:read' },
       { path: 'customers', permission: 'sales.customer:read' },
       { path: 'reports', permission: 'sales.report:read' },
@@ -167,11 +172,22 @@ export function appAvailableFor(app: AppDefinition, businessType: BusinessType |
   return !app.businessTypes || !businessType || app.businessTypes.includes(businessType)
 }
 
-/** แอปที่ผู้ใช้เห็น — ตัดแอปที่ไม่ใช้กับประเภทธุรกิจ, เหลือเฉพาะเมนูที่มีสิทธิ์ และตัดแอปที่ไม่เหลือเมนู */
+/** เมนูใช้กับประเภทธุรกิจนี้ได้หรือไม่ — ไม่รู้ประเภท = ใช้ได้ */
+export function menuItemAvailableFor(item: AppMenuItem, businessType: BusinessType | null | undefined): boolean {
+  return !item.businessTypes || !businessType || item.businessTypes.includes(businessType)
+}
+
+/** เมนู path ของแอป appKey ใช้กับประเภทธุรกิจนี้ได้หรือไม่ (เมนูที่ไม่รู้จัก = ใช้ได้) */
+export function menuAvailableFor(appKey: string, path: string, businessType: BusinessType | null | undefined): boolean {
+  const item = findApp(appKey)?.menu.find((m) => m.path === path)
+  return !item || menuItemAvailableFor(item, businessType)
+}
+
+/** แอปที่ผู้ใช้เห็น — ตัดแอป / เมนูที่ไม่ใช้กับประเภทธุรกิจ, เหลือเฉพาะเมนูที่มีสิทธิ์ และตัดแอปที่ไม่เหลือเมนู */
 export function visibleApps(permissions: readonly string[], businessType?: BusinessType | null): AppDefinition[] {
   return apps
     .filter((app) => appAvailableFor(app, businessType))
-    .map((app) => ({ ...app, menu: app.menu.filter((m) => can(permissions, m.permission)) }))
+    .map((app) => ({ ...app, menu: app.menu.filter((m) => menuItemAvailableFor(m, businessType) && can(permissions, m.permission)) }))
     .filter((app) => app.menu.length > 0)
 }
 

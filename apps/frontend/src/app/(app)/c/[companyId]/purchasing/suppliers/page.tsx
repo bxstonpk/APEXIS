@@ -42,7 +42,7 @@ export default async function Page({ params, searchParams }: Props) {
   ]
   return (
     <>
-      <ListHeader title={t.heading} description={t.description} createHref={createHref} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={t.heading}createHref={createHref} count={list.error ? undefined : list.meta.total} />
       <ListToolbar q={param(sp, 'q')} keep={{ sort: param(sp, 'sort'), page_size: param(sp, 'page_size') }}>
         <SelectField name="status" label={texts.common.status} defaultValue={param(sp, 'status')} options={statusFilterOptions()} />
       </ListToolbar>

@@ -100,7 +100,7 @@ export function PurchaseFulfilForm({
   return (
     <form ref={formRef} noValidate onSubmit={submit} className="flex flex-col gap-6">
       {error && <Alert tone="error">{error}</Alert>}
-      <FormSection title={texts.sales.sections.header} description={`${order.order_no ?? ''} · ${order.supplier.code} ${order.supplier.name}`}>
+      <FormSection title={texts.sales.sections.header}>
         {invoice ? (
           <>
             <TextField
@@ -121,9 +121,7 @@ export function PurchaseFulfilForm({
             />
             <TextField
               label={f.postingDate}
-              required
-              hint={f.postingDateHint}
-              type="date"
+              required              type="date"
               value={head.date}
               error={errors.date}
               onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))}
@@ -133,9 +131,7 @@ export function PurchaseFulfilForm({
           <>
             <TextField label={texts.sales.fields.date} required type="date" value={head.date} error={errors.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} />
             <ReferenceSelect
-              label={f.warehouse}
-              hint={f.warehouseHint}
-              source={warehousesApi}
+              label={f.warehouse}              source={warehousesApi}
               params={{ status: 'active' }}
               value={warehouse}
               onChange={setWarehouse}
@@ -215,7 +211,6 @@ export function PurchaseFulfilForm({
             </tbody>
           </table>
         </div>
-        {invoice && <p className="text-[13px] text-ink-muted">{f.priceHint}</p>}
         {errors.lines && (
           <p role="alert" className="text-[13px] text-danger">
             {errors.lines}

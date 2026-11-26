@@ -199,10 +199,7 @@ export function SalesDocForm({
             onChange={(e) => setHead((h) => ({ ...h, inclusive: e.target.checked }))}
             className="mt-0.5 size-4 accent-primary"
           />
-          <span>
-            <span className="block text-sm font-medium">{t.fields.priceIncludesVat}</span>
-            <span className="block text-[13px] text-ink-muted">{t.fields.priceIncludesVatHint}</span>
-          </span>
+          <span className="block text-sm font-medium">{t.fields.priceIncludesVat}</span>
         </label>
       </FormSection>
 

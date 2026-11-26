@@ -16,7 +16,7 @@ export default async function NewFiscalYearPage({ params }: { params: Promise<{ 
   if (!can(ctx.permissions, r.manage)) return <NoPermission />
   const path = r.page(companyId)
   return (
-    <FormPage crumb={{ label: texts.fiscalYears.heading, href: r.page(companyId) }} title={texts.fiscalYears.newTitle} description={texts.fiscalYears.description}>
+    <FormPage crumb={{ label: texts.fiscalYears.heading, href: r.page(companyId) }} title={texts.fiscalYears.newTitle}>
       <FiscalYearForm apiPath={r.api(companyId)} listHref={path} defaultYear={new Date().getFullYear()} />
     </FormPage>
   )
