@@ -155,6 +155,21 @@ describe('NumberingTable', () => {
     render(<NumberingTable apiPath="/x" items={[item]} canManage={false} />)
     expect(screen.queryByRole('button', { name: texts.numbering.edit })).toBeNull()
   })
+
+  it('จัดกลุ่มตาม module (ขาย → จัดซื้อ → คลัง → การผลิต) และใช้ชื่อไทยของใบสั่งผลิต', () => {
+    const row = (doc_type: string, name: string) => ({ ...item, doc_type, name })
+    render(
+      <NumberingTable
+        apiPath="/x"
+        items={[row('manufacturing.production_order', 'Production order'), row('purchasing.payment', 'ใบจ่ายชำระ'), row('sales.invoice', 'ใบกำกับภาษี'), row('inventory.receipt', 'รับเข้า')]}
+        canManage={false}
+      />,
+    )
+    const groups = screen.getAllByRole('columnheader').filter((h) => h.getAttribute('scope') === 'colgroup').map((h) => h.textContent)
+    const mods = texts.permissions.modules
+    expect(groups).toEqual([mods.sales, mods.purchasing, mods.inventory, mods.manufacturing])
+    expect(screen.getByText('ใบสั่งผลิต')).toBeInTheDocument()
+  })
 })
 
 describe('CompanySettingsForm', () => {

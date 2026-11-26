@@ -1,6 +1,7 @@
 import {
   BookOpenCheck,
   Building2,
+  Factory,
   Landmark,
   type LucideIcon,
   Package,
@@ -87,6 +88,18 @@ export const apps: readonly AppDefinition[] = [
       { path: 'closing', permission: 'inventory.closing:read' },
       { path: 'reports', permission: 'inventory.report:read' },
       { path: 'settings', permission: 'inventory.settings:read' },
+    ],
+  },
+  {
+    key: 'manufacturing',
+    icon: Factory,
+    tone: 'bg-app-manufacturing',
+    businessTypes: ['manufacturing'],
+    menu: [
+      { path: 'orders', permission: 'manufacturing.order:read' },
+      { path: 'boms', permission: 'manufacturing.bom:read' },
+      { path: 'reports', permission: 'manufacturing.report:read' },
+      { path: 'settings', permission: 'manufacturing.settings:read' },
     ],
   },
   {
