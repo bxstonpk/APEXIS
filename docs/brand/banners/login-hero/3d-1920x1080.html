@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>APEXIS Hero — 3D Sculptural</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  /* 3D / Sculptural — บล็อกโมดูลแบบ isometric ซ้อนเป็นขั้นบันไดขึ้นสู่ยอด (apex) สีส้ม บนพื้นสว่างนุ่ม */
+  :root { --navy:#101c3b; --blue:#1d3f8f; --orange:#f28c1a; --ink:#101c3b; --muted:#5a6376; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; }
+  body { font-family:'Plex Thai', sans-serif; color:var(--ink); position:relative;
+    background:
+      radial-gradient(55% 70% at 75% 45%, #ffffff 0%, transparent 70%),
+      radial-gradient(40% 50% at 95% 100%, rgba(242,140,26,.16) 0%, transparent 70%),
+      linear-gradient(160deg, #eef2fb 0%, #f5f6f8 55%, #ebeef4 100%); }
+  svg.scene { position:absolute; left:860px; top:60px; width:1060px; height:960px; }
+
+  .copy { position:absolute; left:192px; top:50%; transform:translateY(-50%); width:760px; }
+  .brand { font-weight:700; font-size:30px; letter-spacing:.28em; color:var(--navy); }
+  .brand .x { color:var(--orange); }
+  .rule { margin-top:30px; width:72px; height:5px; border-radius:5px; background:var(--orange); }
+  h1 { margin-top:30px; font-size:94px; line-height:1.12; font-weight:700; letter-spacing:-.015em; color:var(--navy); }
+  h1 span { color:var(--blue); }
+  p.sub { margin-top:30px; font-size:29px; line-height:1.62; color:var(--muted); max-width:700px; }
+  .legend { margin-top:52px; display:grid; grid-template-columns:repeat(3, auto); gap:16px 34px; justify-content:start; font-size:22px; color:#2b3550; }
+  .legend span { display:flex; align-items:center; gap:12px; }
+  .legend i { width:18px; height:18px; border-radius:5px; display:block; }
+</style>
+</head>
+<body>
+  <!-- ฉาก isometric: บล็อก = โมดูล; ขั้นสูงขึ้นไปทางขวาบน; บล็อกบนสุดสีส้ม = apex -->
+  <svg class="scene" viewBox="0 0 1060 960" aria-hidden="true">
+    <defs>
+      <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="18"/></filter>
+      <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    </defs>
+    <g id="blocks"></g>
+  </svg>
+
+  <div class="copy">
+    <div class="brand">APE<span class="x">X</span>IS</div>
+    <div class="rule"></div>
+    <h1>ERP สำหรับ<br><span>ธุรกิจไทย</span></h1>
+    <p class="sub">หกโมดูลที่ต่อกันเป็นระบบเดียว ตั้งแต่ใบเสนอราคา รับ–จ่ายสินค้า จนถึงงบการเงิน</p>
+    <div class="legend">
+      <span><i style="background:#5b48b8"></i>องค์กร</span>
+      <span><i style="background:#c2414f"></i>ขาย</span>
+      <span><i style="background:#2c5fb8"></i>จัดซื้อ</span>
+      <span><i style="background:#c46f17"></i>คลังสินค้า</span>
+      <span><i style="background:#0f7c91"></i>การเงิน</span>
+      <span><i style="background:#11795b"></i>บัญชี</span>
+    </div>
+  </div>
+
+<script>
+  // วาดบล็อก isometric (cube) — top / left / right shading จากสีฐาน
+  const g = document.getElementById('blocks')
+  const NS = 'http://www.w3.org/2000/svg'
+  const W = 92, H = 53 // ครึ่งความกว้าง / ครึ่งความสูงของหน้าบนแบบ isometric
+  const OX = 520, OY = 600 // จุดกำเนิดของกริด
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16), r = n >> 16, gg = (n >> 8) & 255, b = n & 255
+    const m = (c) => Math.max(0, Math.min(255, Math.round(f > 0 ? c + (255 - c) * f : c * (1 + f))))
+    return `rgb(${m(r)},${m(gg)},${m(b)})`
+  }
+  function el(tag, attrs) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); g.appendChild(e); return e }
+  function cube(col, row, level, h, color, glow) {
+    const x = OX + (col - row) * W, y = OY + (col + row) * H - level
+    const top = `${x},${y - h} ${x + W},${y - h + H} ${x},${y - h + 2 * H} ${x - W},${y - h + H}`
+    const left = `${x - W},${y - h + H} ${x},${y - h + 2 * H} ${x},${y + 2 * H} ${x - W},${y + H}`
+    const right = `${x + W},${y - h + H} ${x},${y - h + 2 * H} ${x},${y + 2 * H} ${x + W},${y + H}`
+    el('ellipse', { cx: x, cy: y + 2 * H + 6, rx: W * 1.05, ry: H * 0.75, fill: '#101c3b', opacity: level ? 0 : 0.14, filter: 'url(#sh)' })
+    if (glow) el('ellipse', { cx: x, cy: y - h + H, rx: W * 1.6, ry: H * 1.6, fill: color, opacity: 0.35, filter: 'url(#sh)' })
+    el('polygon', { points: left, fill: shade(color, -0.18) })
+    el('polygon', { points: right, fill: shade(color, -0.38) })
+    el('polygon', { points: top, fill: shade(color, 0.12) })
+    el('polygon', { points: top, fill: 'url(#shine)' })
+  }
+  // หกโมดูลเรียงแถวเดียว สูงขึ้นทีละขั้นเข้าหาผู้ชม (บล็อกหลังเตี้ยกว่า จึงไม่ถูกบัง) + บล็อกส้มลอยเหนือยอด = apex
+  const STEP = 1.2
+  const modules = [
+    ['#5b48b8', 90],  // องค์กร
+    ['#c2414f', 140], // ขาย
+    ['#2c5fb8', 195], // จัดซื้อ
+    ['#c46f17', 255], // คลังสินค้า
+    ['#0f7c91', 320], // การเงิน
+    ['#11795b', 390], // บัญชี
+  ]
+  modules.forEach(([color, h], i) => cube((i - 3) * STEP, 0, 0, h, color, false))
+  const last = (modules.length - 4) * STEP
+  const lx = OX + last * W, ly = OY + last * H - 390
+  // apex: ลูกบาศก์ส้มเล็กลอยเหนือบล็อกสูงสุด
+  const s = 0.62, aw = W * s, ah = H * s, ay = ly - 120, ty = ay - 70
+  el('ellipse', { cx: lx, cy: ly + H, rx: aw * 0.9, ry: ah * 0.7, fill: '#101c3b', opacity: 0.12, filter: 'url(#sh)' })
+  el('ellipse', { cx: lx, cy: ay, rx: aw * 2.4, ry: ah * 2.4, fill: '#f28c1a', opacity: 0.32, filter: 'url(#sh)' })
+  el('polygon', { points: `${lx - aw},${ty + ah} ${lx},${ty + 2 * ah} ${lx},${ay + 2 * ah} ${lx - aw},${ay + ah}`, fill: shade('#f28c1a', -0.12) })
+  el('polygon', { points: `${lx + aw},${ty + ah} ${lx},${ty + 2 * ah} ${lx},${ay + 2 * ah} ${lx + aw},${ay + ah}`, fill: shade('#f28c1a', -0.32) })
+  el('polygon', { points: `${lx},${ty} ${lx + aw},${ty + ah} ${lx},${ty + 2 * ah} ${lx - aw},${ty + ah}`, fill: shade('#f28c1a', 0.2) })
+  el('polygon', { points: `${lx},${ty} ${lx + aw},${ty + ah} ${lx},${ty + 2 * ah} ${lx - aw},${ty + ah}`, fill: 'url(#shine)' })
+</script>
+</body>
+</html>

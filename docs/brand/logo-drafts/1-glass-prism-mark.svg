@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none"><defs>
+  <linearGradient id="mblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="mdeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="msky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="mmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="mfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="mgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#msky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#mdeep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#mgloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#mfire)" filter="url(#mglow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#mfire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg>

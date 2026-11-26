@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>APEXIS Hero — Glassmorphism</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  /* Glassmorphism — แสงสีของแต่ละแอปฟุ้งใต้การ์ดกระจกที่จำลองหน้าจอจริงของระบบ */
+  :root { --navy:#101c3b; --orange:#f28c1a; --sales:#c2414f; --pur:#2c5fb8; --inv:#c46f17; --acc:#11795b; --fin:#0f7c91; --org:#5b48b8; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1920px; height:1080px; overflow:hidden; }
+  body { font-family:'Plex Thai', sans-serif; color:#fff; background:#0a1330; position:relative; }
+
+  .orb { position:absolute; border-radius:50%; filter:blur(90px); }
+  .o1 { width:620px; height:620px; left:1080px; top:-120px; background:#2c5fb8; opacity:.9; }
+  .o2 { width:520px; height:520px; left:1440px; top:520px; background:var(--orange); opacity:.75; }
+  .o3 { width:420px; height:420px; left:1000px; top:640px; background:var(--org); opacity:.7; }
+  .o4 { width:340px; height:340px; left:1560px; top:120px; background:var(--fin); opacity:.7; }
+  .o5 { width:700px; height:700px; left:-260px; top:-260px; background:#1d3f8f; opacity:.55; }
+  .dots { position:absolute; inset:0; background-image:radial-gradient(rgba(255,255,255,.08) 1.5px, transparent 1.5px); background-size:32px 32px;
+    -webkit-mask-image:linear-gradient(90deg, #000 0%, transparent 55%); mask-image:linear-gradient(90deg, #000 0%, transparent 55%); }
+
+  .glass { position:absolute; border-radius:28px; padding:30px 34px;
+    background:linear-gradient(145deg, rgba(255,255,255,.20), rgba(255,255,255,.06));
+    border:1px solid rgba(255,255,255,.28);
+    box-shadow:0 30px 80px rgba(3,8,25,.45), inset 0 1px 0 rgba(255,255,255,.35);
+    backdrop-filter:blur(26px) saturate(150%); -webkit-backdrop-filter:blur(26px) saturate(150%); }
+  .label { font-size:20px; color:rgba(255,255,255,.72); display:flex; align-items:center; gap:10px; }
+  .dot { width:12px; height:12px; border-radius:4px; display:inline-block; }
+  .big { margin-top:10px; font-size:52px; font-weight:700; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .up { margin-top:6px; font-size:20px; color:#7ee2b0; font-weight:500; }
+
+  /* การ์ดยอดขาย + กราฟ */
+  .c1 { left:1090px; top:170px; width:560px; height:330px; }
+  .bars { position:absolute; left:34px; right:34px; bottom:30px; height:120px; display:flex; align-items:flex-end; gap:14px; }
+  .bars b { flex:1; border-radius:8px 8px 3px 3px; background:rgba(255,255,255,.28); }
+  .bars b.on { background:linear-gradient(180deg, #ffc37a, var(--orange)); box-shadow:0 0 24px rgba(242,140,26,.6); }
+  /* การ์ดเอกสาร */
+  .c2 { left:1420px; top:440px; width:420px; }
+  .doc-no { margin-top:8px; font-size:28px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .badge { margin-top:14px; display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:999px; font-size:19px; font-weight:500; background:rgba(126,226,176,.18); color:#a6f0cb; border:1px solid rgba(126,226,176,.35); }
+  .line { margin-top:18px; display:flex; justify-content:space-between; font-size:20px; color:rgba(255,255,255,.8); }
+  /* การ์ดสต็อก */
+  .c3 { left:1060px; top:600px; width:400px; }
+  .meter { margin-top:16px; height:12px; border-radius:99px; background:rgba(255,255,255,.18); overflow:hidden; }
+  .meter i { display:block; height:100%; width:68%; border-radius:99px; background:linear-gradient(90deg, #ffb547, var(--inv)); }
+  /* การ์ดโมดูล */
+  .c4 { left:1170px; top:840px; width:560px; padding:22px 26px; display:flex; gap:14px; }
+  .mod { flex:1; height:64px; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:19px; font-weight:500; }
+
+  .copy { position:absolute; left:192px; top:50%; transform:translateY(-50%); width:800px; }
+  .brand { display:inline-flex; align-items:center; gap:14px; padding:12px 22px; border-radius:999px; font-size:22px; font-weight:600; letter-spacing:.26em;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); backdrop-filter:blur(12px); }
+  .brand b { width:10px; height:10px; border-radius:50%; background:var(--orange); box-shadow:0 0 14px var(--orange); }
+  h1 { margin-top:40px; font-size:92px; line-height:1.14; font-weight:700; letter-spacing:-.01em; }
+  h1 em { font-style:normal; color:#ffb547; }
+  p.sub { margin-top:30px; font-size:29px; line-height:1.62; color:rgba(255,255,255,.75); max-width:720px; }
+</style>
+</head>
+<body>
+  <div class="orb o5"></div><div class="orb o1"></div><div class="orb o4"></div><div class="orb o3"></div><div class="orb o2"></div>
+  <div class="dots"></div>
+
+  <div class="glass c1">
+    <div class="label"><span class="dot" style="background:var(--sales)"></span>ยอดขายเดือนนี้ (ก่อน VAT)</div>
+    <div class="big">฿2,480,000</div>
+    <div class="up">▲ 12.4% จากปีก่อน</div>
+    <div class="bars"><b style="height:38%"></b><b style="height:52%"></b><b style="height:45%"></b><b style="height:63%"></b><b style="height:58%"></b><b style="height:74%"></b><b style="height:69%"></b><b class="on" style="height:96%"></b></div>
+  </div>
+
+  <div class="glass c3">
+    <div class="label"><span class="dot" style="background:var(--inv)"></span>สินค้าคงเหลือ · คลังหลัก</div>
+    <div class="big" style="font-size:44px">1,284 <span style="font-size:24px;font-weight:500;color:rgba(255,255,255,.7)">รายการ</span></div>
+    <div class="meter"><i></i></div>
+  </div>
+
+  <div class="glass c2">
+    <div class="label"><span class="dot" style="background:var(--acc)"></span>ใบกำกับภาษี</div>
+    <div class="doc-no">INV2026-000128</div>
+    <div class="badge">✓ ลงบัญชีอัตโนมัติแล้ว</div>
+    <div class="line"><span>ยอดรวม</span><span style="font-weight:600">฿107,000.00</span></div>
+  </div>
+
+  <div class="glass c4">
+    <div class="mod" style="background:rgba(194,65,79,.55)">ขาย</div>
+    <div class="mod" style="background:rgba(44,95,184,.6)">จัดซื้อ</div>
+    <div class="mod" style="background:rgba(196,111,23,.6)">คลัง</div>
+    <div class="mod" style="background:rgba(15,124,145,.6)">การเงิน</div>
+    <div class="mod" style="background:rgba(17,121,91,.6)">บัญชี</div>
+  </div>
+
+  <div class="copy">
+    <div class="brand"><b></b>APEXIS</div>
+    <h1>ERP สำหรับ<br><em>ธุรกิจไทย</em></h1>
+    <p class="sub">ทุกงานของธุรกิจในระบบเดียว — เอกสารเดินต่อกันอัตโนมัติ ตั้งแต่ใบเสนอราคาจนถึงงบการเงิน</p>
+  </div>
+</body>
+</html>
