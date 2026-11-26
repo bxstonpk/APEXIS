@@ -297,6 +297,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบสั่งซื้อ | `GET`, `POST /purchase-orders`; `GET`, `PUT`, `PATCH`, `DELETE /purchase-orders/{orderID}` | `status, supplier_id, item_id, start_date, end_date`; sort `date\|order_no\|created_at` | `purchasing.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `purchasing.order:approve` |
 | ใบรับสินค้า | `GET`, `POST /goods-receipts`; `GET`, `PATCH /goods-receipts/{receiptID}` | `status, supplier_id, order_id, start_date, end_date` | `purchasing.receipt:read\|post` |
 | ใบแจ้งหนี้ | `GET`, `POST /supplier-invoices`; `GET`, `PATCH /supplier-invoices/{invoiceID}` | เหมือนใบรับสินค้า | `purchasing.invoice:read\|post` |
+| ใบลดหนี้ผู้ขาย | `GET`, `POST /supplier-credit-notes`; `GET`, `PATCH /supplier-credit-notes/{creditNoteID}` | `status, supplier_id, invoice_id, start_date, end_date`; sort `date\|document_no` | `purchasing.invoice:read\|post` |
 
 - ใบสั่งซื้อ `PATCH` รับ `approved` / `closed` / `cancelled`; ใบรับ / ใบแจ้งหนี้ `PATCH` รับเฉพาะ `cancelled`
 - ใบรับ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที (response มี `entry_no` ของ ledger, ใบรับมี `stock_document_no` ของ inventory)
@@ -310,14 +311,23 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 // POST /supplier-invoices — unit_price ไม่ส่ง = ราคาใบสั่งซื้อ; invoice_date ไม่ส่ง = date
 { "order_id": "…", "supplier_invoice_no": "INV-001", "date": "2026-02-15",
   "lines": [ { "order_line_no": 1, "quantity": "4", "unit_price": "110" } ] }
+// POST /supplier-credit-notes — return: quantity (+ unit_price ≤ ราคาใบแจ้งหนี้), allowance: amount; credit_note_date ไม่ส่ง = date
+{ "invoice_id": "…", "supplier_credit_note_no": "CN-77", "date": "2026-02-20", "kind": "return", "reason": "สินค้าชำรุด",
+  "warehouse_id": "…", "lines": [ { "invoice_line_no": 1, "quantity": "1" } ] }
 ```
+
+- **ใบลดหนี้ผู้ขาย** (`purchasing.credit_note`, PCN): ลงบัญชีทันที — Dr เจ้าหนี้ / Cr ภาษีซื้อ + (perpetual + ส่งคืนสินค้า stock: Cr สินค้าคงเหลือตามต้นทุน FIFO ที่ตัดออก, ส่วนต่างลงผลต่างราคา; อื่น ๆ: Cr `purchase_returns_account_id` หรือบัญชีซื้อของสินค้า)
+  - ตัดยอดค้างของใบแจ้งหนี้เหมือนการจ่ายเงิน (ไม่เกินยอดค้าง, aging / ใบค้างจ่ายหักให้อัตโนมัติ); ใบแจ้งหนี้ที่มีใบลดหนี้ยกเลิกไม่ได้ (422 `invoice_has_credit_notes_(cancel_the_credit_notes_first)`)
+  - คืนได้ไม่เกินจำนวนที่ยังไม่คืน / ลดได้ไม่เกินมูลค่าบรรทัดที่ยังไม่ลด (422 `credit_exceeds_what_is_left_on_the_invoice`); เลขที่ใบลดหนี้ผู้ขายซ้ำ = 409
+  - ใบแจ้งหนี้มี `credited_amount` (รวม VAT) และต่อบรรทัด `line_no`, `returned_quantity`, `credited_amount`; `outstanding` = ยอดรวม − จ่าย − ลดหนี้
 
 ### รายงาน (`purchasing.report:read`)
 
 | `book` | parameter | ผลลัพธ์ |
 |---|---|---|
 | `outstanding-purchase-orders` | `supplier_id, item_id, q, sort` (date, order_no, supplier_code, delivery_date), `page, page_size` | บรรทัดใบสั่งซื้อที่ค้างรับ (`to_receive`) หรือค้างแจ้งหนี้ (`to_invoice`) |
-| `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย (หักยอดจ่ายถึงวันที่รายงาน): `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |
+| `ap-aging` | `end_date` (บังคับ), `supplier_id, q, page, page_size` | ยอดค้างต่อผู้ขาย (หักยอดจ่าย / ลดหนี้ถึงวันที่รายงาน): `not_due, days_1_30, days_31_60, days_61_90, over_90, total` + `totals` รวมทุกผู้ขาย |
+| `input-vat` | `start_date, end_date` (บังคับ, ตามวันที่บันทึกบัญชี), `supplier_id, sort` (date, document_no, supplier_name), `page, page_size` | ภาษีซื้อ: ใบแจ้งหนี้ที่มี VAT + ใบลดหนี้ผู้ขาย (ติดลบ) — `kind, tax_invoice_no, tax_invoice_date, reference_no, supplier, tax_id, branch_no, base, tax`; `total_base`, `total_tax` |
 
 - ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม — ยอดจ่ายมาจากใบสำคัญจ่ายของการเงิน (ดู 4.10)
 
@@ -331,6 +341,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ใบสั่งขาย | `GET`, `POST /sales-orders`; `GET`, `PUT`, `PATCH`, `DELETE /sales-orders/{orderID}` | เหมือนใบเสนอราคา | `sales.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `sales.order:approve` |
 | ใบส่งของ | `GET`, `POST /deliveries`; `GET`, `PATCH /deliveries/{deliveryID}` | `status, customer_id, order_id, start_date, end_date` | `sales.delivery:read\|post` |
 | ใบแจ้งหนี้ / ใบกำกับภาษี | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | เหมือนใบส่งของ | `sales.invoice:read\|post` |
+| ใบลดหนี้ | `GET`, `POST /sales-credit-notes`; `GET`, `PATCH /sales-credit-notes/{creditNoteID}` | `status, customer_id, invoice_id, start_date, end_date` | `sales.invoice:read\|post` |
 
 - ลูกค้า / ผู้ขาย: ที่อยู่ส่งเป็น `address_detail` ตามแบบกรมสรรพากร `{building, room_no, floor_no, village, house_no, moo, soi, yaek, street, sub_district, district, province, postal_code}` ("-" = ว่าง, รหัสไปรษณีย์ 5 หลัก, ผิด = 400 `invalid_address`); response มี `address` = ข้อความที่ประกอบแล้ว (กรุงเทพฯ ใช้ แขวง / เขต) ใช้พิมพ์ใบกำกับภาษีและเก็บ snapshot ในเอกสารการเงิน
 
@@ -338,6 +349,11 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 - **สาขา**: `branch_no` / `address_detail` ของลูกค้า = สาขาหลัก; สาขาอื่น `branches: [{branch_no, name, address_detail}]` (PUT แทนที่ทั้งชุด — ไม่ส่ง = ไม่มีสาขาอื่น; response มี `address` และส่งเฉพาะ GET รายตัว); เลขสาขาซ้ำ (รวมสาขาหลัก) = 400 `duplicate_customer_branch_number`
 - ใบเสนอราคา / ใบสั่งขายรับ `customer_branch_no` (ว่าง = สาขาหลัก; ไม่มีในลูกค้า = 422 `customer_branch_not_found`) — ใบสั่งขายจากใบเสนอราคาใช้สาขาตามใบเสนอราคา
 - ใบแจ้งหนี้ / ใบกำกับภาษีมี `bill_to {name, tax_id, branch_no, address}` = ผู้ซื้อ ณ วันออก (สาขาตามใบสั่งขาย) — แก้ทะเบียนลูกค้าภายหลังไม่กระทบ; รายงานภาษีขายใช้ค่านี้
+- **ใบลดหนี้** (`sales.credit_note`, CN — ม.86/10): `POST {invoice_id, date, kind: return|allowance, reason, description?, warehouse_id?, lines:[{invoice_line_no, quantity?, unit_price?, amount?}]}`
+  - ลงบัญชีทันที: Dr รับคืน / ส่วนลด (`sales_returns_account_id` หรือบัญชีรายได้ของบรรทัด) + Dr ภาษีขาย / Cr ลูกหนี้; รับคืนสินค้า stock เข้าคลังที่ต้นทุนเดิม (perpetual: Dr สินค้าคงเหลือ / Cr ต้นทุนขาย)
+  - ตัดยอดค้างของใบแจ้งหนี้เหมือนรับเงิน (ไม่เกินยอดค้าง) — aging / ใบค้างรับ / วงเงินเครดิต / dashboard หักให้อัตโนมัติ; ใบแจ้งหนี้ที่มีใบลดหนี้ยกเลิกไม่ได้
+  - detail มี `original_totals`, `credited_before`, `correct_totals` (มูลค่าเดิม / ที่ถูกต้อง) ใช้พิมพ์ใบลดหนี้; ใบแจ้งหนี้มี `credited_amount` และต่อบรรทัด `line_no`, `returned_quantity`, `credited_amount`; `received_amount` = รับเงินจริงเท่านั้น
+  - รายงาน `output-vat`: ใบลดหนี้เป็นแถวติดลบ (`kind: credit_note`, `reference_no` = ใบกำกับเดิม)
 
 ### ค้นหาผู้จดทะเบียน VAT (กรมสรรพากร — module `taxregistry`)
 
@@ -386,6 +402,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 - บัญชีลูกหนี้ / เจ้าหนี้มาจากค่าตั้งขาย / จัดซื้อ (เจ้าของบัญชีคุม) — การเงินขอผ่าน `sales.SettleReceivables` / `purchasing.SettlePayables` ใน transaction เดียวกัน; กฎของขาย / จัดซื้อ (เกินยอดค้าง ฯลฯ) ตอบ 422 `rejected`
 - คู่ค้า ณ วันเอกสาร (ชื่อ เลขผู้เสียภาษี สาขา ที่อยู่ ประเภทผู้มีเงินได้) เก็บติดเอกสาร — รายงานภาษีไม่ต้องอ่านทะเบียนข้าม module
 - จ่ายเงินที่หักภาษี ณ ที่จ่ายต้องรู้เลขผู้เสียภาษีและประเภท (`individual` = ภ.ง.ด.3, `juristic` = ภ.ง.ด.53) — ผู้ขายใช้ข้อมูลทะเบียน, จ่ายเงินอื่นกรอกใน `payee`
+- **หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)**: ใบจ่ายที่มีภาษีหักได้ `wht_certificate_no` (`finance.wht_certificate`, WT) ใน transaction เดียวกัน; ประเภทภาษีหัก ณ ที่จ่ายมี `income_type` = ช่องในแบบ (`40_1, 40_2, 40_3, 40_4a, 40_4b, 3_tres, other`; ของเดิม = `3_tres`); หน้าเว็บพิมพ์ 2 ฉบับจากข้อมูลใบจ่าย
 
 ```jsonc
 // PUT /finance-settings
@@ -413,6 +430,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 |---|---|---|
 | `withholding-tax` | `start_date, end_date` (บังคับ), `form` (pnd3 / pnd53), `party_id, sort` (date, document_no, party_name), `page, page_size` | บรรทัดใบจ่ายที่หักภาษี: ผู้รับเงิน (ชื่อ เลขผู้เสียภาษี สาขา ที่อยู่), `tax_form`, ประเภท, อัตรา, ฐาน, ภาษี; `total_base`, `total_wht` |
 | `withholding-tax-received` | `start_date, end_date` (บังคับ), `party_id, sort, page, page_size` | ใบรับที่ลูกค้าหัก ณ ที่จ่าย: ฐาน (ยอดตัดหนี้), ภาษีถูกหัก + ยอดรวม |
+| `vat-summary` | `start_date, end_date` (บังคับ) | สรุป ภ.พ.30: `output` / `input` = `{base, tax, documents}` (ใบกำกับหักใบลดหนี้ — ขอผ่าน `sales.OutputVat` / `purchasing.InputVat`), `net_tax`, `payable`, `refundable` |
 
 ### สิทธิ์เดิม
 
