@@ -57,11 +57,27 @@ type Item struct {
 	ID                 uuid.UUID
 	Code               string
 	Name               string
-	Stock              bool // ชนิด stock (นับสต็อก / มีใบรับเข้า)
+	Uom                string // รหัสหน่วยนับ
+	Stock              bool   // ชนิด stock (นับสต็อก / มีใบรับเข้า)
 	Active             bool
 	PurchaseAccountID  uuid.UUID
 	InventoryAccountID uuid.UUID
 	RevenueAccountID   uuid.UUID // uuid.Nil = ไม่ได้ตั้งที่สินค้า / หมวด (ใช้ค่าเริ่มต้นของค่าตั้งขาย)
+}
+
+// Ref คือรหัส / ชื่อของข้อมูลหลักใน module อื่น (เช่นบัญชี / สมุดรายวันของ ledger) สำหรับแสดงในเอกสาร
+type Ref struct {
+	ID   uuid.UUID
+	Code string
+	Name string
+}
+
+// Warehouse คือคลังสินค้าของ inventory (ใช้แสดงชื่อ / ตรวจสถานะในเอกสารของ module อื่น)
+type Warehouse struct {
+	ID     uuid.UUID
+	Code   string
+	Name   string
+	Active bool
 }
 
 // PurchaseContext คือข้อมูลที่จัดซื้อต้องใช้ ณ วันที่เอกสาร

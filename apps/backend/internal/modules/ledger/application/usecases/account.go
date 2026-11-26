@@ -103,6 +103,15 @@ func (uc *AccountUseCases) PostableIDsByCode(ctx context.Context, companyID vo.C
 	return uc.accounts.PostableIDsByCode(ctx, companyID, codes)
 }
 
+// AccountRefs / JournalRefs: รหัส / ชื่อตาม id ให้ module อื่นแสดงในเอกสาร — ไม่ตรวจสิทธิ์ (ผู้เรียกตรวจสิทธิ์เอกสารของตัวเองแล้ว)
+func (uc *AccountUseCases) AccountRefs(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) (map[vo.AccountID]dto.CodeName, error) {
+	return uc.accounts.RefsByIDs(ctx, companyID, ids)
+}
+
+func (uc *AccountUseCases) JournalRefs(ctx context.Context, companyID vo.CompanyID, ids []vo.JournalID) (map[vo.JournalID]dto.CodeName, error) {
+	return uc.journals.RefsByIDs(ctx, companyID, ids)
+}
+
 func (uc *AccountUseCases) JournalIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error) {
 	return uc.journals.ActiveIDsByCode(ctx, companyID, codes)
 }

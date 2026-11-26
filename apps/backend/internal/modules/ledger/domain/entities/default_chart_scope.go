@@ -34,7 +34,7 @@ var ChartScope = map[string][]vo.BusinessType{
 	// ต้นทุนการผลิต
 	"5060000000": mfgTypes, "5061000000": mfgTypes, "5062000000": mfgTypes, "5063000000": mfgTypes,
 	"5063010000": mfgTypes, "5063020000": mfgTypes, "5063030000": mfgTypes, "5063040000": mfgTypes,
-	"5063050000": mfgTypes, "5063060000": mfgTypes, "5064000000": mfgTypes,
+	"5063050000": mfgTypes, "5063060000": mfgTypes, "5064000000": mfgTypes, "5065000000": mfgTypes,
 	// สัญญาก่อสร้าง
 	"1103040000": conTypes, "1103050000": conTypes, "1105100000": conTypes, "2103040000": conTypes,
 	"4060000000": conTypes, "4061000000": conTypes, "4062000000": conTypes,

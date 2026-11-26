@@ -131,7 +131,7 @@ func itemMap(items []dto.PurchaseItem) map[uuid.UUID]integration.Item {
 	out := make(map[uuid.UUID]integration.Item, len(items))
 	for _, i := range items {
 		out[uuid.UUID(i.ID)] = integration.Item{
-			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
+			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Uom: i.Uom, Stock: i.Stock, Active: i.Active,
 			PurchaseAccountID: accountUUID(i.Accounts.Purchase), InventoryAccountID: accountUUID(i.Accounts.Inventory),
 			RevenueAccountID: accountUUID(i.Accounts.Revenue),
 		}
@@ -195,6 +195,24 @@ func DocumentTypes() []integration.DocumentType {
 
 // Migrate สร้างตารางของ inventory
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
+
+// Warehouses คืนคลังตาม id (คลังที่ไม่พบจะไม่อยู่ใน map) — ใช้แสดงชื่อ / ตรวจสถานะในเอกสารของ module อื่น
+func (m *Module) Warehouses(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Warehouse, error) {
+	in := make([]vo.WarehouseID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.WarehouseID(id)
+	}
+	found, err := m.UseCases.Facade.Warehouses(ctx, vo.CompanyID(companyID), in)
+	if err != nil {
+		return nil, reject(err)
+	}
+	out := make(map[uuid.UUID]integration.Warehouse, len(found))
+	for _, w := range found {
+		d := w.Data()
+		out[uuid.UUID(w.ID())] = integration.Warehouse{ID: uuid.UUID(w.ID()), Code: d.Code, Name: d.Name, Active: w.IsActive()}
+	}
+	return out, nil
+}
 
 // SalesItems / SalesContext คือ PurchaseItems / PurchaseContext สำหรับ module ขาย
 // (ข้อมูลเดียวกัน: สินค้า + บัญชีที่ใช้จริง และระบบบัญชีของปีบัญชี)

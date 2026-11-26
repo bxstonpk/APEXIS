@@ -186,6 +186,33 @@ func (m *Module) JournalIDsByCode(ctx context.Context, companyID uuid.UUID, code
 	return out, err
 }
 
+// AccountRefs / JournalRefs คืนรหัส / ชื่อของบัญชี / สมุดรายวันตาม id (รวมที่ลบแล้ว) ให้ module อื่นแสดงในเอกสาร — query เดียว
+func (m *Module) AccountRefs(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Ref, error) {
+	in := make([]vo.AccountID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.AccountID(id)
+	}
+	found, err := m.UseCases.Accounts.AccountRefs(ctx, vo.CompanyID(companyID), in)
+	out := make(map[uuid.UUID]integration.Ref, len(found))
+	for id, r := range found {
+		out[uuid.UUID(id)] = integration.Ref{ID: uuid.UUID(id), Code: r.Code, Name: r.Name}
+	}
+	return out, err
+}
+
+func (m *Module) JournalRefs(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Ref, error) {
+	in := make([]vo.JournalID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.JournalID(id)
+	}
+	found, err := m.UseCases.Accounts.JournalRefs(ctx, vo.CompanyID(companyID), in)
+	out := make(map[uuid.UUID]integration.Ref, len(found))
+	for id, r := range found {
+		out[uuid.UUID(id)] = integration.Ref{ID: uuid.UUID(id), Code: r.Code, Name: r.Name}
+	}
+	return out, err
+}
+
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {
 	out := make([]string, len(vo.AllPermissions))

@@ -24,7 +24,7 @@ var inventoryDefaults = map[integration.BusinessType]inventoryDefaultCodes{
 }
 
 // Provision ตั้งค่าคลังสินค้าเริ่มต้นของบริษัทใหม่จากผังบัญชีมาตรฐานตามประเภทธุรกิจ
-// ระบบบัญชีสินค้าไม่ตั้ง = สิ้นงวด (periodic) ทุกปีบัญชี — เปลี่ยนเป็นต่อเนื่องได้ที่หน้าค่าตั้ง
+// ระบบบัญชีสินค้าไม่ตั้ง = สิ้นงวด (periodic) ทุกปีบัญชีทุกประเภทธุรกิจ (รวมธุรกิจผลิต) — เปลี่ยนเป็นต่อเนื่องได้ที่หน้าค่าตั้ง
 // เรียกจาก hook ตอนสร้างบริษัท — ไม่ตรวจสิทธิ์, เข้าร่วม transaction ของผู้เรียก; บัญชีที่ไม่มีในผังจะไม่ตั้ง
 // query: บัญชีตามรหัส 1 + สมุดตามรหัส 1 + UPSERT ค่าตั้ง 1
 func (uc *SettingsUseCases) Provision(ctx context.Context, companyID vo.CompanyID, bt integration.BusinessType) error {

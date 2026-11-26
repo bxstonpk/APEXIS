@@ -71,7 +71,7 @@ func New(d Deps) *UseCases {
 		Reports:    &ReportUseCases{base: b, stock: d.Stock, items: d.Items, warehouses: d.Warehouses},
 		Settings:   &SettingsUseCases{base: b, settings: d.Settings},
 		Closings:   &ClosingUseCases{base: b, settings: d.Settings, closings: d.Closings, items: d.Items, stock: d.Stock},
-		Facade:     &FacadeUseCases{base: b, settings: d.Settings, items: d.Items, docs: docs},
+		Facade:     &FacadeUseCases{base: b, settings: d.Settings, items: d.Items, warehouses: d.Warehouses, docs: docs},
 	}
 }
 

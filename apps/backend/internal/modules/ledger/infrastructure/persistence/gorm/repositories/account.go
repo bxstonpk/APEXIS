@@ -83,6 +83,28 @@ func (r *AccountRepository) PostableIDsByCode(ctx context.Context, companyID vo.
 	return out, err
 }
 
+func (r *AccountRepository) RefsByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) (map[vo.AccountID]dto.CodeName, error) {
+	out := map[vo.AccountID]dto.CodeName{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	in := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		in[i] = uuidOf(id)
+	}
+	var rows []struct {
+		ID   uuid.UUID
+		Code string
+		Name string
+	}
+	err := database.Conn(ctx, r.db).Unscoped().Model(&models.AccountModel{}).Select("id, code, name").
+		Where("company_id = ? AND id IN ?", uuidOf(companyID), in).Scan(&rows).Error
+	for _, row := range rows {
+		out[vo.AccountID(row.ID)] = dto.CodeName{Code: row.Code, Name: row.Name}
+	}
+	return out, err
+}
+
 func (r *AccountRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) error {
 	return softDelete[models.AccountModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrAccountNotFound)
 }

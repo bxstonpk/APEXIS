@@ -303,6 +303,7 @@ type ItemAccountsRow struct {
 	Name                       string
 	Type                       string
 	Status                     string
+	Uom                        string
 	PurchaseAccountID          *uuid.UUID
 	InventoryAccountID         *uuid.UUID
 	RevenueAccountID           *uuid.UUID
@@ -313,13 +314,14 @@ type ItemAccountsRow struct {
 
 func (r ItemAccountsRow) dto() dto.ItemAccounts {
 	return dto.ItemAccounts{
-		ID: vo.ItemID(r.ID), Code: r.Code, Name: r.Name, Type: vo.ItemType(r.Type), Status: vo.Status(r.Status),
+		ID: vo.ItemID(r.ID), Code: r.Code, Name: r.Name, Uom: r.Uom, Type: vo.ItemType(r.Type), Status: vo.Status(r.Status),
 		Item:     gp.GLAccounts(r.PurchaseAccountID, r.InventoryAccountID, r.RevenueAccountID),
 		Category: gp.GLAccounts(r.CategoryPurchaseAccountID, r.CategoryInventoryAccountID, r.CategoryRevenueAccountID),
 	}
 }
 
-const itemAccountColumns = `i.id, i.code, i.name, i.type, i.status, i.purchase_account_id, i.inventory_account_id,
+// itemAccountColumns ต้องใช้กับ alias i (สินค้า), c (หมวด) และ u (หน่วยนับ — LEFT JOIN inventory_uoms)
+const itemAccountColumns = `i.id, i.code, i.name, i.type, i.status, COALESCE(u.code, '') AS uom, i.purchase_account_id, i.inventory_account_id,
 	i.revenue_account_id, c.purchase_account_id AS category_purchase_account_id,
 	c.inventory_account_id AS category_inventory_account_id, c.revenue_account_id AS category_revenue_account_id`
 
@@ -331,6 +333,7 @@ func (r *ItemRepository) AccountsOf(ctx context.Context, companyID vo.CompanyID,
 	var rows []ItemAccountsRow
 	err := database.Conn(ctx, r.db).Table("inventory_items AS i").
 		Joins("LEFT JOIN inventory_item_categories AS c ON c.id = i.category_id AND c.deleted_at IS NULL").
+		Joins("LEFT JOIN inventory_uoms AS u ON u.id = i.uom_id").
 		Where("i.company_id = ? AND i.deleted_at IS NULL AND i.id IN ?", uuidOf(companyID), uuids(ids)).
 		Select(itemAccountColumns).Scan(&rows).Error
 	return toResult(rows, 0, listing.Page{}, ItemAccountsRow.dto).Items, err

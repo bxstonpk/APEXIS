@@ -15,6 +15,7 @@ import (
 	"apexis/backend/internal/modules/identity"
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
+	"apexis/backend/internal/modules/manufacturing"
 	"apexis/backend/internal/modules/organization"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
@@ -62,6 +63,9 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if err := finance.Migrate(db); err != nil {
+		return err
+	}
+	if err := manufacturing.Migrate(db); err != nil {
 		return err
 	}
 	// ผู้ขายรหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบจ่ายเงินของ finance ต้องชี้รหัสที่เก็บไว้
@@ -120,12 +124,16 @@ func run(logger *slog.Logger) error {
 	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing
 	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule)
 	financeModule.RegisterRoutes(mux)
+	// การผลิต (เฉพาะบริษัทประเภทผลิต): สูตร / ใบสั่งผลิต — สต็อกผ่าน inventory, ลงบัญชีผ่าน ledger (ระบบต่อเนื่อง)
+	manufacturingModule := manufacturing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
+	manufacturingModule.RegisterRoutes(mux)
 	// ตั้งค่าบริษัทใหม่ใน transaction เดียวกับการสร้างบริษัท: ผังบัญชีมาตรฐานตามประเภทธุรกิจก่อน แล้วค่าตั้งของแต่ละ module
 	organizationModule.OnCompanyCreated(ledgerModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(salesModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(purchasingModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(inventoryModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(financeModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(manufacturingModule.ProvisionCompany)
 	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
 	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 
@@ -136,12 +144,13 @@ func run(logger *slog.Logger) error {
 	purchasingModule.RegisterReports(reportBooks)
 	salesModule.RegisterReports(reportBooks)
 	financeModule.RegisterReports(reportBooks)
+	manufacturingModule.RegisterReports(reportBooks)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
 
 	// รายการสิทธิ์ทั้งหมด (หน้ากำหนดบทบาทของ frontend) — แต่ละ module ลงทะเบียนของตัวเอง
 	permissionCatalog := permissions.NewCatalog()
 	for _, m := range []interface{ Permissions() []string }{
-		salesModule, purchasingModule, inventoryModule, ledgerModule, financeModule, organizationModule, identityModule,
+		salesModule, purchasingModule, inventoryModule, manufacturingModule, ledgerModule, financeModule, organizationModule, identityModule,
 	} {
 		permissionCatalog.Register(m.Permissions()...)
 	}
