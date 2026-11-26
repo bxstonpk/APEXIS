@@ -38,14 +38,21 @@ def prism(p):
 
 
 def folded(p):
-    """Folded Apex — ริบบิ้นพับเป็นตัว A: ด้านซ้ายมืด ด้านขวาสว่าง รอยพับมีเงา ยอดเป็นแผ่นส้ม (ดูมีมิติ)"""
+    """Folded Apex — ริบบิ้นพับเป็นตัว A: ด้านซ้ายมืด ด้านขวาสว่าง รอยพับมีเงา ยอดเป็นแผ่นส้ม (ดูมีมิติ)
+    v2.1 (ที่เลือก): เงาเด่นขึ้น — เงาตกกระทบใต้ตัว A, drop shadow ทั้งชิ้น, ยอดส้มทอดเงาลงบนแผ่นน้ำเงิน, รอยพับเข้มขึ้น"""
     return defs(p) + f'''
+<filter id="{p}drop" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="{NAVY}" flood-opacity=".38"/></filter>
+<filter id="{p}soft" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="3"/></filter>
+<ellipse cx="60" cy="112" rx="46" ry="4.5" fill="{NAVY}" opacity=".3" filter="url(#{p}soft)"/>
+<g filter="url(#{p}drop)">
 <path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#{p}mid)"/>
 <path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#{p}blue)"/>
-<path d="M60 58 L82 110 H91 L63 52 Z" fill="{NAVY}" opacity=".3"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="{NAVY}" opacity=".45"/>
+<path d="M44 44 L60 36 L76 44 L73.5 50 L60 43.5 L46.5 50 Z" fill="{NAVY}" opacity=".38"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#{p}gloss)" opacity=".7"/>
 <path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#{p}fire)"/>
-<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
-<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#{p}gloss)" opacity=".7"/>'''
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".2"/>
+</g>'''
 
 
 def ascend(p):

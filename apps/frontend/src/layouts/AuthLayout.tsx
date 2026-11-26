@@ -44,7 +44,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
               width={brand.logo.width}
               height={brand.logo.height}
               alt={texts.app.logoAlt}
-              className="mb-10 h-auto w-40"
+              className="mb-10 h-auto w-60"
               decoding="async"
               fetchPriority="high"
             />
