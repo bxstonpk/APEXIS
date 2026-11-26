@@ -54,6 +54,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 		CompanyID: uuid.UUID(companyID), VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		GRIRAccountID: OptUUID(s.GRIRAccountID), APAccountID: OptUUID(s.APAccountID),
 		InputVatAccountID: OptUUID(s.InputVatAccountID), PriceVarianceAccountID: OptUUID(s.PriceVarianceAccountID),
+		PurchaseReturnsAccountID: OptUUID(s.PurchaseReturnsAccountID),
 	}
 }
 
@@ -62,6 +63,7 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		GRIRAccountID: OptID[vo.AccountID](m.GRIRAccountID), APAccountID: OptID[vo.AccountID](m.APAccountID),
 		InputVatAccountID: OptID[vo.AccountID](m.InputVatAccountID), PriceVarianceAccountID: OptID[vo.AccountID](m.PriceVarianceAccountID),
+		PurchaseReturnsAccountID: OptID[vo.AccountID](m.PurchaseReturnsAccountID),
 	}
 }
 
@@ -277,6 +279,60 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 		}
 	}
 	return entities.RehydrateInvoice(s)
+}
+
+// ---------- ใบลดหนี้ผู้ขาย ----------
+
+func CreditNoteToModel(c *entities.CreditNote) models.CreditNoteModel {
+	s := c.State()
+	m := models.CreditNoteModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, FiscalYear: s.Posting.FiscalYear,
+		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), InvoiceID: uuid.UUID(s.InvoiceID), OrderID: uuid.UUID(s.OrderID),
+		SupplierID: uuid.UUID(s.SupplierID), SupplierCreditNoteNo: s.SupplierCreditNoteNo,
+		BillFromName: s.BillFrom.Name, BillFromTaxID: s.BillFrom.TaxID, BillFromBranchNo: s.BillFrom.BranchNo, BillFromAddress: s.BillFrom.Address,
+		CreditNoteDate: s.CreditNoteDate, PostingDate: s.Date, Kind: string(s.Kind), Reason: s.Reason, Description: s.Description,
+		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
+		WarehouseID: OptUUID(s.WarehouseID), System: string(s.System), StockDocumentID: OptUUID(s.StockDocumentID), StockDocumentNo: s.StockDocumentNo,
+		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
+		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
+	}
+	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
+	m.Lines = make([]models.CreditNoteLineModel, len(s.Lines))
+	for i, l := range s.Lines {
+		m.Lines[i] = models.CreditNoteLineModel{
+			CreditNoteID: m.ID, LineNo: i + 1, InvoiceLineNo: l.InvoiceLineNo, ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity,
+			UnitPrice: l.UnitPrice, Net: l.Amounts.Net, Vat: l.Amounts.Vat, Gross: l.Amounts.Gross, AccountID: uuid.UUID(l.AccountID),
+			Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptUUID(l.InventoryAccountID), Variance: l.Variance,
+		}
+	}
+	return m
+}
+
+func CreditNoteToEntity(m models.CreditNoteModel) *entities.CreditNote {
+	s := entities.CreditNoteState{
+		ID: vo.CreditNoteID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), InvoiceID: vo.InvoiceID(m.InvoiceID), OrderID: vo.OrderID(m.OrderID),
+		SupplierID: vo.SupplierID(m.SupplierID), SupplierCreditNoteNo: m.SupplierCreditNoteNo,
+		BillFrom:       entities.BillFrom{Name: m.BillFromName, TaxID: m.BillFromTaxID, BranchNo: m.BillFromBranchNo, Address: m.BillFromAddress},
+		CreditNoteDate: DateUTC(m.CreditNoteDate), Date: DateUTC(m.PostingDate), Kind: vo.CreditNoteKind(m.Kind), Reason: m.Reason,
+		Description: m.Description, Vat: services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+		WarehouseID: OptID[vo.WarehouseID](m.WarehouseID), System: vo.AccountingSystem(m.System),
+		StockDocumentID: OptID[vo.StockDocumentID](m.StockDocumentID), StockDocumentNo: m.StockDocumentNo,
+		Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross}, Status: vo.DocStatus(m.Status),
+		Lines: make([]entities.CreditNoteLine, len(m.Lines)),
+		Posting: entities.Posting{
+			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
+			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
+		},
+		Cancellation: toCancellation(m.CancelledBy, m.CancelledAt),
+	}
+	for i, l := range m.Lines {
+		s.Lines[i] = entities.CreditNoteLine{
+			InvoiceLineNo: l.InvoiceLineNo, ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			Amounts: services.Amounts{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, AccountID: vo.AccountID(l.AccountID),
+			Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptID[vo.AccountID](l.InventoryAccountID), Variance: l.Variance,
+		}
+	}
+	return entities.RehydrateCreditNote(s)
 }
 
 // ---------- ภาษีหัก ณ ที่จ่าย / ใบจ่าย ----------

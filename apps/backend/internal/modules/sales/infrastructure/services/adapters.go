@@ -137,6 +137,7 @@ type InventoryAccess interface {
 	SalesItems(ctx context.Context, companyID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]integration.Item, error)
 	SalesContext(ctx context.Context, companyID uuid.UUID, date time.Time, itemIDs []uuid.UUID) (integration.PurchaseContext, error)
 	PostIssue(ctx context.Context, companyID, userID, warehouseID uuid.UUID, date time.Time, reference, description string, lines []integration.IssueLine) (integration.Receipt, error)
+	PostReceipt(ctx context.Context, companyID, userID, warehouseID uuid.UUID, date time.Time, reference, description string, lines []integration.ReceiptLine) (integration.Receipt, error)
 	CancelDocument(ctx context.Context, companyID, userID, documentID uuid.UUID) error
 }
 
@@ -176,6 +177,19 @@ func (a *Inventory) PostIssue(ctx context.Context, companyID vo.CompanyID, userI
 		in[i] = integration.IssueLine{ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity}
 	}
 	r, err := a.inv.PostIssue(ctx, uuid.UUID(companyID), uuid.UUID(userID), uuid.UUID(warehouseID), date, reference, description, in)
+	if err != nil {
+		return ports.StockDocument{}, err
+	}
+	return ports.StockDocument{DocumentID: vo.StockDocumentID(r.DocumentID), DocumentNo: r.DocumentNo, LineValues: r.LineValues}, nil
+}
+
+// PostReceipt: รับสินค้าคืนเข้าคลัง (ใบลดหนี้) ที่ต้นทุนเดิมต่อหน่วย
+func (a *Inventory) PostReceipt(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, warehouseID vo.WarehouseID, date time.Time, reference, description string, lines []ports.ReceiptLine) (ports.StockDocument, error) {
+	in := make([]integration.ReceiptLine, len(lines))
+	for i, l := range lines {
+		in[i] = integration.ReceiptLine{ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity, UnitCost: l.UnitCost}
+	}
+	r, err := a.inv.PostReceipt(ctx, uuid.UUID(companyID), uuid.UUID(userID), uuid.UUID(warehouseID), date, reference, description, in)
 	if err != nil {
 		return ports.StockDocument{}, err
 	}

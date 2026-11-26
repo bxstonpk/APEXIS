@@ -51,10 +51,12 @@ type WhtTypeModel struct {
 	Code      string          `gorm:"size:30;not null;uniqueIndex:uq_fin_wht_types_code,priority:2,where:deleted_at IS NULL"`
 	Name      string          `gorm:"size:200;not null"`
 	Rate      decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_fin_wht_types_rate,rate > 0 AND rate <= 100"`
-	Status    string          `gorm:"size:20;not null;check:chk_fin_wht_types_status,status IN ('active','inactive')"`
-	CreatedAt time.Time       `gorm:"not null"`
-	UpdatedAt time.Time       `gorm:"not null"`
-	DeletedAt gorm.DeletedAt  `gorm:"index"`
+	// IncomeType: ประเภทเงินได้ตาม 50 ทวิ — แถวเดิมก่อนมีคอลัมน์นี้ได้ค่าเริ่มต้น 3_tres (ค่าบริการ / ค่าเช่า / ค่าจ้างทำของ ฯลฯ)
+	IncomeType string         `gorm:"size:10;not null;default:'3_tres';check:chk_fin_wht_types_income_type,income_type IN ('40_1','40_2','40_3','40_4a','40_4b','3_tres','other')"`
+	Status     string         `gorm:"size:20;not null;check:chk_fin_wht_types_status,status IN ('active','inactive')"`
+	CreatedAt  time.Time      `gorm:"not null"`
+	UpdatedAt  time.Time      `gorm:"not null"`
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
 }
 
 func (WhtTypeModel) TableName() string { return "finance_wht_types" }
@@ -135,17 +137,19 @@ func (ReceiptMethodModel) TableName() string { return "finance_receipt_methods" 
 
 // PaymentModel: ใบสำคัญจ่าย — total_paid = total_amount - total_wht (CHECK)
 type PaymentModel struct {
-	CompanyID  uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:uq_fin_payments_no,priority:1;index:idx_fin_payments_date,priority:1"`
+	CompanyID  uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:uq_fin_payments_no,priority:1;index:idx_fin_payments_date,priority:1;uniqueIndex:uq_fin_payments_wht_cert,priority:1"`
 	DocumentNo string    `gorm:"size:30;not null;uniqueIndex:uq_fin_payments_no,priority:2"`
 	DocDate    time.Time `gorm:"type:date;not null;index:idx_fin_payments_date,priority:2"`
 	DocumentModel
 	Kind string `gorm:"size:20;not null;check:chk_fin_payments_kind,kind IN ('supplier','other')"`
 	PartyModel
-	TotalAmount decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_amount,total_amount > 0"`
-	TotalWht    decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_wht,total_wht >= 0 AND total_wht <= total_amount"`
-	TotalPaid   decimal.Decimal      `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_paid,total_paid = total_amount - total_wht"`
-	Lines       []PaymentLineModel   `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
-	Methods     []PaymentMethodModel `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
+	TotalAmount decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_amount,total_amount > 0"`
+	TotalWht    decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_wht,total_wht >= 0 AND total_wht <= total_amount"`
+	TotalPaid   decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_paid,total_paid = total_amount - total_wht"`
+	// WhtCertificateNo: เลขที่หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) — NULL = ไม่มีภาษีหัก (unique ต่อบริษัท, NULL ซ้ำได้)
+	WhtCertificateNo *string              `gorm:"size:30;uniqueIndex:uq_fin_payments_wht_cert,priority:2"`
+	Lines            []PaymentLineModel   `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
+	Methods          []PaymentMethodModel `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE"`
 }
 
 func (PaymentModel) TableName() string { return "finance_payments" }

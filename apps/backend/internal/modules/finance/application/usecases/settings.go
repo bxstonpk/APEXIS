@@ -3,7 +3,10 @@ package usecases
 import (
 	"context"
 
+	"github.com/shopspring/decimal"
+
 	"apexis/backend/internal/modules/finance/application/dto"
+	"apexis/backend/internal/modules/finance/application/ports"
 	"apexis/backend/internal/modules/finance/application/ports/repositories"
 	"apexis/backend/internal/modules/finance/domain/entities"
 	domain "apexis/backend/internal/modules/finance/domain/errors"
@@ -107,6 +110,9 @@ func (uc *WhtTypeUseCases) Update(ctx context.Context, in dto.ByDoc[vo.WhtTypeID
 		if err != nil {
 			return err
 		}
+		if d.IncomeType == "" { // ไม่ส่ง = คงประเภทเงินได้เดิม
+			d.IncomeType = w.Data().IncomeType
+		}
 		if err := w.Update(d); err != nil {
 			return err
 		}
@@ -123,7 +129,7 @@ func (uc *WhtTypeUseCases) Delete(ctx context.Context, in dto.ByDoc[vo.WhtTypeID
 
 func whtDTO(w *entities.WhtType) dto.WhtType {
 	d := w.Data()
-	return dto.WhtType{ID: w.ID().String(), Code: d.Code, Name: d.Name, Rate: d.Rate, Status: string(d.Status)}
+	return dto.WhtType{ID: w.ID().String(), Code: d.Code, Name: d.Name, Rate: d.Rate, IncomeType: string(d.IncomeType), Status: string(d.Status)}
 }
 
 // ---------- รายงาน ----------
@@ -131,6 +137,7 @@ func whtDTO(w *entities.WhtType) dto.WhtType {
 type ReportUseCases struct {
 	base
 	reports repositories.ReportRepository
+	vat     ports.Vat
 }
 
 // WithholdingPaid: ภาษีหัก ณ ที่จ่ายตามวันที่จ่าย แยก ภ.ง.ด.3 / 53 (กรอง form)
@@ -147,4 +154,33 @@ func (uc *ReportUseCases) WithholdingReceived(ctx context.Context, a dto.Actor, 
 		rows, totals, err := uc.reports.WithholdingReceived(ctx, a.CompanyID, f)
 		return dto.Withholding{Start: f.Start, End: f.End, Rows: rows, Totals: totals}, err
 	})
+}
+
+// VatSummary: สรุปภาษีมูลค่าเพิ่มสำหรับ ภ.พ.30 — ภาษีขาย (sales) - ภาษีซื้อ (purchasing) ของช่วงวันที่ (ปกติ = 1 เดือนภาษี)
+// อ่านอย่างเดียว ไม่ใช้ transaction (2 คำขอที่ไม่ขึ้นต่อกัน)
+func (uc *ReportUseCases) VatSummary(ctx context.Context, a dto.Actor, f dto.VatSummaryFilter) (dto.VatSummary, error) {
+	return read(ctx, uc.base, a, vo.PermReportRead, func() (dto.VatSummary, error) {
+		output, err := uc.vat.OutputVat(ctx, a.CompanyID, f.Start, f.End)
+		if err != nil {
+			return dto.VatSummary{}, err
+		}
+		input, err := uc.vat.InputVat(ctx, a.CompanyID, f.Start, f.End)
+		if err != nil {
+			return dto.VatSummary{}, err
+		}
+		return vatSummary(f, output, input), nil
+	})
+}
+
+func vatSummary(f dto.VatSummaryFilter, output, input ports.VatTotals) dto.VatSummary {
+	net := output.Tax.Sub(input.Tax)
+	out := dto.VatSummary{Start: f.Start, End: f.End, NetTax: net, Payable: decimal.Zero, Refundable: decimal.Zero,
+		Output: dto.VatTotals{Base: output.Base, Tax: output.Tax, Documents: output.Documents},
+		Input:  dto.VatTotals{Base: input.Base, Tax: input.Tax, Documents: input.Documents}}
+	if net.IsPositive() {
+		out.Payable = net
+	} else {
+		out.Refundable = net.Neg()
+	}
+	return out
 }

@@ -141,6 +141,7 @@ type ReceivablesAccess interface {
 	SettleReceivables(ctx context.Context, companyID, customerID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
 	UnsettleReceivables(ctx context.Context, companyID, documentID uuid.UUID) error
 	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID) ([]integration.OpenInvoice, error)
+	OutputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
 }
 
 // PayablesAccess คือ public API ของ purchasing ที่ finance ใช้ (*purchasing.Module)
@@ -148,6 +149,7 @@ type PayablesAccess interface {
 	SettlePayables(ctx context.Context, companyID, supplierID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
 	UnsettlePayables(ctx context.Context, companyID, documentID uuid.UUID) error
 	OpenPayables(ctx context.Context, companyID, supplierID uuid.UUID) ([]integration.OpenInvoice, error)
+	InputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
 }
 
 type settleFunc func(ctx context.Context, companyID, partyID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
@@ -202,4 +204,35 @@ func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID 
 			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
 	}
 	return out, err
+}
+
+// ---------- ภาษีมูลค่าเพิ่ม (ภ.พ.30) ----------
+
+type vatFunc func(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+
+// Vat แปลงยอดภาษีขายของ sales / ภาษีซื้อของ purchasing เป็น ports.Vat
+type Vat struct {
+	output vatFunc
+	input  vatFunc
+}
+
+var _ ports.Vat = (*Vat)(nil)
+
+func NewVat(r ReceivablesAccess, p PayablesAccess) *Vat {
+	return &Vat{output: r.OutputVat, input: p.InputVat}
+}
+
+func (v *Vat) OutputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
+	return vatTotals(v.output(ctx, uuid.UUID(companyID), start, end))
+}
+
+func (v *Vat) InputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
+	return vatTotals(v.input(ctx, uuid.UUID(companyID), start, end))
+}
+
+func vatTotals(t integration.VatTotals, err error) (ports.VatTotals, error) {
+	if err != nil {
+		return ports.VatTotals{}, err
+	}
+	return ports.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }

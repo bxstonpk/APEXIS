@@ -64,6 +64,25 @@ type InvoiceInput struct {
 	Lines        []ShipmentInput
 }
 
+// CreditNoteInput: ใบลดหนี้อ้างใบแจ้งหนี้ — WarehouseID บังคับเมื่อรับคืนสินค้า stock
+type CreditNoteInput struct {
+	InvoiceID   vo.InvoiceID
+	Date        time.Time
+	Kind        vo.CreditNoteKind
+	Reason      string
+	Description string
+	WarehouseID *vo.WarehouseID
+	Lines       []CreditNoteLineInput
+}
+
+// CreditNoteLineInput: return ใช้ Quantity (+ UnitPrice ไม่ส่ง = ราคาในใบ); allowance ใช้ Amount
+type CreditNoteLineInput struct {
+	InvoiceLineNo int
+	Quantity      vo.Quantity
+	UnitPrice     *vo.Money
+	Amount        vo.Money
+}
+
 // ---------- Filter ----------
 
 var (
@@ -85,8 +104,9 @@ type DocumentFilter struct {
 	Search     string
 	Statuses   []string
 	CustomerID *vo.CustomerID
-	OrderID    *vo.OrderID // ใบส่งของ / ใบแจ้งหนี้ของใบสั่งขายนี้
-	ItemID     *vo.ItemID  // ใบเสนอราคา / ใบสั่งขาย: มีบรรทัดของสินค้านี้
+	OrderID    *vo.OrderID   // ใบส่งของ / ใบแจ้งหนี้ของใบสั่งขายนี้
+	InvoiceID  *vo.InvoiceID // ใบลดหนี้ของใบแจ้งหนี้นี้
+	ItemID     *vo.ItemID    // ใบเสนอราคา / ใบสั่งขาย: มีบรรทัดของสินค้านี้
 	StartDate  *time.Time
 	EndDate    *time.Time
 	Sort       []listing.Sort
@@ -138,13 +158,14 @@ type Totals struct {
 }
 
 type Settings struct {
-	VatRegistered      bool
-	VatRate            vo.Money
-	JournalID          *string
-	ARAccountID        *string
-	OutputVatAccountID *string
-	RevenueAccountID   *string
-	CogsAccountID      *string
+	VatRegistered         bool
+	VatRate               vo.Money
+	JournalID             *string
+	ARAccountID           *string
+	OutputVatAccountID    *string
+	RevenueAccountID      *string
+	CogsAccountID         *string
+	SalesReturnsAccountID *string
 }
 
 type Customer struct {
@@ -254,6 +275,7 @@ type Delivery struct {
 }
 
 type InvoiceLine struct {
+	LineNo           int // เลขบรรทัดของใบแจ้งหนี้ (ใบลดหนี้อ้างด้วย invoice_line_no)
 	OrderLineNo      int
 	Item             Ref
 	Quantity         vo.Quantity
@@ -261,6 +283,8 @@ type InvoiceLine struct {
 	Amounts          Totals
 	RevenueAccountID string
 	Cost             vo.Money
+	Returned         vo.Quantity // รับคืนแล้ว (ใบลดหนี้ที่ยังไม่ยกเลิก)
+	Credited         vo.Money    // ยอดก่อน VAT ที่ลดหนี้แล้ว
 }
 
 type InvoiceSummary struct {
@@ -268,8 +292,51 @@ type InvoiceSummary struct {
 	WithDelivery bool
 	DueDate      time.Time
 	Totals       Totals
-	Received     vo.Money
-	Outstanding  vo.Money
+	Received     vo.Money // ยอดรับชำระ (ใบเสร็จ) — ไม่รวมใบลดหนี้
+	Credited     vo.Money // ยอดใบลดหนี้ (รวม VAT)
+	Outstanding  vo.Money // ยอดรวม - รับชำระ - ลดหนี้
+}
+
+// ---------- ใบลดหนี้ ----------
+
+type CreditNoteSummary struct {
+	PostedSummary // Order = ใบแจ้งหนี้เดิม (Code = เลขที่ใบแจ้งหนี้)
+	Kind          string
+	Reason        string
+	Totals        Totals
+}
+
+type CreditNoteLine struct {
+	LineNo        int
+	InvoiceLineNo int
+	Item          Ref
+	Quantity      vo.Quantity
+	UnitPrice     vo.Money
+	Amounts       Totals
+	AccountID     string
+	Cost          vo.Money
+}
+
+// CreditNote: ยอดของใบเดิม / ยอดที่ถูกต้อง / ผลต่าง ตาม ม.86/10 = InvoiceTotals / InvoiceTotals - ลดหนี้สะสม / Totals
+type CreditNote struct {
+	CreditNoteSummary
+	StockInfo
+	InvoiceDate      time.Time
+	InvoiceTotals    Totals
+	CreditedBefore   Totals // ใบลดหนี้ของใบแจ้งหนี้เดียวกันที่ออกก่อนใบนี้ (ยังไม่ยกเลิก)
+	BillTo           BillTo
+	VatRate          vo.Money
+	PriceIncludesVat bool
+	Description      string
+	CreatedBy        string
+	Lines            []CreditNoteLine
+}
+
+// VatTotals: ยอดรวมภาษีขายของช่วงวันที่ (ใบแจ้งหนี้ - ใบลดหนี้)
+type VatTotals struct {
+	Base      vo.Money
+	Tax       vo.Money
+	Documents int
 }
 
 // BillTo คือผู้ซื้อตามใบกำกับภาษี ณ วันออก
@@ -317,17 +384,19 @@ type Aging struct {
 	Totals AgingRow
 }
 
-// TaxRow: รายงานภาษีขาย (ใบแจ้งหนี้) / ภาษีถูกหัก ณ ที่จ่าย (ใบเสร็จ)
+// TaxRow: รายงานภาษีขาย (ใบแจ้งหนี้ + ใบลดหนี้เป็นยอดติดลบ) / ภาษีถูกหัก ณ ที่จ่าย (ใบเสร็จ)
 type TaxRow struct {
-	Date       time.Time
-	DocumentID string
-	DocumentNo string
-	Customer   Ref
-	TaxID      string
-	BranchNo   string
-	TaxType    string
-	Base       vo.Money // ภาษีขาย: ยอดก่อน VAT; ถูกหัก: ยอดตัดหนี้
-	Tax        vo.Money
+	Date        time.Time
+	Kind        string // invoice | credit_note
+	DocumentID  string
+	DocumentNo  string
+	ReferenceNo string // ใบลดหนี้: เลขที่ใบกำกับภาษีเดิม
+	Customer    Ref
+	TaxID       string
+	BranchNo    string
+	TaxType     string
+	Base        vo.Money // ภาษีขาย: ยอดก่อน VAT; ถูกหัก: ยอดตัดหนี้
+	Tax         vo.Money
 }
 
 type TaxReport struct {

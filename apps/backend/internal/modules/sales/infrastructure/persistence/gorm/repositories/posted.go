@@ -225,6 +225,28 @@ func (r *DeliveryRepository) List(ctx context.Context, companyID vo.CompanyID, f
 	return toResult(rows, total, f.Page, PostedRow.summary), err
 }
 
+// UnitCosts — 1 query: ต้นทุนเฉลี่ยต่อหน่วยของบรรทัดใบสั่งขาย = ต้นทุนรวม / จำนวน ของใบส่งของที่ยังไม่ยกเลิก (สินค้า stock)
+func (r *DeliveryRepository) UnitCosts(ctx context.Context, companyID vo.CompanyID, orderID vo.OrderID, orderLineNos []int) (map[int]vo.Money, error) {
+	var rows []struct {
+		OrderLineNo int
+		Quantity    decimal.Decimal
+		Cost        decimal.Decimal
+	}
+	err := database.Conn(ctx, r.db).Table("sales_delivery_lines AS l").
+		Joins("JOIN sales_deliveries AS d ON d.id = l.delivery_id").
+		Select("l.order_line_no, SUM(l.quantity) AS quantity, SUM(l.cost) AS cost").
+		Where("d.company_id = ? AND d.order_id = ? AND d.status = 'posted' AND l.stock AND l.order_line_no IN ?",
+			uuidOf(companyID), uuidOf(orderID), orderLineNos).
+		Group("l.order_line_no").Scan(&rows).Error
+	out := make(map[int]vo.Money, len(rows))
+	for _, x := range rows {
+		if x.Quantity.IsPositive() {
+			out[x.OrderLineNo] = x.Cost.DivRound(x.Quantity, 6)
+		}
+	}
+	return out, err
+}
+
 // ---------- ใบแจ้งหนี้ ----------
 
 var _ ports.InvoiceRepository = (*InvoiceRepository)(nil)
@@ -296,17 +318,21 @@ type InvoiceRow struct {
 	TotalVat       decimal.Decimal
 	TotalGross     decimal.Decimal
 	ReceivedAmount decimal.Decimal
+	CreditedAmount decimal.Decimal
 }
 
+// summary: received_amount ในตารางรวมทั้งใบเสร็จและใบลดหนี้ — แยกยอดรับชำระ = received - credited
 func (r InvoiceRow) summary() dto.InvoiceSummary {
 	return dto.InvoiceSummary{
 		PostedSummary: r.PostedRow.summary(), WithDelivery: r.WithDelivery, DueDate: dateUTC(r.DueDate),
 		Totals:   dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
-		Received: r.ReceivedAmount, Outstanding: r.TotalGross.Sub(r.ReceivedAmount),
+		Received: r.ReceivedAmount.Sub(r.CreditedAmount), Credited: r.CreditedAmount, Outstanding: r.TotalGross.Sub(r.ReceivedAmount),
 	}
 }
 
-const invoiceExtra = "d.with_delivery, d.due_date, d.total_net, d.total_vat, d.total_gross, d.received_amount"
+// invoiceExtra: ยอดใบลดหนี้ (ยังไม่ยกเลิก) เป็น subquery ต่อแถว (index: sales_credit_notes.invoice_id)
+const invoiceExtra = `d.with_delivery, d.due_date, d.total_net, d.total_vat, d.total_gross, d.received_amount,
+	(SELECT COALESCE(SUM(n.total_gross), 0) FROM sales_credit_notes AS n WHERE n.invoice_id = d.id AND n.status = 'posted') AS credited_amount`
 
 func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error) {
 	var rows []struct {
@@ -333,8 +359,18 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 		return dto.Invoice{}, domain.ErrInvoiceNotFound
 	}
 	h := rows[0]
-	var lines []models.InvoiceLineModel
-	if err := database.Conn(ctx, r.db).Where("invoice_id = ?", h.ID).Order("line_no").Find(&lines).Error; err != nil {
+	var lines []struct {
+		models.InvoiceLineModel
+		Returned decimal.Decimal
+		Credited decimal.Decimal
+	}
+	// บรรทัด + ยอดที่รับคืน / ลดหนี้แล้ว (ใบลดหนี้ที่ยังไม่ยกเลิก) — query เดียว
+	if err := database.Conn(ctx, r.db).Table("sales_invoice_lines AS l").
+		Select(`l.*, COALESCE(cr.returned, 0) AS returned, COALESCE(cr.credited, 0) AS credited`).
+		Joins(`LEFT JOIN (SELECT cl.invoice_line_no, SUM(cl.quantity) FILTER (WHERE n.kind = 'return') AS returned, SUM(cl.net) AS credited
+			FROM sales_credit_note_lines AS cl JOIN sales_credit_notes AS n ON n.id = cl.credit_note_id
+			WHERE n.invoice_id = ? AND n.status = 'posted' GROUP BY cl.invoice_line_no) AS cr ON cr.invoice_line_no = l.line_no`, h.ID).
+		Where("l.invoice_id = ?", h.ID).Order("l.line_no").Scan(&lines).Error; err != nil {
 		return dto.Invoice{}, err
 	}
 	out := dto.Invoice{
@@ -348,8 +384,9 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	}
 	for i, l := range lines {
 		out.Lines[i] = dto.InvoiceLine{
-			OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
 			Amounts: dto.Totals{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, RevenueAccountID: l.RevenueAccountID.String(), Cost: l.Cost,
+			Returned: l.Returned, Credited: l.Credited,
 		}
 	}
 	return out, nil

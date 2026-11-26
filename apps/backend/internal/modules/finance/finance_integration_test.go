@@ -13,6 +13,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 
 	"apexis/backend/internal/modules/finance"
@@ -181,8 +182,15 @@ func TestPayments(t *testing.T) {
 	bank := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "BBL", "name": "กรุงเทพ", "type": "bank", "bank_name": "BBL", "account_no": "123-4-56789-0", "gl_account_id": bankGL}), 201, "bank").id()
 
 	// ---------- ภาษีหัก ณ ที่จ่าย / ค่าตั้ง ----------
-	a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "X", "name": "x", "rate": "0"}), 400, "zero rate")
-	svc3 := a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3"}), 201, "wht 3%").id()
+	a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "X", "name": "x", "rate": "0", "income_type": "3_tres"}), 400, "zero rate")
+	a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "X", "name": "x", "rate": "3"}), 400, "income type required")
+	a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "X", "name": "x", "rate": "3", "income_type": "40_9"}), 400, "invalid income type")
+	svc3 := a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3", "income_type": "3_tres"}), 201, "wht 3%").id()
+	// PUT ไม่ส่ง income_type = คงค่าเดิม; ส่งค่าใหม่ = เปลี่ยน
+	if w := a.expect(a.do("PUT", base+"/withholding-tax-types/"+svc3, owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3", "status": "active"}), 200, "update keeps income type").data(); w["income_type"] != "3_tres" {
+		t.Fatalf("wht type after update = %v", w)
+	}
+	a.expect(a.do("PUT", base+"/withholding-tax-types/"+svc3, owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3", "status": "active", "income_type": "bad"}), 400, "update invalid income type")
 	a.expect(a.do("PUT", base+"/purchasing-settings", owner, obj{"vat_rate": "7", "journal_id": jv["id"], "grir_account_id": grirAcc, "ap_account_id": apAcc,
 		"input_vat_account_id": vatAcc}), 200, "purchasing settings")
 	payment := func(lines []obj, methods ...obj) obj {
@@ -221,7 +229,8 @@ func TestPayments(t *testing.T) {
 	pl := objs(p["lines"])
 	if p["document_no"] != "PV2603-00001" || p["amount"] != "8025" || p["wht"] != "150" || p["net"] != "7875" || p["party"].(obj)["tax_type"] != "juristic" ||
 		p["entry_no"] != "PJ6903-0004" || pl[0]["wht_base"] != "5000" || pl[0]["wht_rate"] != "3" || pl[0]["invoice"].(obj)["name"] != "A-1" ||
-		objs(p["methods"])[1]["cash_account"].(obj)["code"] != "BBL" {
+		objs(p["methods"])[1]["cash_account"].(obj)["code"] != "BBL" || pl[0]["wht_type"].(obj)["income_type"] != "3_tres" || pl[1]["wht_type"] != nil ||
+		p["wht_certificate_no"] != "WT2026-000001" {
 		t.Fatalf("payment = %v", p)
 	}
 	// รายการที่ 4 ของสมุด PJ ในเดือนนี้ (รับสินค้า + แจ้งหนี้ 2 ใบลงก่อน) — 1 ผังบัญชี = 1 บรรทัด
@@ -251,7 +260,7 @@ func TestPayments(t *testing.T) {
 	a.expect(a.do("POST", base+"/payments", owner, other), 422, "withholding without payee tax id")
 	other["payee"] = obj{"name": "นาย ก", "tax_id": "1101700000000", "tax_type": "individual", "address": "กรุงเทพฯ"}
 	po2 := a.expect(a.do("POST", base+"/payments", owner, other), 201, "other payment").data()
-	if po2["wht"] != "75" || po2["kind"] != "other" || po2["party"].(obj)["id"] != nil {
+	if po2["wht"] != "75" || po2["kind"] != "other" || po2["party"].(obj)["id"] != nil || po2["wht_certificate_no"] != "WT2026-000002" {
 		t.Fatalf("other payment = %v", po2)
 	}
 
@@ -267,7 +276,8 @@ func TestPayments(t *testing.T) {
 		t.Helper()
 		return a.expect(a.do("GET", base+"/reports?book=withholding-tax&start_date=2026-03-01&end_date=2026-03-31"+query, owner, nil), 200, "wht "+query).data()
 	}
-	if r := wht("&form=pnd53"); len(objs(r["rows"])) != 1 || r["total_base"] != "5000" || r["total_wht"] != "150" || objs(r["rows"])[0]["party"].(obj)["tax_id"] != "0105551234567" {
+	if r := wht("&form=pnd53"); len(objs(r["rows"])) != 1 || r["total_base"] != "5000" || r["total_wht"] != "150" || objs(r["rows"])[0]["party"].(obj)["tax_id"] != "0105551234567" ||
+		objs(r["rows"])[0]["certificate_no"] != "WT2026-000001" || objs(r["rows"])[0]["wht_type"].(obj)["income_type"] != "3_tres" {
 		t.Fatalf("withholding pnd53 = %v", r)
 	}
 	if r := wht("&form=pnd3"); len(objs(r["rows"])) != 1 || r["total_wht"] != "75" || objs(r["rows"])[0]["tax_form"] != "pnd3" {
@@ -282,8 +292,36 @@ func TestPayments(t *testing.T) {
 		t.Fatalf("after cancel: A=%s aging=%s", outstanding(invA), aging("2026-03-31"))
 	}
 	p2 := a.expect(a.do("POST", base+"/payments", owner, withSupplier(payment([]obj{{"invoice_id": invA, "amount": "5350"}}, method(bank, "5350")))), 201, "payment 2").data()
-	if p2["document_no"] != "PV2603-00003" || p2["wht"] != "0" {
+	if p2["document_no"] != "PV2603-00003" || p2["wht"] != "0" || p2["wht_certificate_no"] != nil {
 		t.Fatalf("payment 2 = %v", p2)
+	}
+	// ใบจ่ายที่ยกเลิกยังคงเลขที่หนังสือรับรองเดิม (เป็นโมฆะพร้อมใบจ่าย) — รายการใบจ่ายแสดงเลขที่ด้วย
+	if c := a.expect(a.do("GET", base+"/payments/"+p["id"].(string), owner, nil), 200, "cancelled payment").data(); c["status"] != "cancelled" || c["wht_certificate_no"] != "WT2026-000001" {
+		t.Fatalf("cancelled payment = %v", c)
+	}
+	if rows := objs(a.expect(a.do("GET", base+"/payments?sort=document_no", owner, nil), 200, "payments list").body["data"]); len(rows) != 3 ||
+		rows[0]["wht_certificate_no"] != "WT2026-000001" || rows[2]["wht_certificate_no"] != nil {
+		t.Fatalf("payments list = %v", rows)
+	}
+
+	// ---------- สรุป ภ.พ.30: ภาษีขาย - ภาษีซื้อ ----------
+	a.expect(a.do("GET", base+"/reports?book=vat-summary&start_date=2026-03-01", owner, nil), 400, "vat summary without end date")
+	a.expect(a.do("GET", base+"/reports?book=vat-summary&start_date=2026-03-31&end_date=2026-03-01", owner, nil), 400, "vat summary reversed range")
+	vs := a.expect(a.do("GET", base+"/reports?book=vat-summary&start_date=2026-03-01&end_date=2026-03-31", owner, nil), 200, "vat summary").data()
+	out, in := vs["output"].(obj), vs["input"].(obj)
+	dec := func(v any) decimal.Decimal {
+		t.Helper()
+		d, err := decimal.NewFromString(v.(string))
+		if err != nil {
+			t.Fatalf("decimal %v: %v", v, err)
+		}
+		return d
+	}
+	net := dec(out["tax"]).Sub(dec(in["tax"]))
+	if vs["book"] != "vat-summary" || vs["start_date"] != "2026-03-01" || vs["end_date"] != "2026-03-31" || !dec(vs["net_tax"]).Equal(net) ||
+		!dec(vs["payable"]).Equal(decimal.Max(net, decimal.Zero)) || !dec(vs["refundable"]).Equal(decimal.Max(net.Neg(), decimal.Zero)) ||
+		out["base"] == nil || in["documents"] == nil {
+		t.Fatalf("vat summary = %v", vs)
 	}
 	if r := a.expect(a.do("GET", base+"/payments?status=posted&kind=supplier&party_id="+sup, owner, nil), 200, "list payments"); r.total() != 1 {
 		t.Fatalf("posted supplier payments = %d", r.total())

@@ -34,6 +34,8 @@ type Settings struct {
 	OutputVatAccountID *vo.AccountID // ภาษีขาย
 	RevenueAccountID   *vo.AccountID // รายได้ค่าเริ่มต้น (เมื่อสินค้า / หมวดไม่ได้ตั้ง)
 	CogsAccountID      *vo.AccountID // ต้นทุนขาย (perpetual)
+	// SalesReturnsAccountID: รับคืนสินค้าและส่วนลดจ่าย (ใบลดหนี้) — ไม่ตั้ง = ลดบัญชีรายได้ของบรรทัดในใบแจ้งหนี้
+	SalesReturnsAccountID *vo.AccountID
 }
 
 func DefaultSettings() Settings { return Settings{VatRegistered: true, VatRate: decimal.NewFromInt(7)} }
@@ -47,7 +49,7 @@ func NewSettings(s Settings) (Settings, error) {
 
 func (s Settings) AccountIDs() []vo.AccountID {
 	var out []vo.AccountID
-	for _, p := range []*vo.AccountID{s.ARAccountID, s.OutputVatAccountID, s.RevenueAccountID, s.CogsAccountID} {
+	for _, p := range []*vo.AccountID{s.ARAccountID, s.OutputVatAccountID, s.RevenueAccountID, s.CogsAccountID, s.SalesReturnsAccountID} {
 		if p != nil {
 			out = append(out, *p)
 		}

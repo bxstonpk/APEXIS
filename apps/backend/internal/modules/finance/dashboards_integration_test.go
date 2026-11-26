@@ -20,7 +20,7 @@ func TestFinanceDashboard(t *testing.T) {
 		"lines": []obj{{"account_id": acc["1101"], "debit": "10000", "credit": "0"}, {"account_id": acc["3100"], "debit": "0", "credit": "10000"}}}), 201, "opening")
 	cash := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "CASH", "name": "เงินสด", "type": "cash", "gl_account_id": acc["1101"]}), 201, "cash").id()
 	bank := a.expect(a.do("POST", base+"/cash-accounts", owner, obj{"code": "BANK", "name": "ธนาคาร", "type": "bank", "bank_name": "KBANK", "account_no": "222-2-22222-2", "gl_account_id": acc["1102"]}), 201, "bank").id()
-	svc3 := a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3"}), 201, "wht 3%").id()
+	svc3 := a.expect(a.do("POST", base+"/withholding-tax-types", owner, obj{"code": "SVC", "name": "ค่าบริการ", "rate": "3", "income_type": "3_tres"}), 201, "wht 3%").id()
 	a.expect(a.do("PUT", base+"/finance-settings", owner, obj{"receipt_journal_id": gen, "payment_journal_id": gen, "transfer_journal_id": gen,
 		"wht_pnd3_account_id": acc["2131"]}), 200, "settings")
 

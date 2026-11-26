@@ -202,7 +202,7 @@ func (r *WhtTypeRepository) Create(ctx context.Context, w *entities.WhtType) err
 func (r *WhtTypeRepository) Update(ctx context.Context, w *entities.WhtType) error {
 	m := gp.WhtTypeToModel(w)
 	res := database.Conn(ctx, r.db).Model(&m).Where("company_id = ?", m.CompanyID).
-		Select("code", "name", "rate", "status", "updated_at").Updates(&m)
+		Select("code", "name", "rate", "income_type", "status", "updated_at").Updates(&m)
 	if res.Error != nil {
 		if database.IsUniqueViolation(res.Error) {
 			return domain.ErrCodeExists
@@ -258,16 +258,17 @@ func (r *WhtTypeRepository) FindByIDs(ctx context.Context, companyID vo.CompanyI
 }
 
 type whtRow struct {
-	ID     uuid.UUID
-	Code   string
-	Name   string
-	Rate   decimal.Decimal
-	Status string
-	Total  int64
+	ID         uuid.UUID
+	Code       string
+	Name       string
+	Rate       decimal.Decimal
+	IncomeType string
+	Status     string
+	Total      int64
 }
 
 func (r whtRow) dto() dto.WhtType {
-	return dto.WhtType{ID: r.ID.String(), Code: r.Code, Name: r.Name, Rate: r.Rate, Status: r.Status}
+	return dto.WhtType{ID: r.ID.String(), Code: r.Code, Name: r.Name, Rate: r.Rate, IncomeType: r.IncomeType, Status: r.Status}
 }
 
 func (r *WhtTypeRepository) List(ctx context.Context, companyID vo.CompanyID, f dto.WhtTypeFilter) (listing.Result[dto.WhtType], error) {
@@ -282,7 +283,7 @@ func (r *WhtTypeRepository) List(ctx context.Context, companyID vo.CompanyID, f 
 		}
 		return searchCols(q, f.Search, "w.code", "w.name")
 	}
-	rows, total, err := database.FetchPage(base, "w.id, w.code, w.name, w.rate, w.status", order, f.Page, func(r whtRow) int64 { return r.Total })
+	rows, total, err := database.FetchPage(base, "w.id, w.code, w.name, w.rate, w.income_type, w.status", order, f.Page, func(r whtRow) int64 { return r.Total })
 	return toResult(rows, total, f.Page, whtRow.dto), err
 }
 
@@ -309,6 +310,7 @@ type docRow struct {
 	CancelledAt   *time.Time
 	Description   string
 	CreatedBy     uuid.UUID
+	WhtCertNo     *string
 	Total         int64
 }
 
@@ -318,14 +320,19 @@ func (r docRow) summary() dto.DocumentSummary {
 		Party: dto.Party{ID: optString(r.PartyID), Code: r.PartyCode, Name: r.PartyName, TaxID: r.PartyTaxID, BranchNo: r.PartyBranchNo,
 			Address: r.PartyAddress, TaxType: r.PartyTaxType},
 		Amount: r.TotalAmount, Wht: r.TotalWht, Net: r.TotalNet, Status: r.Status, EntryID: optString(r.EntryID), EntryNo: r.EntryNo,
-		CancelledAt: r.CancelledAt, Description: r.Description,
+		CancelledAt: r.CancelledAt, Description: r.Description, WhtCertificateNo: r.WhtCertNo,
 	}
 }
 
+// docColumns: net = คอลัมน์ยอดรับ / จ่ายจริง; ใบจ่ายเพิ่มเลขที่หนังสือรับรอง 50 ทวิ (ใบรับ = NULL)
 func docColumns(net string) string {
+	cert := "NULL::text"
+	if net == "total_paid" {
+		cert = "d.wht_certificate_no"
+	}
 	return `d.id, d.document_no, d.doc_date, d.kind, d.party_id, d.party_code, d.party_name, d.party_tax_id, d.party_branch_no,
 		d.party_address, d.party_tax_type, d.total_amount, d.total_wht, d.` + net + ` AS total_net, d.status, d.entry_id, d.entry_no,
-		d.cancelled_at, d.description, d.created_by`
+		d.cancelled_at, d.description, d.created_by, ` + cert + ` AS wht_cert_no`
 }
 
 // methods — 1 query: ช่องทาง JOIN ทะเบียนเงิน (รหัส / ชื่อ)
@@ -488,6 +495,7 @@ func (r *PaymentRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 		WhtTypeID         *uuid.UUID
 		WhtCode           *string
 		WhtName           *string
+		WhtIncomeType     *string
 		WhtRate           decimal.Decimal
 		WhtBase           decimal.Decimal
 		Wht               decimal.Decimal
@@ -495,7 +503,7 @@ func (r *PaymentRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	err := database.Conn(ctx, r.db).Table("finance_payment_lines AS l").
 		Joins("LEFT JOIN finance_wht_types AS w ON w.id = l.wht_type_id").
 		Select(`l.invoice_id, l.invoice_no, l.supplier_invoice_no, l.account_id, l.description, l.amount, l.wht_type_id,
-			w.code AS wht_code, w.name AS wht_name, l.wht_rate, l.wht_base, l.wht`).
+			w.code AS wht_code, w.name AS wht_name, w.income_type AS wht_income_type, l.wht_rate, l.wht_base, l.wht`).
 		Where("l.payment_id = ?", h.ID).Order("l.line_no").Scan(&lines).Error
 	if err != nil {
 		return dto.Payment{}, err
@@ -508,7 +516,10 @@ func (r *PaymentRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 			line.Invoice = &dto.Ref{ID: l.InvoiceID.String(), Code: l.InvoiceNo, Name: l.SupplierInvoiceNo}
 		}
 		if l.WhtTypeID != nil && l.WhtCode != nil {
-			line.WhtType = &dto.Ref{ID: l.WhtTypeID.String(), Code: *l.WhtCode, Name: *l.WhtName}
+			line.WhtType = &dto.WhtTypeRef{ID: l.WhtTypeID.String(), Code: *l.WhtCode, Name: *l.WhtName}
+			if l.WhtIncomeType != nil {
+				line.WhtType.IncomeType = *l.WhtIncomeType
+			}
 		}
 		out.Lines[i] = line
 	}
@@ -653,6 +664,8 @@ type whtReportRow struct {
 	WhtTypeID     *uuid.UUID
 	WhtCode       *string
 	WhtName       *string
+	WhtIncomeType *string
+	CertificateNo *string
 	Rate          decimal.Decimal
 	Base          decimal.Decimal
 	Wht           decimal.Decimal
@@ -669,7 +682,13 @@ func (r whtReportRow) dto() dto.WithholdingRow {
 		TaxForm: vo.TaxType(r.PartyTaxType).Form(), Rate: r.Rate, Base: r.Base, Wht: r.Wht,
 	}
 	if r.WhtTypeID != nil && r.WhtCode != nil {
-		out.WhtType = &dto.Ref{ID: r.WhtTypeID.String(), Code: *r.WhtCode, Name: *r.WhtName}
+		out.WhtType = &dto.WhtTypeRef{ID: r.WhtTypeID.String(), Code: *r.WhtCode, Name: *r.WhtName}
+		if r.WhtIncomeType != nil {
+			out.WhtType.IncomeType = *r.WhtIncomeType
+		}
+	}
+	if r.CertificateNo != nil {
+		out.CertificateNo = *r.CertificateNo
 	}
 	return out
 }
@@ -711,7 +730,7 @@ func (r *ReportRepository) WithholdingPaid(ctx context.Context, companyID vo.Com
 		return q
 	}
 	return r.withholding(base, `d.doc_date, d.id AS document_id, d.document_no, `+partyColumns+`, l.wht_type_id, w.code AS wht_code,
-		w.name AS wht_name, l.wht_rate AS rate, l.wht_base AS base, l.wht, SUM(l.wht_base) OVER () AS total_base, SUM(l.wht) OVER () AS total_wht`,
+		w.name AS wht_name, w.income_type AS wht_income_type, d.wht_certificate_no AS certificate_no, l.wht_rate AS rate, l.wht_base AS base, l.wht, SUM(l.wht_base) OVER () AS total_base, SUM(l.wht) OVER () AS total_wht`,
 		order, f.Page)
 }
 

@@ -15,15 +15,16 @@ import (
 )
 
 type SettingsModel struct {
-	CompanyID          uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	VatRegistered      bool            `gorm:"not null"`
-	VatRate            decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_sal_settings_vat,vat_rate BETWEEN 0 AND 100"`
-	JournalID          *uuid.UUID      `gorm:"type:uuid"`
-	ARAccountID        *uuid.UUID      `gorm:"column:ar_account_id;type:uuid"`
-	OutputVatAccountID *uuid.UUID      `gorm:"type:uuid"`
-	RevenueAccountID   *uuid.UUID      `gorm:"type:uuid"`
-	CogsAccountID      *uuid.UUID      `gorm:"type:uuid"`
-	UpdatedAt          time.Time       `gorm:"not null"`
+	CompanyID             uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	VatRegistered         bool            `gorm:"not null"`
+	VatRate               decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_sal_settings_vat,vat_rate BETWEEN 0 AND 100"`
+	JournalID             *uuid.UUID      `gorm:"type:uuid"`
+	ARAccountID           *uuid.UUID      `gorm:"column:ar_account_id;type:uuid"`
+	OutputVatAccountID    *uuid.UUID      `gorm:"type:uuid"`
+	RevenueAccountID      *uuid.UUID      `gorm:"type:uuid"`
+	CogsAccountID         *uuid.UUID      `gorm:"type:uuid"`
+	SalesReturnsAccountID *uuid.UUID      `gorm:"type:uuid"`
+	UpdatedAt             time.Time       `gorm:"not null"`
 }
 
 func (SettingsModel) TableName() string { return "sales_settings" }
@@ -243,7 +244,52 @@ type InvoiceLineModel struct {
 
 func (InvoiceLineModel) TableName() string { return "sales_invoice_lines" }
 
-// SettlementModel: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance
+// CreditNoteModel: ใบลดหนี้ขาย (อ้างใบแจ้งหนี้เดิม) — ผู้ซื้อ / เงื่อนไข VAT คัดลอกจากใบแจ้งหนี้ ณ วันออก
+// ยอดที่ลดตัดลูกหนี้ของใบแจ้งหนี้ผ่าน sales_invoice_settlements (document_id = id ใบลดหนี้)
+type CreditNoteModel struct {
+	ID         uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	CompanyID  uuid.UUID     `gorm:"type:uuid;not null;index:idx_sal_credit_notes_date,priority:1;uniqueIndex:uq_sal_credit_notes_no,priority:1"`
+	DocumentNo string        `gorm:"size:30;not null;uniqueIndex:uq_sal_credit_notes_no,priority:2"`
+	DocDate    time.Time     `gorm:"type:date;not null;index:idx_sal_credit_notes_date,priority:2"`
+	InvoiceID  uuid.UUID     `gorm:"type:uuid;not null;index"`
+	Invoice    *InvoiceModel `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
+	PostedModel
+	StockModel
+	Kind             string                `gorm:"size:20;not null;check:chk_sal_credit_notes_kind,kind IN ('return','allowance')"`
+	Reason           string                `gorm:"size:500;not null;check:chk_sal_credit_notes_reason,length(trim(reason)) > 0"`
+	BillToName       string                `gorm:"size:200;not null;default:''"`
+	BillToTaxID      string                `gorm:"size:13;not null;default:''"`
+	BillToBranchNo   string                `gorm:"size:5;not null;default:''"`
+	BillToAddress    string                `gorm:"size:500;not null;default:''"`
+	VatRate          decimal.Decimal       `gorm:"type:numeric(5,2);not null"`
+	PriceIncludesVat bool                  `gorm:"not null"`
+	TotalNet         decimal.Decimal       `gorm:"type:numeric(24,6);not null"`
+	TotalVat         decimal.Decimal       `gorm:"type:numeric(24,6);not null"`
+	TotalGross       decimal.Decimal       `gorm:"type:numeric(24,6);not null;check:chk_sal_credit_notes_total,total_gross = total_net + total_vat AND total_gross > 0"`
+	Lines            []CreditNoteLineModel `gorm:"foreignKey:CreditNoteID;constraint:OnDelete:CASCADE"`
+}
+
+func (CreditNoteModel) TableName() string { return "sales_credit_notes" }
+
+type CreditNoteLineModel struct {
+	CreditNoteID       uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	LineNo             int             `gorm:"primaryKey"`
+	InvoiceLineNo      int             `gorm:"not null;check:chk_sal_credit_note_lines_ref,invoice_line_no > 0"`
+	ItemID             uuid.UUID       `gorm:"type:uuid;not null"`
+	Quantity           decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_sal_credit_note_lines_qty,quantity >= 0"`
+	UnitPrice          decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Net                decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Vat                decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Gross              decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_sal_credit_note_lines_gross,gross = net + vat AND gross > 0"`
+	AccountID          uuid.UUID       `gorm:"type:uuid;not null"`
+	Stock              bool            `gorm:"not null;default:false"`
+	Cost               decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_sal_credit_note_lines_cost,cost >= 0"`
+	InventoryAccountID *uuid.UUID      `gorm:"type:uuid"`
+}
+
+func (CreditNoteLineModel) TableName() string { return "sales_credit_note_lines" }
+
+// SettlementModel: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance และใบลดหนี้
 // (document_id ไม่มี FK เพราะเป็นตารางของ module อื่น) — อายุลูกหนี้รวมยอดตาม settled_on
 type SettlementModel struct {
 	ID         uuid.UUID       `gorm:"type:uuid;primaryKey"`
@@ -272,7 +318,7 @@ func (SequenceModel) TableName() string { return "sales_number_sequences" }
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&SettingsModel{}, &CustomerModel{}, &CustomerBranchModel{}, &QuotationModel{}, &QuotationLineModel{}, &OrderModel{}, &OrderLineModel{},
-		&DeliveryModel{}, &DeliveryLineModel{}, &InvoiceModel{}, &InvoiceLineModel{},
+		&DeliveryModel{}, &DeliveryLineModel{}, &InvoiceModel{}, &InvoiceLineModel{}, &CreditNoteModel{}, &CreditNoteLineModel{},
 		&SettlementModel{}, &SequenceModel{},
 	); err != nil {
 		return err

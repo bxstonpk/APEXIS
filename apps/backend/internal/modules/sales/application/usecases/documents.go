@@ -268,9 +268,10 @@ func (uc *DeliveryUseCases) Cancel(ctx context.Context, in dto.ByID[vo.DeliveryI
 
 type InvoiceUseCases struct {
 	base
-	invoices  repositories.InvoiceRepository
-	orders    repositories.OrderRepository
-	customers repositories.CustomerRepository
+	invoices    repositories.InvoiceRepository
+	orders      repositories.OrderRepository
+	customers   repositories.CustomerRepository
+	creditNotes repositories.CreditNoteRepository
 }
 
 func (uc *InvoiceUseCases) Get(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
@@ -415,12 +416,21 @@ func (uc *InvoiceUseCases) billTo(ctx context.Context, companyID vo.CompanyID, c
 	return entities.BillTo{Name: d.Name, TaxID: d.TaxID, BranchNo: b.BranchNo, Address: b.Address}, nil
 }
 
-// Cancel: ใบที่รับเงินแล้วต้องยกเลิกใบเสร็จก่อน; รวมใบ = คืนสต็อกด้วย; กลับรายการ ณ วันที่เดิม
+// Cancel: ใบที่มีใบลดหนี้ / รับเงินแล้วต้องยกเลิกใบลดหนี้ / ใบเสร็จก่อน; รวมใบ = คืนสต็อกด้วย; กลับรายการ ณ วันที่เดิม
 func (uc *InvoiceUseCases) Cancel(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
 	err := uc.write(ctx, in.Actor, vo.PermInvoicePost, func(ctx context.Context) error {
 		inv, err := uc.invoices.FindForUpdate(ctx, in.CompanyID, in.ID)
 		if err != nil {
 			return err
+		}
+		if inv.State().Status == vo.DocPosted {
+			has, err := uc.creditNotes.HasPosted(ctx, in.CompanyID, in.ID)
+			if err != nil {
+				return err
+			}
+			if has {
+				return domain.ErrInvoiceHasCredits
+			}
 		}
 		if err := inv.Cancel(in.UserID, uc.now()); err != nil {
 			return err
@@ -497,6 +507,14 @@ func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter
 		rows, totals, err := uc.reports.Aging(ctx, in.CompanyID, in.Filter)
 		return dto.Aging{AsOf: in.Filter.AsOf, Rows: rows, Totals: totals}, err
 	})
+}
+
+// VatTotals: ภาษีขายของช่วงวันที่ (ใบแจ้งหนี้ - ใบลดหนี้) — เรียกโดย finance (สรุป ภ.พ.30) ซึ่งตรวจสิทธิ์รายงานของตัวเองแล้ว
+func (uc *ReportUseCases) VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error) {
+	if !vo.IsDateOnly(start) || !vo.IsDateOnly(end) || start.After(end) {
+		return dto.VatTotals{}, domain.ErrInvalidDate
+	}
+	return uc.reports.VatTotals(ctx, companyID, start, end)
 }
 
 func (uc *ReportUseCases) OutputVat(ctx context.Context, in dto.List[dto.TaxFilter]) (dto.TaxReport, error) {

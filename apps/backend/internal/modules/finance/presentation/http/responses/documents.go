@@ -104,28 +104,53 @@ func FromReceipt(r dto.Receipt) Receipt {
 }
 
 type PaymentLine struct {
-	Invoice     *Ref    `json:"invoice"` // code = เลขที่ใบแจ้งหนี้, name = เลขที่ของผู้ขาย
-	AccountID   *string `json:"account_id"`
-	Description string  `json:"description"`
-	Amount      string  `json:"amount"`
-	WhtType     *Ref    `json:"wht_type"`
-	WhtRate     string  `json:"wht_rate"`
-	WhtBase     string  `json:"wht_base"`
-	Wht         string  `json:"wht"`
+	Invoice     *Ref        `json:"invoice"` // code = เลขที่ใบแจ้งหนี้, name = เลขที่ของผู้ขาย
+	AccountID   *string     `json:"account_id"`
+	Description string      `json:"description"`
+	Amount      string      `json:"amount"`
+	WhtType     *WhtTypeRef `json:"wht_type"`
+	WhtRate     string      `json:"wht_rate"`
+	WhtBase     string      `json:"wht_base"`
+	Wht         string      `json:"wht"`
+}
+
+// WhtTypeRef: ประเภทภาษีหัก ณ ที่จ่ายในบรรทัดใบจ่าย / รายงาน — income_type ใช้เลือกช่องใน 50 ทวิ
+type WhtTypeRef struct {
+	ID         string `json:"id"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	IncomeType string `json:"income_type"`
+}
+
+func optWhtType(r *dto.WhtTypeRef) *WhtTypeRef {
+	if r == nil {
+		return nil
+	}
+	return &WhtTypeRef{ID: r.ID, Code: r.Code, Name: r.Name, IncomeType: r.IncomeType}
+}
+
+// PaymentSummary: รายการใบจ่าย + เลขที่หนังสือรับรอง 50 ทวิ (null = ไม่มีภาษีหัก)
+type PaymentSummary struct {
+	DocumentSummary
+	WhtCertificateNo *string `json:"wht_certificate_no"`
+}
+
+func FromPaymentSummary(d dto.DocumentSummary) PaymentSummary {
+	return PaymentSummary{DocumentSummary: FromSummary(d), WhtCertificateNo: d.WhtCertificateNo}
 }
 
 type Payment struct {
-	DocumentSummary
+	PaymentSummary
 	CreatedBy string        `json:"created_by"`
 	Lines     []PaymentLine `json:"lines"`
 	Methods   []Method      `json:"methods"`
 }
 
 func FromPayment(p dto.Payment) Payment {
-	out := Payment{DocumentSummary: FromSummary(p.DocumentSummary), CreatedBy: p.CreatedBy, Lines: make([]PaymentLine, len(p.Lines)), Methods: methods(p.Methods)}
+	out := Payment{PaymentSummary: FromPaymentSummary(p.DocumentSummary), CreatedBy: p.CreatedBy, Lines: make([]PaymentLine, len(p.Lines)), Methods: methods(p.Methods)}
 	for i, l := range p.Lines {
 		out.Lines[i] = PaymentLine{Invoice: optRef(l.Invoice), AccountID: l.AccountID, Description: l.Description, Amount: str(l.Amount),
-			WhtType: optRef(l.WhtType), WhtRate: str(l.WhtRate), WhtBase: str(l.WhtBase), Wht: str(l.Wht)}
+			WhtType: optWhtType(l.WhtType), WhtRate: str(l.WhtRate), WhtBase: str(l.WhtBase), Wht: str(l.Wht)}
 	}
 	return out
 }
@@ -151,15 +176,16 @@ func FromTransfer(t dto.Transfer) Transfer {
 }
 
 type WhtType struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	Rate   string `json:"rate"`
-	Status string `json:"status"`
+	ID         string `json:"id"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	Rate       string `json:"rate"`
+	IncomeType string `json:"income_type"`
+	Status     string `json:"status"`
 }
 
 func FromWhtType(w dto.WhtType) WhtType {
-	return WhtType{ID: w.ID, Code: w.Code, Name: w.Name, Rate: str(w.Rate), Status: w.Status}
+	return WhtType{ID: w.ID, Code: w.Code, Name: w.Name, Rate: str(w.Rate), IncomeType: w.IncomeType, Status: w.Status}
 }
 
 type Settings struct {
@@ -196,15 +222,17 @@ func FromOpenInvoices(rows []dto.OpenInvoice) []OpenInvoice {
 // ---------- รายงาน ----------
 
 type WithholdingRow struct {
-	Date       string `json:"date"`
-	DocumentID string `json:"document_id"`
-	DocumentNo string `json:"document_no"`
-	Party      Party  `json:"party"`
-	TaxForm    string `json:"tax_form"` // pnd3 / pnd53 (ภาษีที่จ่าย)
-	WhtType    *Ref   `json:"wht_type"`
-	Rate       string `json:"rate"`
-	Base       string `json:"base"`
-	Wht        string `json:"wht"`
+	Date       string      `json:"date"`
+	DocumentID string      `json:"document_id"`
+	DocumentNo string      `json:"document_no"`
+	Party      Party       `json:"party"`
+	TaxForm    string      `json:"tax_form"` // pnd3 / pnd53 (ภาษีที่จ่าย)
+	WhtType    *WhtTypeRef `json:"wht_type"`
+	// CertificateNo: เลขที่หนังสือรับรอง 50 ทวิ (ภาษีถูกหัก = "")
+	CertificateNo string `json:"certificate_no"`
+	Rate          string `json:"rate"`
+	Base          string `json:"base"`
+	Wht           string `json:"wht"`
 }
 
 type Withholding struct {
@@ -226,7 +254,7 @@ func FromWithholding(book string, w dto.Withholding) WithholdingBody {
 	rows := make([]WithholdingRow, len(w.Rows.Items))
 	for i, r := range w.Rows.Items {
 		rows[i] = WithholdingRow{Date: date(r.Date), DocumentID: r.DocumentID, DocumentNo: r.DocumentNo, Party: party(r.Party), TaxForm: r.TaxForm,
-			WhtType: optRef(r.WhtType), Rate: str(r.Rate), Base: str(r.Base), Wht: str(r.Wht)}
+			WhtType: optWhtType(r.WhtType), CertificateNo: r.CertificateNo, Rate: str(r.Rate), Base: str(r.Base), Wht: str(r.Wht)}
 	}
 	return WithholdingBody{
 		Data: Withholding{Book: book, StartDate: date(w.Start), EndDate: date(w.End), Rows: rows, TotalBase: str(w.Totals.Base), TotalWht: str(w.Totals.Wht)},
@@ -299,4 +327,32 @@ func FromFinanceDashboard(d dto.FinanceDashboard) FinanceDashboard {
 		out.Recent[i] = RecentDocument{Kind: x.Kind, ID: x.ID, DocumentNo: x.DocumentNo, Date: date(x.Date), Party: x.Party, Amount: str(x.Amount)}
 	}
 	return out
+}
+
+// ---------- สรุป ภ.พ.30 ----------
+
+type VatTotals struct {
+	Base      string `json:"base"`
+	Tax       string `json:"tax"`
+	Documents int    `json:"documents"`
+}
+
+// VatSummary: book=vat-summary — net_tax = output.tax - input.tax, payable / refundable แยกตามเครื่องหมาย
+type VatSummary struct {
+	Book       string    `json:"book"`
+	StartDate  string    `json:"start_date"`
+	EndDate    string    `json:"end_date"`
+	Output     VatTotals `json:"output"`
+	Input      VatTotals `json:"input"`
+	NetTax     string    `json:"net_tax"`
+	Payable    string    `json:"payable"`
+	Refundable string    `json:"refundable"`
+}
+
+func FromVatSummary(book string, s dto.VatSummary) VatSummary {
+	t := func(x dto.VatTotals) VatTotals {
+		return VatTotals{Base: str(x.Base), Tax: str(x.Tax), Documents: x.Documents}
+	}
+	return VatSummary{Book: book, StartDate: date(s.Start), EndDate: date(s.End), Output: t(s.Output), Input: t(s.Input),
+		NetTax: str(s.NetTax), Payable: str(s.Payable), Refundable: str(s.Refundable)}
 }

@@ -19,15 +19,18 @@ var (
 	ErrInvalidVatRate  = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
 	ErrInvalidLine     = errors.New("invalid line") // detailed
 	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
+	ErrInvalidKind     = errors.New("kind must be return or allowance")
+	ErrInvalidReason   = errors.New("reason is required (up to 500 characters)")
 )
 
 // ไม่พบ (404)
 var (
-	ErrSupplierNotFound = errors.New("supplier not found")
-	ErrOrderNotFound    = errors.New("purchase order not found")
-	ErrReceiptNotFound  = errors.New("goods receipt not found")
-	ErrInvoiceNotFound  = errors.New("supplier invoice not found")
-	ErrItemNotFound     = errors.New("item not found") // detailed
+	ErrSupplierNotFound   = errors.New("supplier not found")
+	ErrOrderNotFound      = errors.New("purchase order not found")
+	ErrReceiptNotFound    = errors.New("goods receipt not found")
+	ErrInvoiceNotFound    = errors.New("supplier invoice not found")
+	ErrItemNotFound       = errors.New("item not found") // detailed
+	ErrCreditNoteNotFound = errors.New("supplier credit note not found")
 )
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
@@ -37,6 +40,8 @@ var (
 	ErrInvoiceNoExists = errors.New("supplier invoice number already recorded for this supplier")
 	ErrDocumentNoUsed  = errors.New("document number is already used (check the document number format)")
 	ErrTaxIDExists     = errors.New("tax id already belongs to another supplier") // detailed: รหัสที่มีอยู่ — เพิ่มสาขาที่รหัสนั้นแทน
+	// ErrCreditNoteNoExists: เลขที่ใบลดหนี้ของผู้ขายซ้ำ (ยังไม่ยกเลิก)
+	ErrCreditNoteNoExists = errors.New("supplier credit note number already recorded for this supplier")
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -64,6 +69,11 @@ var (
 	ErrInvoiceNotPayable = errors.New("invoice is not a posted invoice of this supplier")        // detailed
 	ErrInactiveRef       = errors.New("withholding tax type or cash / bank account is inactive") // detailed
 	ErrBranchNotFound    = errors.New("supplier branch not found")                               // detailed
+	// ใบลดหนี้ผู้ขาย
+	ErrInvoiceNotCreditable = errors.New("invoice is not a posted supplier invoice")
+	ErrCreditBeforeInvoice  = errors.New("credit note date must be on or after the invoice posting date")
+	ErrOverCredit           = errors.New("credit exceeds what is left on the invoice") // detailed
+	ErrInvoiceHasCredits    = errors.New("invoice has credit notes (cancel the credit notes first)")
 )
 
 // สิทธิ์ (403)
@@ -78,6 +88,8 @@ var all = []error{
 	ErrCompanyInactive, ErrSupplierInactive, ErrItemInactive, ErrVatNotApplicable, ErrOrderNotDraft, ErrOrderNotApproved,
 	ErrOrderNotOpen, ErrOrderHasActivity, ErrOverReceipt, ErrOverInvoice, ErrReceiptInvoiced, ErrAlreadyCancelled,
 	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired, ErrBranchNotFound,
+	ErrInvalidKind, ErrInvalidReason, ErrCreditNoteNotFound, ErrCreditNoteNoExists, ErrInvoiceNotCreditable, ErrCreditBeforeInvoice,
+	ErrOverCredit, ErrInvoiceHasCredits,
 	ErrForbidden,
 }
 

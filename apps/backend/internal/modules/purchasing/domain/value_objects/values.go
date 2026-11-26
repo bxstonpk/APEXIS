@@ -26,6 +26,7 @@ type (
 	OrderID         uuid.UUID
 	ReceiptID       uuid.UUID
 	InvoiceID       uuid.UUID
+	CreditNoteID    uuid.UUID
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
 	StockDocumentID uuid.UUID
@@ -48,17 +49,18 @@ func ParseID[T anyID](s string) (T, error) {
 
 func IDString[T anyID](id T) string { return uuid.UUID(id).String() }
 
-func (id CompanyID) String() string   { return IDString(id) }
-func (id UserID) String() string      { return IDString(id) }
-func (id SupplierID) String() string  { return IDString(id) }
-func (id OrderID) String() string     { return IDString(id) }
-func (id ReceiptID) String() string   { return IDString(id) }
-func (id InvoiceID) String() string   { return IDString(id) }
-func (id ItemID) String() string      { return IDString(id) }
-func (id WarehouseID) String() string { return IDString(id) }
-func (id AccountID) String() string   { return IDString(id) }
-func (id JournalID) String() string   { return IDString(id) }
-func (id EntryID) String() string     { return IDString(id) }
+func (id CompanyID) String() string    { return IDString(id) }
+func (id UserID) String() string       { return IDString(id) }
+func (id SupplierID) String() string   { return IDString(id) }
+func (id OrderID) String() string      { return IDString(id) }
+func (id ReceiptID) String() string    { return IDString(id) }
+func (id InvoiceID) String() string    { return IDString(id) }
+func (id CreditNoteID) String() string { return IDString(id) }
+func (id ItemID) String() string       { return IDString(id) }
+func (id WarehouseID) String() string  { return IDString(id) }
+func (id AccountID) String() string    { return IDString(id) }
+func (id JournalID) String() string    { return IDString(id) }
+func (id EntryID) String() string      { return IDString(id) }
 
 // ---------- ข้อความ ----------
 
@@ -187,16 +189,31 @@ func parseEnum[T ~string](raw string, allowed []T, invalid error) (T, error) {
 	return "", invalid
 }
 
+// CreditNoteKind ของใบลดหนี้ผู้ขาย: return = ส่งคืนสินค้า (ตัดสต็อกออก), allowance = ลดราคา / ส่วนลดภายหลัง (ไม่มีสินค้าเคลื่อนไหว)
+type CreditNoteKind string
+
+const (
+	CreditReturn    CreditNoteKind = "return"
+	CreditAllowance CreditNoteKind = "allowance"
+)
+
+var CreditNoteKinds = []CreditNoteKind{CreditReturn, CreditAllowance}
+
+func ParseCreditNoteKind(raw string) (CreditNoteKind, error) {
+	return parseEnum(raw, CreditNoteKinds, domain.ErrInvalidKind)
+}
+
 // DocType คือชนิดเอกสารของจัดซื้อที่ลงทะเบียนกับ organization เพื่อตั้งรูปแบบเลขที่
 type DocType string
 
 const (
-	DocOrder   DocType = "purchasing.order"
-	DocReceipt DocType = "purchasing.receipt"
-	DocInvoice DocType = "purchasing.invoice"
+	DocOrder      DocType = "purchasing.order"
+	DocReceipt    DocType = "purchasing.receipt"
+	DocInvoice    DocType = "purchasing.invoice"
+	DocCreditNote DocType = "purchasing.credit_note"
 )
 
-var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice}
+var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice, DocCreditNote}
 
 // Prefix คือ prefix เริ่มต้นของเลขที่ (บริษัทเปลี่ยนได้)
 func (t DocType) Prefix() string {
@@ -207,6 +224,8 @@ func (t DocType) Prefix() string {
 		return "RC"
 	case DocInvoice:
 		return "PI"
+	case DocCreditNote:
+		return "PCN"
 	default:
 		return "PV"
 	}
@@ -220,6 +239,8 @@ func (t DocType) Name() string {
 		return "ใบรับสินค้า"
 	case DocInvoice:
 		return "ใบแจ้งหนี้ผู้ขาย"
+	case DocCreditNote:
+		return "ใบลดหนี้ผู้ขาย"
 	default:
 		return "ใบจ่ายชำระ"
 	}

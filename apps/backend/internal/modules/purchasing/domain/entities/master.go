@@ -29,6 +29,8 @@ type Settings struct {
 	APAccountID            *vo.AccountID // เจ้าหนี้การค้า
 	InputVatAccountID      *vo.AccountID // ภาษีซื้อ
 	PriceVarianceAccountID *vo.AccountID // ผลต่างราคา (perpetual: ราคาใบแจ้งหนี้ต่างจากราคารับสินค้า)
+	// PurchaseReturnsAccountID: ส่งคืนสินค้าและส่วนลดรับ (ใบลดหนี้ผู้ขาย) — ไม่ตั้ง = บัญชีซื้อของสินค้า
+	PurchaseReturnsAccountID *vo.AccountID
 }
 
 func DefaultSettings() Settings { return Settings{VatRate: DefaultVatRate} }
@@ -43,7 +45,7 @@ func NewSettings(s Settings) (Settings, error) {
 // AccountIDs คือบัญชีทั้งหมดที่ตั้งไว้ (ใช้ตรวจกับ ledger)
 func (s Settings) AccountIDs() []vo.AccountID {
 	var out []vo.AccountID
-	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID} {
+	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID, s.PurchaseReturnsAccountID} {
 		if p != nil {
 			out = append(out, *p)
 		}
@@ -56,6 +58,7 @@ func (s Settings) Require(fields ...string) error {
 	set := map[string]bool{
 		"journal_id": s.JournalID != nil, "grir_account_id": s.GRIRAccountID != nil, "ap_account_id": s.APAccountID != nil,
 		"input_vat_account_id": s.InputVatAccountID != nil, "price_variance_account_id": s.PriceVarianceAccountID != nil,
+		"purchase_returns_account_id": s.PurchaseReturnsAccountID != nil,
 	}
 	var missing []string
 	for _, f := range fields {

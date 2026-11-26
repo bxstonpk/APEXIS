@@ -70,6 +70,8 @@ type Inventory interface {
 	// PurchaseContext: ระบบบัญชีของปีบัญชีที่ date อยู่ + สินค้า (lock ค่าตั้งของ inventory จน commit)
 	PurchaseContext(ctx context.Context, companyID vo.CompanyID, date time.Time, ids []vo.ItemID) (vo.AccountingSystem, map[vo.ItemID]Item, error)
 	PostReceipt(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, warehouseID vo.WarehouseID, date time.Time, reference, description string, lines []StockLine) (StockReceipt, error)
+	// PostIssue ตัดสต็อกออก (FIFO, ห้ามติดลบ) — LineValues = ต้นทุน FIFO ต่อบรรทัด (UnitCost ของ lines ไม่ใช้)
+	PostIssue(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, warehouseID vo.WarehouseID, date time.Time, reference, description string, lines []StockLine) (StockReceipt, error)
 	CancelDocument(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.StockDocumentID) error
 }
 

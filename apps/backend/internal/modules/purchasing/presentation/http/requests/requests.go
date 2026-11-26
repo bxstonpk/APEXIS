@@ -134,12 +134,13 @@ func (d *Decimal) required(field string) (decimal.Decimal, error) {
 
 // Settings: PUT /purchasing-settings — แทนที่ทั้งก้อน (บัญชีที่ไม่ส่ง = ไม่ตั้ง)
 type Settings struct {
-	VatRate                *Decimal `json:"vat_rate"`
-	JournalID              *string  `json:"journal_id"`
-	GRIRAccountID          *string  `json:"grir_account_id"`
-	APAccountID            *string  `json:"ap_account_id"`
-	InputVatAccountID      *string  `json:"input_vat_account_id"`
-	PriceVarianceAccountID *string  `json:"price_variance_account_id"`
+	VatRate                  *Decimal `json:"vat_rate"`
+	JournalID                *string  `json:"journal_id"`
+	GRIRAccountID            *string  `json:"grir_account_id"`
+	APAccountID              *string  `json:"ap_account_id"`
+	InputVatAccountID        *string  `json:"input_vat_account_id"`
+	PriceVarianceAccountID   *string  `json:"price_variance_account_id"`
+	PurchaseReturnsAccountID *string  `json:"purchase_returns_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -160,6 +161,7 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 		{"ap_account_id", r.APAccountID, &out.APAccountID},
 		{"input_vat_account_id", r.InputVatAccountID, &out.InputVatAccountID},
 		{"price_variance_account_id", r.PriceVarianceAccountID, &out.PriceVarianceAccountID},
+		{"purchase_returns_account_id", r.PurchaseReturnsAccountID, &out.PurchaseReturnsAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -382,5 +384,95 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 	return dto.InvoiceInput{
 		OrderID: order, SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: invDate, Date: d,
 		Description: r.Description, Lines: lines,
+	}, nil
+}
+
+// ---------- ใบลดหนี้ผู้ขาย ----------
+
+// CreditNoteLine: ส่งคืนสินค้า = quantity (+ unit_price ไม่ส่ง = ราคาตามใบแจ้งหนี้); ลดราคา = amount (รวม / แยก VAT ตามใบแจ้งหนี้)
+type CreditNoteLine struct {
+	InvoiceLineNo int      `json:"invoice_line_no"`
+	Quantity      *Decimal `json:"quantity"`
+	UnitPrice     *Decimal `json:"unit_price"`
+	Amount        *Decimal `json:"amount"`
+}
+
+// CreditNote: POST /supplier-credit-notes — credit_note_date (วันที่ในใบลดหนี้ของผู้ขาย) ไม่ส่ง = วันที่ลงบัญชี
+type CreditNote struct {
+	InvoiceID            string           `json:"invoice_id"`
+	SupplierCreditNoteNo string           `json:"supplier_credit_note_no"`
+	CreditNoteDate       string           `json:"credit_note_date"`
+	Date                 string           `json:"date"`
+	Kind                 string           `json:"kind"`
+	Reason               string           `json:"reason"`
+	Description          string           `json:"description"`
+	WarehouseID          *string          `json:"warehouse_id"`
+	Lines                []CreditNoteLine `json:"lines"`
+}
+
+func (r CreditNote) ToInput() (dto.CreditNoteInput, error) {
+	if err := required(map[string]string{"invoice_id": r.InvoiceID, "date": r.Date, "supplier_credit_note_no": r.SupplierCreditNoteNo,
+		"kind": r.Kind, "reason": r.Reason}); err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	inv, err := id[vo.InvoiceID]("invoice_id", r.InvoiceID)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	kind, err := vo.ParseCreditNoteKind(r.Kind)
+	if err != nil {
+		return dto.CreditNoteInput{}, invalid("kind must be return or allowance")
+	}
+	d, err := date("date", r.Date)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	cnDate := d
+	if r.CreditNoteDate != "" {
+		if cnDate, err = date("credit_note_date", r.CreditNoteDate); err != nil {
+			return dto.CreditNoteInput{}, err
+		}
+	}
+	wh, err := optionalID[vo.WarehouseID]("warehouse_id", r.WarehouseID)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	if len(r.Lines) == 0 {
+		return dto.CreditNoteInput{}, invalid("lines must have at least one line")
+	}
+	lines := make([]dto.CreditNoteLineInput, len(r.Lines))
+	for i, l := range r.Lines {
+		n := i + 1
+		if l.InvoiceLineNo < 1 {
+			return dto.CreditNoteInput{}, invalid("lines[%d].invoice_line_no is required", n)
+		}
+		out := dto.CreditNoteLineInput{InvoiceLineNo: l.InvoiceLineNo}
+		if kind == vo.CreditReturn {
+			if l.Amount != nil {
+				return dto.CreditNoteInput{}, invalid("lines[%d].amount is not allowed for kind return (use quantity / unit_price)", n)
+			}
+			q, err := l.Quantity.required(fmt.Sprintf("lines[%d].quantity", n))
+			if err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+			out.Quantity = &q
+			if out.UnitPrice, err = l.UnitPrice.parse(fmt.Sprintf("lines[%d].unit_price", n)); err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+		} else {
+			if l.Quantity != nil || l.UnitPrice != nil {
+				return dto.CreditNoteInput{}, invalid("lines[%d].quantity / unit_price are not allowed for kind allowance (use amount)", n)
+			}
+			a, err := l.Amount.required(fmt.Sprintf("lines[%d].amount", n))
+			if err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+			out.Amount = &a
+		}
+		lines[i] = out
+	}
+	return dto.CreditNoteInput{
+		InvoiceID: inv, SupplierCreditNoteNo: r.SupplierCreditNoteNo, CreditNoteDate: cnDate, Date: d, Kind: kind,
+		Reason: r.Reason, Description: r.Description, WarehouseID: wh, Lines: lines,
 	}, nil
 }

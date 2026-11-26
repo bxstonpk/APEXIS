@@ -6,6 +6,7 @@ package repositories
 import (
 	"apexis/backend/internal/platform/dashperiod"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -64,6 +65,8 @@ type DeliveryRepository interface {
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (*entities.Delivery, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (dto.Delivery, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.PostedSummary], error)
+	// UnitCosts: ต้นทุนเฉลี่ยต่อหน่วยของบรรทัดใบสั่งขายจากใบส่งของที่ยังไม่ยกเลิก (ไม่มี = ไม่อยู่ใน map) — query เดียว
+	UnitCosts(ctx context.Context, companyID vo.CompanyID, orderID vo.OrderID, orderLineNos []int) (map[int]vo.Money, error)
 }
 
 type InvoiceRepository interface {
@@ -79,6 +82,19 @@ type InvoiceRepository interface {
 	Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error)
 }
 
+// CreditNoteRepository: ใบลดหนี้ขาย
+type CreditNoteRepository interface {
+	Create(ctx context.Context, c *entities.CreditNote) error
+	UpdateStatus(ctx context.Context, c *entities.CreditNote) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.CreditNoteID) (*entities.CreditNote, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.CreditNoteID) (dto.CreditNote, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.CreditNoteSummary], error)
+	// Credited: ยอดที่ลดหนี้แล้วต่อบรรทัดใบแจ้งหนี้ (ใบที่ยังไม่ยกเลิก) — query เดียว
+	Credited(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID) (map[int]entities.Credited, error)
+	// HasPosted: ใบแจ้งหนี้มีใบลดหนี้ที่ยังไม่ยกเลิก
+	HasPosted(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID) (bool, error)
+}
+
 // SettlementRepository: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารรับเงินของ finance (ใช้คำนวณอายุลูกหนี้ ณ วันที่)
 type SettlementRepository interface {
 	Create(ctx context.Context, companyID vo.CompanyID, doc dto.SettlementDoc, lines []dto.SettlementLine) error
@@ -90,8 +106,10 @@ type SettlementRepository interface {
 type ReportRepository interface {
 	Outstanding(ctx context.Context, companyID vo.CompanyID, f dto.OutstandingFilter) (listing.Result[dto.OutstandingRow], error)
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
-	// OutputVat: ใบแจ้งหนี้ (ยังไม่ยกเลิก) ในช่วงวันที่ — ฐาน = ยอดก่อน VAT, ภาษี = VAT
+	// OutputVat: ใบแจ้งหนี้ + ใบลดหนี้ (ติดลบ) ที่ยังไม่ยกเลิกในช่วงวันที่ — ฐาน = ยอดก่อน VAT, ภาษี = VAT
 	OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
+	// VatTotals: ภาษีขายของช่วงวันที่ — ใบแจ้งหนี้ลบใบลดหนี้ (ที่ยังไม่ยกเลิก) — query เดียว
+	VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error)
 	// Dashboard: ภาพรวมแอปขายในช่วง (aggregate ไม่กี่ query)
 	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
 }

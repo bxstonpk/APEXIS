@@ -126,3 +126,36 @@ func ParseAging(v url.Values) (dto.AgingFilter, error) {
 	}
 	return f, q.err
 }
+
+// ParseCreditNoteFilter: GET /supplier-credit-notes?q=&status=&supplier_id=&invoice_id=&start_date=&end_date=&sort=&page=&page_size=
+func ParseCreditNoteFilter(v url.Values) (dto.DocumentFilter, error) {
+	f, err := ParseDocumentFilter(v, false)
+	if err != nil {
+		return f, err
+	}
+	q := &query{v: v}
+	f.OrderID = nil
+	f.InvoiceID = optionalIDParam[vo.InvoiceID](q, "invoice_id")
+	return f, q.err
+}
+
+// GET /reports?book=input-vat&start_date=&end_date=&supplier_id=&sort=date|document_no|supplier_name&page=&page_size=
+func ParseInputVat(v url.Values) (dto.InputVatFilter, error) {
+	q := &query{v: v}
+	f := dto.InputVatFilter{
+		SupplierID: optionalIDParam[vo.SupplierID](q, "supplier_id"),
+		Sort:       q.sort(dto.InputVatSortKeys, dto.DefaultInputVatSort), Page: q.page(),
+	}
+	if q.err != nil {
+		return f, q.err
+	}
+	start, end, err := listing.ParseDateRange(v, "start_date", "end_date")
+	if err != nil {
+		return f, err
+	}
+	if start == nil || end == nil {
+		return f, fmt.Errorf("%w: start_date and end_date are required (YYYY-MM-DD)", listing.ErrInvalidQuery)
+	}
+	f.Start, f.End = *start, *end
+	return f, nil
+}

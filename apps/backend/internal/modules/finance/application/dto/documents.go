@@ -152,6 +152,8 @@ type DocumentSummary struct {
 	EntryNo     string
 	CancelledAt *time.Time
 	Description string
+	// WhtCertificateNo: เลขที่หนังสือรับรอง 50 ทวิ (ใบจ่ายที่มีภาษีหักเท่านั้น, ใบรับ = nil)
+	WhtCertificateNo *string
 }
 
 type ReceiptLine struct {
@@ -174,7 +176,7 @@ type PaymentLine struct {
 	AccountID   *string
 	Description string
 	Amount      vo.Money
-	WhtType     *Ref
+	WhtType     *WhtTypeRef
 	WhtRate     vo.Money
 	WhtBase     vo.Money
 	Wht         vo.Money
@@ -202,12 +204,21 @@ type Transfer struct {
 	CancelledAt *time.Time
 }
 
+// WhtTypeRef: ประเภทภาษีที่อ้างในบรรทัดใบจ่าย / รายงาน — IncomeType ใช้เลือกช่องใน 50 ทวิ
+type WhtTypeRef struct {
+	ID         string
+	Code       string
+	Name       string
+	IncomeType string
+}
+
 type WhtType struct {
-	ID     string
-	Code   string
-	Name   string
-	Rate   vo.Money
-	Status string
+	ID         string
+	Code       string
+	Name       string
+	Rate       vo.Money
+	IncomeType string
+	Status     string
 }
 
 type Settings struct {
@@ -237,10 +248,12 @@ type WithholdingRow struct {
 	DocumentNo string
 	Party      Party
 	TaxForm    string
-	WhtType    *Ref
-	Rate       vo.Money
-	Base       vo.Money
-	Wht        vo.Money
+	WhtType    *WhtTypeRef
+	// CertificateNo: เลขที่หนังสือรับรอง 50 ทวิ ของใบจ่าย ("" = ภาษีถูกหัก / ไม่มี)
+	CertificateNo string
+	Rate          vo.Money
+	Base          vo.Money
+	Wht           vo.Money
 }
 
 type WithholdingTotals struct {
@@ -296,4 +309,27 @@ type FinanceDashboard struct {
 	Flows        FlowTotals
 	Monthly      []MonthlyFlow
 	Recent       []RecentDocument
+}
+
+// ---------- สรุป ภ.พ.30 ----------
+
+// VatSummaryFilter: ช่วงวันที่ (ปกติ = 1 เดือนภาษี)
+type VatSummaryFilter struct {
+	Start, End time.Time
+}
+
+type VatTotals struct {
+	Base      vo.Money
+	Tax       vo.Money
+	Documents int
+}
+
+// VatSummary: ภาษีขาย - ภาษีซื้อ = ภาษีสุทธิ (บวก = ต้องชำระ, ลบ = ชำระเกิน / ขอคืน)
+type VatSummary struct {
+	Start, End time.Time
+	Output     VatTotals
+	Input      VatTotals
+	NetTax     vo.Money
+	Payable    vo.Money
+	Refundable vo.Money
 }

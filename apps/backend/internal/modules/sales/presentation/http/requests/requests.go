@@ -143,6 +143,8 @@ type Settings struct {
 	OutputVatAccountID *string  `json:"output_vat_account_id"`
 	RevenueAccountID   *string  `json:"revenue_account_id"`
 	CogsAccountID      *string  `json:"cogs_account_id"`
+	// SalesReturnsAccountID: บัญชีรับคืนสินค้าและส่วนลดจ่าย (ใบลดหนี้) — null = ลดบัญชีรายได้ของบรรทัด
+	SalesReturnsAccountID *string `json:"sales_returns_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -164,6 +166,7 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 	}{
 		{"ar_account_id", r.ARAccountID, &out.ARAccountID}, {"output_vat_account_id", r.OutputVatAccountID, &out.OutputVatAccountID},
 		{"revenue_account_id", r.RevenueAccountID, &out.RevenueAccountID}, {"cogs_account_id", r.CogsAccountID, &out.CogsAccountID},
+		{"sales_returns_account_id", r.SalesReturnsAccountID, &out.SalesReturnsAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -418,6 +421,82 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 		Reference: in.Reference, Description: in.Description, Lines: in.Lines}, nil
 }
 
+// ---------- ใบลดหนี้ ----------
+
+// CreditNoteLine: return ส่ง quantity (+ unit_price ไม่ส่ง = ราคาในใบแจ้งหนี้); allowance ส่ง amount
+type CreditNoteLine struct {
+	InvoiceLineNo int      `json:"invoice_line_no"`
+	Quantity      *Decimal `json:"quantity"`
+	UnitPrice     *Decimal `json:"unit_price"`
+	Amount        *Decimal `json:"amount"`
+}
+
+// CreditNote: POST /sales-credit-notes — warehouse_id บังคับเมื่อรับคืนสินค้า stock (kind = return)
+type CreditNote struct {
+	InvoiceID   string           `json:"invoice_id"`
+	Date        string           `json:"date"`
+	Kind        string           `json:"kind"`
+	Reason      string           `json:"reason"`
+	Description string           `json:"description"`
+	WarehouseID *string          `json:"warehouse_id"`
+	Lines       []CreditNoteLine `json:"lines"`
+}
+
+func (r CreditNote) ToInput() (dto.CreditNoteInput, error) {
+	if err := required(map[string]string{"invoice_id": r.InvoiceID, "date": r.Date, "kind": r.Kind, "reason": r.Reason}); err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	inv, err := id[vo.InvoiceID]("invoice_id", r.InvoiceID)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	d, err := date("date", r.Date)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	kind, err := vo.ParseCreditNoteKind(r.Kind)
+	if err != nil {
+		return dto.CreditNoteInput{}, invalid("kind must be return or allowance")
+	}
+	wh, err := optionalID[vo.WarehouseID]("warehouse_id", r.WarehouseID)
+	if err != nil {
+		return dto.CreditNoteInput{}, err
+	}
+	if kind == vo.CreditAllowance && wh != nil {
+		return dto.CreditNoteInput{}, invalid("warehouse_id is only used with kind return")
+	}
+	if len(r.Lines) == 0 {
+		return dto.CreditNoteInput{}, invalid("lines is required")
+	}
+	lines := make([]dto.CreditNoteLineInput, len(r.Lines))
+	for i, l := range r.Lines {
+		if l.InvoiceLineNo < 1 {
+			return dto.CreditNoteInput{}, invalid("lines[%d].invoice_line_no is required", i+1)
+		}
+		line := dto.CreditNoteLineInput{InvoiceLineNo: l.InvoiceLineNo}
+		if kind == vo.CreditReturn {
+			if line.Quantity, err = l.Quantity.required(fmt.Sprintf("lines[%d].quantity", i+1)); err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+			if line.UnitPrice, err = l.UnitPrice.parse(fmt.Sprintf("lines[%d].unit_price", i+1)); err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+			if l.Amount != nil && *l.Amount != "" {
+				return dto.CreditNoteInput{}, invalid("lines[%d].amount is only used with kind allowance", i+1)
+			}
+		} else {
+			if line.Amount, err = l.Amount.required(fmt.Sprintf("lines[%d].amount", i+1)); err != nil {
+				return dto.CreditNoteInput{}, err
+			}
+			if (l.Quantity != nil && *l.Quantity != "") || (l.UnitPrice != nil && *l.UnitPrice != "") {
+				return dto.CreditNoteInput{}, invalid("lines[%d].quantity / unit_price are only used with kind return", i+1)
+			}
+		}
+		lines[i] = line
+	}
+	return dto.CreditNoteInput{InvoiceID: inv, Date: d, Kind: kind, Reason: r.Reason, Description: r.Description, WarehouseID: wh, Lines: lines}, nil
+}
+
 // ---------- URL query ----------
 
 type query struct {
@@ -472,7 +551,7 @@ const (
 	KindPosted
 )
 
-// ParseDocumentFilter: ?q=&status=&customer_id=&order_id=&item_id=&start_date=&end_date=&sort=date|document_no|created_at&page=&page_size=
+// ParseDocumentFilter: ?q=&status=&customer_id=&order_id=&invoice_id=&item_id=&start_date=&end_date=&sort=date|document_no|created_at&page=&page_size=
 func ParseDocumentFilter(v url.Values, kind DocKind) (dto.DocumentFilter, error) {
 	q := &query{v: v}
 	f := dto.DocumentFilter{
@@ -489,6 +568,7 @@ func ParseDocumentFilter(v url.Values, kind DocKind) (dto.DocumentFilter, error)
 		}),
 		CustomerID: optionalIDParam[vo.CustomerID](q, "customer_id"),
 		OrderID:    optionalIDParam[vo.OrderID](q, "order_id"),
+		InvoiceID:  optionalIDParam[vo.InvoiceID](q, "invoice_id"),
 		ItemID:     optionalIDParam[vo.ItemID](q, "item_id"),
 		Sort: parse(q, func() ([]listing.Sort, error) {
 			return listing.ParseSort(v, dto.DocumentSortKeys, dto.DefaultDocumentSort)

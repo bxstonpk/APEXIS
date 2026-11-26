@@ -42,6 +42,12 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("GET "+base+"/supplier-invoices/{invoiceID}", h.GetInvoice)
 	handle("PATCH "+base+"/supplier-invoices/{invoiceID}", h.CancelInvoice)
 
+	// ใบลดหนี้ผู้ขาย (ส่งคืนสินค้า / ลดราคา) อ้างใบแจ้งหนี้เดิม: สร้าง = ลงบัญชี + ตัดยอดเจ้าหนี้ทันที -> PATCH status=cancelled
+	handle("GET "+base+"/supplier-credit-notes", h.ListCreditNotes)
+	handle("POST "+base+"/supplier-credit-notes", h.CreateCreditNote)
+	handle("GET "+base+"/supplier-credit-notes/{creditNoteID}", h.GetCreditNote)
+	handle("PATCH "+base+"/supplier-credit-notes/{creditNoteID}", h.CancelCreditNote)
+
 	// ใบจ่ายชำระ / ประเภทภาษีหัก ณ ที่จ่าย / ภ.ง.ด.3, 53 อยู่ที่ finance — ตัดยอดใบแจ้งหนี้ผ่าน Module.SettlePayables
 }
 
@@ -49,4 +55,5 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 func RegisterReports(reg *reports.Registry, h *handlers.Handler) {
 	reg.Register(handlers.BookOutstandingOrders, nethttp.HandlerFunc(h.OutstandingOrders))
 	reg.Register(handlers.BookAPAging, nethttp.HandlerFunc(h.APAging))
+	reg.Register(handlers.BookInputVat, nethttp.HandlerFunc(h.InputVat))
 }

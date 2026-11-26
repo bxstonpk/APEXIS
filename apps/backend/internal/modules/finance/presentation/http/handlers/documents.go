@@ -190,6 +190,7 @@ func (h *Handler) DeleteWhtType(w http.ResponseWriter, r *http.Request) {
 const (
 	BookWithholding         = "withholding-tax"
 	BookWithholdingReceived = "withholding-tax-received"
+	BookVatSummary          = "vat-summary" // สรุปภาษีมูลค่าเพิ่ม ภ.พ.30
 )
 
 // RegisterRoutes ผูก route ของ finance — ทุก route ต้อง Authenticate, สิทธิ์ตรวจใน use case, ค้นหาด้วย URL query
@@ -221,7 +222,7 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 	handle("GET "+base+"/receipts/{receiptID}", getDoc(h, "receiptID", uc.Receipts.Get, responses.FromReceipt))
 	handle("PATCH "+base+"/receipts/{receiptID}", cancelDoc(h, "receiptID", uc.Receipts.Cancel, responses.FromReceipt))
 
-	handle("GET "+base+"/payments", listDocs(h, kinds("supplier", "other"), uc.Payments.List, responses.FromSummary))
+	handle("GET "+base+"/payments", listDocs(h, kinds("supplier", "other"), uc.Payments.List, responses.FromPaymentSummary))
 	handle("POST "+base+"/payments", createDoc[requests.Payment](h, uc.Payments.Create, responses.FromPayment))
 	handle("GET "+base+"/payments/open-invoices", openInvoices(h, "supplier_id", uc.Payments.OpenInvoices))
 	handle("GET "+base+"/payments/wht-types", h.listWhtTypes(true))
@@ -268,4 +269,14 @@ func RegisterReports(reg *reports.Registry, h *Handler) {
 			})
 		}))
 	}
+	reg.Register(BookVatSummary, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+			f, err := requests.ParseVatSummary(r.URL.Query())
+			if err != nil {
+				return nil, err
+			}
+			d, err := h.uc.Reports.VatSummary(r.Context(), a, f)
+			return one(responses.FromVatSummary(BookVatSummary, d), err)
+		})
+	}))
 }

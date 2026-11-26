@@ -22,6 +22,7 @@ type InvoiceUseCases struct {
 	invoices  repositories.InvoiceRepository
 	orders    repositories.OrderRepository
 	suppliers repositories.SupplierRepository
+	credits   repositories.CreditNoteRepository
 }
 
 func (uc *InvoiceUseCases) Get(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
@@ -170,6 +171,12 @@ func (uc *InvoiceUseCases) Cancel(ctx context.Context, in dto.ByID[vo.InvoiceID]
 		inv, err := uc.invoices.FindForUpdate(ctx, in.CompanyID, in.ID)
 		if err != nil {
 			return err
+		}
+		// ใบลดหนี้ตัดยอดผ่านการตัดยอดเหมือนใบจ่าย — แจ้งให้ยกเลิกใบลดหนี้ก่อน (ชัดกว่า "มีการจ่ายแล้ว")
+		if credited, err := uc.credits.HasPosted(ctx, in.CompanyID, in.ID); err != nil {
+			return err
+		} else if credited {
+			return domain.ErrInvoiceHasCredits
 		}
 		if err := inv.Cancel(in.UserID, uc.now()); err != nil {
 			return err

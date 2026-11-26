@@ -296,7 +296,12 @@ func (uc *PaymentUseCases) Create(ctx context.Context, a dto.Actor, in dto.Payme
 			return err
 		}
 		st := p.State()
-		st.ID = docID // id เดียวกับที่ใช้ตัดยอดใบแจ้งหนี้ (ยกเลิกแล้วคืนยอดได้ถูกเอกสาร)
+		st.ID = docID                // id เดียวกับที่ใช้ตัดยอดใบแจ้งหนี้ (ยกเลิกแล้วคืนยอดได้ถูกเอกสาร)
+		if !st.Totals.Wht.IsZero() { // มีภาษีหัก ณ ที่จ่าย -> ออกเลขที่หนังสือรับรอง (50 ทวิ) ใน transaction เดียวกัน
+			if st.WhtCertificateNo, err = uc.number(ctx, a.CompanyID, vo.DocWhtCertificate, in.Date, posting.FiscalYear); err != nil {
+				return err
+			}
+		}
 		p = entities.RehydratePayment(st)
 		whtAccount := vo.GLAccountID{}
 		if !st.Totals.Wht.IsZero() {

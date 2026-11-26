@@ -49,15 +49,17 @@ var errorMapper = func() *httpx.ErrorMapper {
 	for status, errs := range map[int][]error{
 		bad: {domain.ErrInvalidID, domain.ErrInvalidCode, domain.ErrInvalidName, domain.ErrInvalidText, domain.ErrInvalidStatus,
 			domain.ErrInvalidDate, domain.ErrInvalidTaxID, domain.ErrInvalidBranchNo, domain.ErrDuplicateBranch, domain.ErrInvalidTerm, domain.ErrInvalidTaxType,
-			domain.ErrInvalidVatRate, domain.ErrInvalidAmount, domain.ErrInvalidLine, thaiaddress.ErrInvalidAddress},
+			domain.ErrInvalidVatRate, domain.ErrInvalidAmount, domain.ErrInvalidLine, thaiaddress.ErrInvalidAddress,
+			domain.ErrInvalidCreditKind, domain.ErrReasonRequired},
 		notFound: {domain.ErrCustomerNotFound, domain.ErrQuotationNotFound, domain.ErrOrderNotFound, domain.ErrDeliveryNotFound,
-			domain.ErrInvoiceNotFound, domain.ErrItemNotFound},
+			domain.ErrInvoiceNotFound, domain.ErrItemNotFound, domain.ErrCreditNoteNotFound},
 		conflict: {domain.ErrCodeExists, domain.ErrTaxIDExists, domain.ErrInUse, domain.ErrDocumentNoUsed, domain.ErrQuotationUsed},
 		rejected: {domain.ErrCompanyInactive, domain.ErrCustomerInactive, domain.ErrItemInactive, domain.ErrVatNotApplicable,
 			domain.ErrNotDraft, domain.ErrQuotationState, domain.ErrQuotationExpired, domain.ErrOrderNotApproved, domain.ErrOrderNotOpen,
 			domain.ErrOrderHasActivity, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrAlreadyCancelled,
 			domain.ErrInvoicePaid, domain.ErrOverReceipt, domain.ErrInvoiceNotPayable, domain.ErrNoFiscalPeriod,
-			domain.ErrPeriodClosed, domain.ErrSettingsMissing, domain.ErrAccountInvalid, domain.ErrJournalInvalid, domain.ErrWarehouseRequired, domain.ErrBranchNotFound},
+			domain.ErrPeriodClosed, domain.ErrSettingsMissing, domain.ErrAccountInvalid, domain.ErrJournalInvalid, domain.ErrWarehouseRequired, domain.ErrBranchNotFound,
+			domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCreditBeforeInvoice, domain.ErrInvoiceHasCredits, domain.ErrCostUnknown},
 	} {
 		for _, e := range errs {
 			rules = append(rules, httpx.ErrorRule{Err: e, Status: status})
@@ -67,7 +69,8 @@ var errorMapper = func() *httpx.ErrorMapper {
 		domain.ErrDuplicateBranch, domain.ErrTaxIDExists, domain.ErrBranchNotFound, domain.ErrInvalidAmount, domain.ErrInvalidLine,
 		domain.ErrInvoiceNotFound, domain.ErrItemNotFound, domain.ErrItemInactive,
 		domain.ErrQuotationState, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrOverReceipt,
-		domain.ErrInvoiceNotPayable, domain.ErrSettingsMissing, domain.ErrAccountInvalid)
+		domain.ErrInvoiceNotPayable, domain.ErrSettingsMissing, domain.ErrAccountInvalid,
+		domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCostUnknown)
 }()
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {
@@ -461,6 +464,12 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 	handle("POST "+base+"/sales-invoices", create[requests.Invoice](h, uc.Invoices.Create, responses.FromInvoice))
 	handle("GET "+base+"/sales-invoices/{invoiceID}", getOne(h, "invoiceID", uc.Invoices.Get, responses.FromInvoice))
 	handle("PATCH "+base+"/sales-invoices/{invoiceID}", cancelOne(h, "invoiceID", uc.Invoices.Cancel, responses.FromInvoice))
+
+	// ใบลดหนี้: อ้างใบแจ้งหนี้ (รับคืนสินค้า / ลดราคา) — POST = posted, PATCH {"status":"cancelled"} ยกเลิก; ?invoice_id= กรองตามใบแจ้งหนี้
+	handle("GET "+base+"/sales-credit-notes", list(h, docFilter(requests.KindPosted), uc.CreditNotes.List, responses.FromCreditNoteSummary))
+	handle("POST "+base+"/sales-credit-notes", create[requests.CreditNote](h, uc.CreditNotes.Create, responses.FromCreditNote))
+	handle("GET "+base+"/sales-credit-notes/{creditNoteID}", getOne(h, "creditNoteID", uc.CreditNotes.Get, responses.FromCreditNote))
+	handle("PATCH "+base+"/sales-credit-notes/{creditNoteID}", cancelOne(h, "creditNoteID", uc.CreditNotes.Cancel, responses.FromCreditNote))
 
 	// ใบเสร็จรับเงินอยู่ที่ finance (POST /customer-receipts) — ตัดยอดใบแจ้งหนี้ผ่าน Module.SettleReceivables
 }
