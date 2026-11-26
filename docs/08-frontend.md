@@ -152,11 +152,24 @@ browser --(cookie apexis_session)--> Next server --(Authorization: Bearer <token
   - เมนูแสดงเมื่อมีสิทธิ์ `permission` ของเมนู (ตรวจแบบเดียวกับ backend: `*`, `sales.*:read`, `sales.order:*`)
   - แอปแสดงเมื่อเหลืออย่างน้อยหนึ่งเมนู; หน้าแรกของแอป = เมนูแรกที่มีสิทธิ์
   - ซ่อนเมนูเพื่อความสะดวกเท่านั้น — backend ตรวจสิทธิ์ทุกคำขอเสมอ
+  - **ตามประเภทธุรกิจ:** `AppDefinition.businessTypes` = ประเภทที่ใช้แอปนั้น (ไม่ระบุ = ทุกประเภท) — `visibleApps(permissions, businessType)` / `appAvailableFor(app, type)`
+    - คลังสินค้า: ซื้อขาย / ผลิต / ก่อสร้าง (ธุรกิจบริการไม่เห็น)
+    - แอปเฉพาะประเภทในอนาคต (ผลิต = manufacturing, โครงการก่อสร้าง = construction) เพิ่มใน `apps` พร้อม `businessTypes` ของตัวเอง
+    - เปิดแอปที่ไม่ใช้กับประเภทนี้จาก URL ตรง → `AppShell` แสดง "แอปนี้ไม่ได้ใช้กับ{ประเภท}" + ปุ่มกลับหน้ารวมแอป
+    - ไม่รู้ประเภท (`business_type` ไม่มีใน `/me/companies/{id}`) = แสดงทุกแอปตามสิทธิ์
 - บริษัท + สิทธิ์โหลดด้วย `getCompanyContext(companyId)`: 2 คำขอพร้อมกัน ครั้งเดียวต่อ request (React `cache`) แม้ layout / page เรียกซ้ำ
   - `/me/companies/{id}` (organization) ชื่อบริษัท — สมาชิกทุกคนอ่านได้ ไม่ต้องมีสิทธิ์อ่านบริษัท
   - `/companies/{id}/access` (identity) สิทธิ์ของผู้ใช้
   - แยก 2 คำขอเพราะข้อมูลอยู่คนละ module (JOIN ข้าม module ไม่ได้ และ identity ไม่พึ่ง organization) — เรียกพร้อมกันจึงไม่เพิ่มเวลารอ
 - เมนูที่ยังไม่มีหน้าจริงแสดง "หน้านี้กำลังพัฒนา"
+
+### ประเภทธุรกิจ (`config/businessTypes.ts`, `features/companies/BusinessTypePicker.tsx`)
+
+- 4 ประเภท: `service` ธุรกิจบริการทั่วไป, `trading` ธุรกิจซื้อขายสินค้า, `manufacturing` ธุรกิจผลิตสินค้า, `construction` ธุรกิจก่อสร้าง — ชื่อ / คำอธิบายที่ `texts.businessTypes`
+- หน้าสร้างบริษัท (`/companies/new`): บังคับเลือก 1 ประเภทด้วย radio card (fieldset + legend + radio จริง — Tab เข้ากลุ่ม, ลูกศรเลื่อน, focus ring บนการ์ด) ข้อผิดพลาดอยู่ใต้กลุ่ม (`role="alert"`, `aria-describedby`)
+  - ส่ง `business_type` ไปกับ `POST /companies`; backend นำเข้าผังบัญชีมาตรฐาน + ค่าตั้งต้นของประเภทนั้นตอนสร้าง
+  - เปลี่ยนภายหลังไม่ได้: หน้าข้อมูลบริษัทแสดงแบบอ่านอย่างเดียว (ไม่ส่งไปกับ `PUT`)
+- หน้าผังบัญชีว่าง (`DefaultChartPanel`) บอกชื่อประเภทว่าผังมาตรฐานจะเป็นชุดของประเภทไหน
 
 ### หน้ารายการ (แม่แบบ: `organization/branches`, `departments` ...)
 
@@ -340,7 +353,8 @@ test ที่มี:
   - `proxy.server.test.ts` — redirect ไป login พร้อม query เดิม, cookie เสีย, ผ่านเมื่อมี session
   - `app/api/session/route.server.test.ts` — ตั้ง HttpOnly cookie โดยไม่คืน token, ส่งต่อ error, backend ล่ม, ต่าง origin = 403, GET / DELETE
   - `proxy.server.test.ts` ยังตรวจการจำบริษัทล่าสุด (cookie `apexis_company`)
-- `lib/permissions.test.ts` — `covers` ตรงกับ backend, `visibleApps` กรองแอป / เมนูตามสิทธิ์
+- `lib/permissions.test.ts` — `covers` ตรงกับ backend, `visibleApps` กรองแอป / เมนูตามสิทธิ์และประเภทธุรกิจ (บริการไม่เห็นคลังสินค้า), `appAvailableFor`
+- `features/companies/companies.test.tsx` — ประเภทธุรกิจ 4 ตัวเลือก, ไม่เลือก = แจ้งใต้กลุ่มและไม่ส่ง, ส่ง `business_type`, เลือกด้วยลูกศร
 - `lib/url.test.ts` — `param`, `pickQuery`, `withQuery`
 - `components/DataTable/DataTable.test.tsx` — ลิงก์เรียง (ขึ้น / ลง), `aria-sort`, ตารางว่าง, `Pagination`
 - `features/shell/shell.test.tsx` — ไอคอนเปิดแท็บใหม่ด้วยชื่อแท็บของแอป, ปุ่มปิด (ปิดไม่ได้ → กลับหน้ารวมแอป)

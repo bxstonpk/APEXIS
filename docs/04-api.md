@@ -102,12 +102,12 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
-| POST | `/companies` | login | ผู้สร้างเป็น owner — 201 |
+| POST | `/companies` | login | ผู้สร้างเป็น owner + ตั้งผังบัญชีมาตรฐานและค่าตั้งขาย / จัดซื้อ / คลัง / การเงินตาม `business_type` ใน transaction เดียว — 201 (ขั้นใดล้มเหลว = ไม่มีบริษัท) |
 | GET | `/me/companies` | login | บริษัทที่ตัวเองเป็นสมาชิก `?q=&status=&sort=name\|code&page=&page_size=` |
-| GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, status}` — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
+| GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, business_type, status}` (รายการ `/me/companies` มี `business_type` เช่นกัน) — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
 | GET | `/me/companies/{companyID}/letterhead` | สมาชิก | หัวกระดาษเอกสารพิมพ์ `{name, legal_name_th, legal_name_en, tax_id, address{line, sub_district, district, province, postal_code, country}, phone, email, website}` — ไม่ใช่สมาชิก = 404 |
 | GET | `/companies/{companyID}` | `organization.company:read` | |
-| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
+| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code` / `business_type` — ส่งมาจะถูกละเว้น), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
 
 ### ข้อมูลภายใต้บริษัท
 
@@ -127,8 +127,9 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 ### Request body (organization)
 
 ```jsonc
-// POST /companies   (ต้องมีแค่ code, name — ที่เหลือมีค่าเริ่มต้น)
-{ "code": "ACME", "name": "ACME", "tax_id": "0105556000000" }
+// POST /companies   (ต้องมี code, name, business_type — ที่เหลือมีค่าเริ่มต้น)
+// business_type: service (บริการทั่วไป) | trading (ซื้อขายสินค้า) | manufacturing (ผลิตสินค้า) | construction (ก่อสร้าง) — แก้ไม่ได้ภายหลัง
+{ "code": "ACME", "name": "ACME", "business_type": "trading", "tax_id": "0105556000000" }
 
 // PUT /companies/{companyID}   (แทนที่ทั้งก้อน — ต้องส่ง name, base_currency, fiscal_year_start_month, status; code แก้ไม่ได้)
 { "name": "ACME", "tax_id": "0105556000000",
@@ -176,7 +177,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
 | GET | `/accounts/tree` | `ledger.account:read` | ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส ไม่แบ่งหน้า — 1 คิวรี; หน้าผังบัญชีสร้างต้นไม้จาก `parent` (ผังบัญชีมีหลักร้อยบัญชี จึงส่งทั้งชุด) |
-| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐาน 262 บัญชี (245 ตามต้นฉบับ + สินค้าคงเหลือ / ต้นทุนขาย / รายได้จากการขาย ตาม TAS 2) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
+| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจของบริษัท (บริการ 245 / ซื้อขาย 259 / ผลิต 273 / ก่อสร้าง 261 บัญชี — ดู 01-requirements LED-10; บริษัทใหม่ได้ผังนี้ตอนสร้างบริษัทแล้ว) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
 
 | Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
 |---|---|---|---|---|
