@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>APEXIS Login Panel — Glass (square)</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  /*
+   * แผงซ้ายหน้า login (สัดส่วนเกือบจัตุรัส ~1:1 ทั้งจอ 1920 และ 1366) — ใช้แบบ object-cover เต็มแผง
+   * ครึ่งบน = ข้อความ ชิดซ้ายตามแนวเดียวกับการ์ด; ครึ่งล่าง = กลุ่มการ์ดกระจกเรียงทแยงขึ้นขวา (สมดุลกับข้อความ)
+   * ขอบล่าง 96px เว้นไว้ให้ข้อความลิขสิทธิ์ของหน้า; ขอบ 6% ทุกด้านอาจถูกตัดเมื่อแผงไม่จัตุรัสพอดี
+   */
+  :root { --navy:#0a1330; --orange:#f28c1a; --amber:#ffb547; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { width:1080px; height:1080px; overflow:hidden; }
+  body { font-family:'Plex Thai', sans-serif; color:#fff; background:var(--navy); position:relative; }
+
+  .orb { position:absolute; border-radius:50%; filter:blur(80px); }
+  .o1 { width:560px; height:560px; left:420px; top:300px; background:#2c5fb8; opacity:.85; }
+  .o2 { width:440px; height:440px; left:640px; top:640px; background:var(--orange); opacity:.6; }
+  .o3 { width:380px; height:380px; left:80px; top:660px; background:#5b48b8; opacity:.6; }
+  .o4 { width:300px; height:300px; left:820px; top:240px; background:#0f7c91; opacity:.6; }
+  .o5 { width:620px; height:620px; left:-260px; top:-280px; background:#1d3f8f; opacity:.5; }
+  .dots { position:absolute; inset:0; background-image:radial-gradient(rgba(255,255,255,.07) 1.5px, transparent 1.5px); background-size:28px 28px;
+    -webkit-mask-image:linear-gradient(180deg, #000 0%, transparent 45%); mask-image:linear-gradient(180deg, #000 0%, transparent 45%); }
+
+  .copy { position:absolute; left:96px; top:88px; right:96px; }
+  .brand { display:inline-flex; align-items:center; gap:12px; padding:10px 20px; border-radius:999px; font-size:19px; font-weight:600; letter-spacing:.26em;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); }
+  .brand b { width:9px; height:9px; border-radius:50%; background:var(--orange); box-shadow:0 0 12px var(--orange); }
+  h1 { margin-top:30px; font-size:76px; line-height:1.14; font-weight:700; letter-spacing:-.01em; }
+  h1 em { display:block; font-style:normal; background:linear-gradient(90deg, #ffd08a, var(--amber) 40%, var(--orange)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  p.sub { margin-top:22px; font-size:24px; line-height:1.6; color:rgba(255,255,255,.72); max-width:640px; }
+
+  .glass { position:absolute; border-radius:24px; padding:24px 28px;
+    background:linear-gradient(145deg, rgba(255,255,255,.20), rgba(255,255,255,.06));
+    border:1px solid rgba(255,255,255,.28);
+    box-shadow:0 26px 70px rgba(3,8,25,.5), inset 0 1px 0 rgba(255,255,255,.35);
+    backdrop-filter:blur(24px) saturate(150%); -webkit-backdrop-filter:blur(24px) saturate(150%); }
+  .label { font-size:17px; color:rgba(255,255,255,.75); display:flex; align-items:center; gap:9px; }
+  .dot { width:11px; height:11px; border-radius:4px; display:inline-block; }
+  .big { margin-top:8px; font-size:42px; font-weight:700; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+  .up { margin-top:4px; font-size:17px; color:#7ee2b0; font-weight:500; }
+
+  /* กลุ่มการ์ด: เรียงทแยงจากซ้ายล่างขึ้นขวาบน */
+  .c-stock { left:96px; top:700px; width:330px; }
+  .meter { margin-top:14px; height:10px; border-radius:99px; background:rgba(255,255,255,.18); overflow:hidden; }
+  .meter i { display:block; height:100%; width:68%; border-radius:99px; background:linear-gradient(90deg, #ffb547, #c46f17); }
+  .c-sales { left:360px; top:528px; width:470px; height:272px; z-index:2; }
+  .bars { position:absolute; left:28px; right:28px; bottom:24px; height:92px; display:flex; align-items:flex-end; gap:12px; }
+  .bars b { flex:1; border-radius:7px 7px 3px 3px; background:rgba(255,255,255,.28); }
+  .bars b.on { background:linear-gradient(180deg, #ffc37a, var(--orange)); box-shadow:0 0 22px rgba(242,140,26,.6); }
+  .c-inv { left:640px; top:748px; width:344px; z-index:3; }
+  .doc-no { margin-top:6px; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .badge { margin-top:12px; display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:999px; font-size:16px; font-weight:500; background:rgba(126,226,176,.18); color:#a6f0cb; border:1px solid rgba(126,226,176,.35); }
+  .c-mods { left:96px; top:892px; width:500px; padding:16px 18px; display:flex; gap:10px; z-index:1; }
+  .mod { flex:1; height:50px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="orb o5"></div><div class="orb o1"></div><div class="orb o4"></div><div class="orb o3"></div><div class="orb o2"></div>
+  <div class="dots"></div>
+
+  <div class="copy">
+    <div class="brand"><b></b>APEXIS</div>
+    <h1>ERP สำหรับ<em>ธุรกิจไทย</em></h1>
+    <p class="sub">ทุกงานของธุรกิจในระบบเดียว<br>เอกสารเดินต่อกันอัตโนมัติ ตั้งแต่ใบเสนอราคาจนถึงงบการเงิน</p>
+  </div>
+
+  <div class="glass c-stock">
+    <div class="label"><span class="dot" style="background:#c46f17"></span>สินค้าคงเหลือ · คลังหลัก</div>
+    <div class="big" style="font-size:36px">1,284 <span style="font-size:19px;font-weight:500;color:rgba(255,255,255,.7)">รายการ</span></div>
+    <div class="meter"><i></i></div>
+  </div>
+
+  <div class="glass c-sales">
+    <div class="label"><span class="dot" style="background:#c2414f"></span>ยอดขายเดือนนี้ (ก่อน VAT)</div>
+    <div class="big">฿2,480,000</div>
+    <div class="up">▲ 12.4% จากปีก่อน</div>
+    <div class="bars"><b style="height:38%"></b><b style="height:52%"></b><b style="height:45%"></b><b style="height:63%"></b><b style="height:58%"></b><b style="height:74%"></b><b style="height:69%"></b><b class="on" style="height:96%"></b></div>
+  </div>
+
+  <div class="glass c-inv">
+    <div class="label"><span class="dot" style="background:#11795b"></span>ใบกำกับภาษี</div>
+    <div class="doc-no">INV2026-000128</div>
+    <div class="badge">✓ ลงบัญชีอัตโนมัติแล้ว</div>
+  </div>
+
+  <div class="glass c-mods">
+    <div class="mod" style="background:rgba(194,65,79,.55)">ขาย</div>
+    <div class="mod" style="background:rgba(44,95,184,.6)">จัดซื้อ</div>
+    <div class="mod" style="background:rgba(196,111,23,.6)">คลัง</div>
+    <div class="mod" style="background:rgba(15,124,145,.6)">การเงิน</div>
+    <div class="mod" style="background:rgba(17,121,91,.6)">บัญชี</div>
+  </div>
+</body>
+</html>

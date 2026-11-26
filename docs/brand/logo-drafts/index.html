@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEXIS Logo Drafts</title>
+<link rel="stylesheet" href="../banners/login-hero/fonts/fonts.css">
+<style>
+:root { --navy:#101c3b; --line:#e4e7ec; --muted:#5a6376; --canvas:#eef1f6; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--canvas); color:var(--navy); font-family:'Plex Thai', sans-serif; }
+main { max-width:1180px; margin:0 auto; padding:48px 24px 72px; display:flex; flex-direction:column; gap:28px; }
+.top h1 { font-size:30px; font-weight:700; letter-spacing:-.01em; } .top p { margin-top:6px; color:var(--muted); font-size:15px; line-height:1.6; }
+.card { background:#fff; border:1px solid var(--line); border-radius:20px; padding:24px; display:flex; flex-direction:column; gap:16px; box-shadow:0 8px 30px rgba(16,28,59,.06); }
+.card header { display:flex; gap:16px; align-items:flex-start; }
+.num { font-size:13px; font-weight:700; color:#fff; background:var(--navy); border-radius:8px; padding:6px 9px; }
+.card h2 { font-size:20px; font-weight:700; } .card header p { margin-top:4px; font-size:14.5px; color:var(--muted); line-height:1.6; }
+.hero { border-radius:16px; display:flex; align-items:center; justify-content:center; min-height:240px; border:1px solid var(--line);
+  background:radial-gradient(60% 90% at 50% 0%, #f4f7ff, #fff); }
+.hero.dark { border-color:#0a1330; background:radial-gradient(70% 100% at 80% 0%, #24448f 0%, transparent 60%), radial-gradient(50% 80% at 100% 100%, rgba(242,140,26,.35), transparent 60%), #0a1330; }
+.hero.small { min-height:200px; }
+.lockup { display:flex; align-items:center; gap:22px; }
+.word b { display:block; font-weight:700; font-size:68px; line-height:1; letter-spacing:.04em; color:var(--navy); }
+.word b i { font-style:normal; background:linear-gradient(45deg, #ff7a2f, #f28c1a 55%, #ffd08a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.word small { display:block; margin-top:10px; font-size:12.5px; font-weight:500; letter-spacing:.34em; color:var(--muted); }
+.small .word b { font-size:48px; } .small .word small { font-size:10px; margin-top:8px; }
+.dark .word b { color:#fff; } .dark .word small { color:rgba(255,255,255,.6); }
+.row { display:grid; grid-template-columns:1.25fr 1fr; gap:16px; }
+.tiles { display:grid; grid-template-columns:auto auto 1fr; gap:16px; align-items:center; border:1px solid var(--line); border-radius:16px; padding:16px; }
+.app { width:104px; height:104px; border-radius:26px; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(80% 80% at 30% 0%, #2a4fc2, #101c3b 70%); box-shadow:0 10px 24px rgba(16,28,59,.3), inset 0 1px 0 rgba(255,255,255,.2); }
+.app.light { background:linear-gradient(180deg, #fff, #f1f4fa); box-shadow:0 10px 24px rgba(16,28,59,.12), inset 0 0 0 1px var(--line); }
+.sizes { display:flex; align-items:flex-end; gap:14px; justify-content:center; flex-wrap:wrap; }
+.sz { display:flex; flex-direction:column; align-items:center; gap:6px; } .sz span { font-size:11px; color:var(--muted); }
+@media (max-width:860px) { .row { grid-template-columns:1fr; } .lockup { flex-direction:column; text-align:center; } .word b { font-size:48px; } }
+</style></head>
+<body><main>
+<div class="top"><h1>APEXIS — โลโก้ draft v2</h1>
+<p>แนว Gradient / Abstract mark ให้เข้าชุดกับภาพหน้า login (glass) · สีกรมท่า #101c3b · น้ำเงิน #1d3f8f → #4f86f7 · ส้ม #f28c1a → #ffd08a<br>
+แต่ละแนว: แนวนอนพื้นสว่าง / พื้นเข้ม · ไอคอนแอป · ทดสอบขนาด 16–64 px · ตัวอักษร APEXIS ใช้ IBM Plex Sans Thai (ฟอนต์เดียวกับระบบ)</p></div>
+
+<section class="card" id="1-glass-prism">
+  <header><span class="num">01</span><div><h2>Glass Prism</h2><p>ขา A เป็นแผ่นกระจกไล่สีสองชิ้นซ้อนกัน คานส้มเรืองแสง — ภาษาเดียวกับภาพ login (glass) ดูพรีเมียม ทันสมัย</p></div></header>
+  <div class="hero light">
+    <div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="132" height="132" fill="none"><defs>
+  <linearGradient id="c0lblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0ldeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0lsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0lmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0lfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0lgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0lglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0lsky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0ldeep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0lgloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0lfire)" filter="url(#c0lglow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0lfire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div>
+  </div>
+  <div class="row">
+    <div class="hero dark small"><div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="92" height="92" fill="none"><defs>
+  <linearGradient id="c0dblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0ddeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0dsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0dmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0dfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0dgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0dglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0dsky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0ddeep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0dgloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0dfire)" filter="url(#c0dglow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0dfire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div></div>
+    <div class="tiles">
+      <div class="app"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c0ablue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0adeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0asky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0amid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0afire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0agloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0aglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0asky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0adeep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0agloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0afire)" filter="url(#c0aglow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0afire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg></div>
+      <div class="app light"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c0bblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0bdeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0bsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0bmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0bfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0bgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0bglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0bsky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0bdeep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0bgloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0bfire)" filter="url(#c0bglow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0bfire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg></div>
+      <div class="sizes"><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="16" height="16" fill="none"><defs>
+  <linearGradient id="c0s16blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0s16deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0s16sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0s16mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0s16fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0s16gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0s16glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0s16sky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s16deep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s16gloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s16fire)" filter="url(#c0s16glow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s16fire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><span>16px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="24" height="24" fill="none"><defs>
+  <linearGradient id="c0s24blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0s24deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0s24sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0s24mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0s24fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0s24gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0s24glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0s24sky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s24deep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s24gloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s24fire)" filter="url(#c0s24glow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s24fire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><span>24px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="32" height="32" fill="none"><defs>
+  <linearGradient id="c0s32blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0s32deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0s32sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0s32mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0s32fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0s32gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0s32glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0s32sky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s32deep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s32gloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s32fire)" filter="url(#c0s32glow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s32fire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><span>32px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="48" height="48" fill="none"><defs>
+  <linearGradient id="c0s48blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0s48deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0s48sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0s48mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0s48fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0s48gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0s48glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0s48sky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s48deep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s48gloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s48fire)" filter="url(#c0s48glow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s48fire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><span>48px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="64" height="64" fill="none"><defs>
+  <linearGradient id="c0s64blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c0s64deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c0s64sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c0s64mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c0s64fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c0s64gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c0s64glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M50 10 Q56 3 62 10 L102 106 Q104 114 96 114 H80 Q75 114 73 109 L41 32 Z" fill="url(#c0s64sky)" opacity=".92"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s64deep)" opacity=".9" style="mix-blend-mode:multiply"/>
+<path d="M70 10 Q64 3 58 10 L18 106 Q16 114 24 114 H40 Q45 114 47 109 L79 32 Z" fill="url(#c0s64gloss)"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s64fire)" filter="url(#c0s64glow)" opacity=".75"/>
+<rect x="26" y="74" width="70" height="11" rx="5.5" fill="url(#c0s64fire)"/>
+<rect x="31" y="75.5" width="44" height="3" rx="1.5" fill="#fff" opacity=".5"/></svg><span>64px</span></div></div>
+    </div>
+  </div>
+</section>
+<section class="card" id="2-folded-apex">
+  <header><span class="num">02</span><div><h2>Folded Apex</h2><p>ริบบิ้นพับเป็นตัว A มีด้านมืด / สว่าง / รอยพับ ยอดเป็นแผ่นส้ม = Apex — มีมิติ จำง่าย ย่อเล็กแล้วยังเป็นตัว A</p></div></header>
+  <div class="hero light">
+    <div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="132" height="132" fill="none"><defs>
+  <linearGradient id="c1lblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1ldeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1lsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1lmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1lfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1lgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1lglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1lmid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1lblue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1lfire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1lgloss)" opacity=".7"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div>
+  </div>
+  <div class="row">
+    <div class="hero dark small"><div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="92" height="92" fill="none"><defs>
+  <linearGradient id="c1dblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1ddeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1dsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1dmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1dfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1dgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1dglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1dmid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1dblue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1dfire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1dgloss)" opacity=".7"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div></div>
+    <div class="tiles">
+      <div class="app"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c1ablue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1adeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1asky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1amid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1afire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1agloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1aglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1amid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1ablue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1afire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1agloss)" opacity=".7"/></svg></div>
+      <div class="app light"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c1bblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1bdeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1bsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1bmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1bfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1bgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1bglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1bmid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1bblue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1bfire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1bgloss)" opacity=".7"/></svg></div>
+      <div class="sizes"><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="16" height="16" fill="none"><defs>
+  <linearGradient id="c1s16blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1s16deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1s16sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1s16mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1s16fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1s16gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1s16glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1s16mid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s16blue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1s16fire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s16gloss)" opacity=".7"/></svg><span>16px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="24" height="24" fill="none"><defs>
+  <linearGradient id="c1s24blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1s24deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1s24sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1s24mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1s24fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1s24gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1s24glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1s24mid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s24blue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1s24fire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s24gloss)" opacity=".7"/></svg><span>24px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="32" height="32" fill="none"><defs>
+  <linearGradient id="c1s32blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1s32deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1s32sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1s32mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1s32fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1s32gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1s32glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1s32mid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s32blue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1s32fire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s32gloss)" opacity=".7"/></svg><span>32px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="48" height="48" fill="none"><defs>
+  <linearGradient id="c1s48blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1s48deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1s48sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1s48mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1s48fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1s48gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1s48glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1s48mid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s48blue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1s48fire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s48gloss)" opacity=".7"/></svg><span>48px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="64" height="64" fill="none"><defs>
+  <linearGradient id="c1s64blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c1s64deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c1s64sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c1s64mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c1s64fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c1s64gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c1s64glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#c1s64mid)"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s64blue)"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#c1s64fire)"/>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#c1s64gloss)" opacity=".7"/></svg><span>64px</span></div></div>
+    </div>
+  </div>
+</section>
+<section class="card" id="3-ascend-x">
+  <header><span class="num">03</span><div><h2>Ascend X</h2><p>ใช้ตัว X ซึ่งเป็นลายเซ็นของชื่อ (APE·X·IS) เส้นส้มพุ่งเป็นลูกศรขึ้น = การเติบโต — โดดเด่นที่สุด ต่างจากโลโก้ ERP ทั่วไป</p></div></header>
+  <div class="hero light">
+    <div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="132" height="132" fill="none"><defs>
+  <linearGradient id="c2lblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2ldeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2lsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2lmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2lfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2lgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2lglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2lblue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2lgloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2lfire)" stroke-width="20" stroke-linecap="round" filter="url(#c2lglow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2lfire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2lfire)" stroke="url(#c2lfire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div>
+  </div>
+  <div class="row">
+    <div class="hero dark small"><div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="92" height="92" fill="none"><defs>
+  <linearGradient id="c2dblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2ddeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2dsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2dmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2dfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2dgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2dglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2dblue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2dgloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2dfire)" stroke-width="20" stroke-linecap="round" filter="url(#c2dglow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2dfire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2dfire)" stroke="url(#c2dfire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div></div>
+    <div class="tiles">
+      <div class="app"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c2ablue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2adeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2asky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2amid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2afire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2agloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2aglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2ablue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2agloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2afire)" stroke-width="20" stroke-linecap="round" filter="url(#c2aglow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2afire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2afire)" stroke="url(#c2afire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg></div>
+      <div class="app light"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c2bblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2bdeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2bsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2bmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2bfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2bgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2bglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2bblue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2bgloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2bfire)" stroke-width="20" stroke-linecap="round" filter="url(#c2bglow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2bfire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2bfire)" stroke="url(#c2bfire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg></div>
+      <div class="sizes"><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="16" height="16" fill="none"><defs>
+  <linearGradient id="c2s16blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2s16deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2s16sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2s16mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2s16fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2s16gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2s16glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2s16blue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2s16gloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2s16fire)" stroke-width="20" stroke-linecap="round" filter="url(#c2s16glow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2s16fire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2s16fire)" stroke="url(#c2s16fire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><span>16px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="24" height="24" fill="none"><defs>
+  <linearGradient id="c2s24blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2s24deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2s24sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2s24mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2s24fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2s24gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2s24glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2s24blue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2s24gloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2s24fire)" stroke-width="20" stroke-linecap="round" filter="url(#c2s24glow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2s24fire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2s24fire)" stroke="url(#c2s24fire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><span>24px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="32" height="32" fill="none"><defs>
+  <linearGradient id="c2s32blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2s32deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2s32sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2s32mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2s32fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2s32gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2s32glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2s32blue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2s32gloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2s32fire)" stroke-width="20" stroke-linecap="round" filter="url(#c2s32glow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2s32fire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2s32fire)" stroke="url(#c2s32fire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><span>32px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="48" height="48" fill="none"><defs>
+  <linearGradient id="c2s48blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2s48deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2s48sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2s48mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2s48fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2s48gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2s48glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2s48blue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2s48gloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2s48fire)" stroke-width="20" stroke-linecap="round" filter="url(#c2s48glow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2s48fire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2s48fire)" stroke="url(#c2s48fire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><span>48px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="64" height="64" fill="none"><defs>
+  <linearGradient id="c2s64blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c2s64deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c2s64sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c2s64mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c2s64fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c2s64gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c2s64glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<path d="M24 22 L96 98" stroke="url(#c2s64blue)" stroke-width="22" stroke-linecap="round"/>
+<path d="M24 22 L96 98" stroke="url(#c2s64gloss)" stroke-width="22" stroke-linecap="round" opacity=".6"/>
+<path d="M30 100 L82 30" stroke="url(#c2s64fire)" stroke-width="20" stroke-linecap="round" filter="url(#c2s64glow)" opacity=".6"/>
+<path d="M30 100 L80 33" stroke="url(#c2s64fire)" stroke-width="20" stroke-linecap="round"/>
+<path d="M66 18 L100 14 L96 48 Z" fill="url(#c2s64fire)" stroke="url(#c2s64fire)" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="60" cy="60" r="7" fill="#fff" opacity=".9"/></svg><span>64px</span></div></div>
+    </div>
+  </div>
+</section>
+<section class="card" id="4-orbit-apex">
+  <header><span class="num">04</span><div><h2>Orbit Apex</h2><p>ต่อยอดโลโก้ปัจจุบัน (A + วงโคจรส้ม) แต่เรียบและคมขึ้น วงโคจรผ่านหน้า / หลังตัว A จริง — เปลี่ยนแล้วผู้ใช้เดิมยังจำได้</p></div></header>
+  <div class="hero light">
+    <div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="132" height="132" fill="none"><defs>
+  <linearGradient id="c3lblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3ldeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3lsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3lmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3lfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3lgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3lglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3lback"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3lfire)" stroke-width="5" clip-path="url(#c3lback)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3lblue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3lgloss)" opacity=".8"/>
+<clipPath id="c3lfront"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3lfire)" stroke-width="5" clip-path="url(#c3lfront)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div>
+  </div>
+  <div class="row">
+    <div class="hero dark small"><div class="lockup"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="92" height="92" fill="none"><defs>
+  <linearGradient id="c3dblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3ddeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3dsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3dmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3dfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3dgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3dglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3dback"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3dfire)" stroke-width="5" clip-path="url(#c3dback)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3dblue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3dgloss)" opacity=".8"/>
+<clipPath id="c3dfront"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3dfire)" stroke-width="5" clip-path="url(#c3dfront)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><div class="word"><b>APE<i>X</i>IS</b><small>ENTERPRISE RESOURCE PLANNING</small></div></div></div>
+    <div class="tiles">
+      <div class="app"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c3ablue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3adeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3asky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3amid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3afire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3agloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3aglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3aback"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3afire)" stroke-width="5" clip-path="url(#c3aback)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3ablue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3agloss)" opacity=".8"/>
+<clipPath id="c3afront"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3afire)" stroke-width="5" clip-path="url(#c3afront)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg></div>
+      <div class="app light"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="68" height="68" fill="none"><defs>
+  <linearGradient id="c3bblue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3bdeep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3bsky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3bmid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3bfire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3bgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3bglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3bback"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3bfire)" stroke-width="5" clip-path="url(#c3bback)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3bblue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3bgloss)" opacity=".8"/>
+<clipPath id="c3bfront"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3bfire)" stroke-width="5" clip-path="url(#c3bfront)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg></div>
+      <div class="sizes"><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="16" height="16" fill="none"><defs>
+  <linearGradient id="c3s16blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3s16deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3s16sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3s16mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3s16fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3s16gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3s16glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3s16back"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s16fire)" stroke-width="5" clip-path="url(#c3s16back)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3s16blue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3s16gloss)" opacity=".8"/>
+<clipPath id="c3s16front"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s16fire)" stroke-width="5" clip-path="url(#c3s16front)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><span>16px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="24" height="24" fill="none"><defs>
+  <linearGradient id="c3s24blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3s24deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3s24sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3s24mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3s24fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3s24gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3s24glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3s24back"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s24fire)" stroke-width="5" clip-path="url(#c3s24back)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3s24blue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3s24gloss)" opacity=".8"/>
+<clipPath id="c3s24front"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s24fire)" stroke-width="5" clip-path="url(#c3s24front)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><span>24px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="32" height="32" fill="none"><defs>
+  <linearGradient id="c3s32blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3s32deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3s32sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3s32mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3s32fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3s32gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3s32glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3s32back"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s32fire)" stroke-width="5" clip-path="url(#c3s32back)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3s32blue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3s32gloss)" opacity=".8"/>
+<clipPath id="c3s32front"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s32fire)" stroke-width="5" clip-path="url(#c3s32front)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><span>32px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="48" height="48" fill="none"><defs>
+  <linearGradient id="c3s48blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3s48deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3s48sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3s48mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3s48fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3s48gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3s48glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3s48back"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s48fire)" stroke-width="5" clip-path="url(#c3s48back)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3s48blue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3s48gloss)" opacity=".8"/>
+<clipPath id="c3s48front"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s48fire)" stroke-width="5" clip-path="url(#c3s48front)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><span>48px</span></div><div class="sz"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="64" height="64" fill="none"><defs>
+  <linearGradient id="c3s64blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4f86f7"/><stop offset="1" stop-color="#1d3f8f"/></linearGradient>
+  <linearGradient id="c3s64deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a4fc2"/><stop offset="1" stop-color="#101c3b"/></linearGradient>
+  <linearGradient id="c3s64sky" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb4ff"/><stop offset=".55" stop-color="#4f86f7"/><stop offset="1" stop-color="#2a4fc2"/></linearGradient>
+  <linearGradient id="c3s64mid" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3466dd"/><stop offset="1" stop-color="#1a3278"/></linearGradient>
+  <linearGradient id="c3s64fire" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".55" stop-color="#f28c1a"/><stop offset="1" stop-color="#ffd08a"/></linearGradient>
+  <linearGradient id="c3s64gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+  <filter id="c3s64glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<clipPath id="c3s64back"><rect x="0" y="0" width="120" height="62"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s64fire)" stroke-width="5" clip-path="url(#c3s64back)" opacity=".55"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 L42 108 Q40 112 36 112 H20 Q14 112 16 106 L54 14 Q56 10 60 10 Z" fill="url(#c3s64blue)"/>
+<path d="M60 10 Q64 10 66 14 L104 106 Q106 112 100 112 H84 Q80 112 78 108 L60 62 Z" fill="#101c3b" opacity=".28"/>
+<path d="M60 10 Q56 10 54 14 L16 106 Q14 112 20 112 H36 Q40 112 42 108 L60 62 Z" fill="url(#c3s64gloss)" opacity=".8"/>
+<clipPath id="c3s64front"><rect x="0" y="62" width="120" height="58"/></clipPath>
+<ellipse cx="60" cy="66" rx="54" ry="17" transform="rotate(-18 60 66)" fill="none" stroke="url(#c3s64fire)" stroke-width="5" clip-path="url(#c3s64front)"/>
+<circle cx="108" cy="44" r="5" fill="#ffd08a"/><circle cx="108" cy="44" r="11" fill="#ffb547" opacity=".3"/></svg><span>64px</span></div></div>
+    </div>
+  </div>
+</section>
+</main></body></html>

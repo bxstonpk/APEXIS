@@ -1,47 +1,37 @@
 import type { ReactNode } from 'react'
 import { brand, format, texts } from '@/config'
-import { appTexts, apps } from '@/config/apps'
 
 /**
  * โครงหน้าก่อนเข้าสู่ระบบ
- * - จอกว้าง: ซ้าย = แผงแบรนด์สีกรมท่า (คำโปรย + โมดูลในระบบ + ลวดลายเส้นโค้งสีส้มและกราฟแท่งจากโลโก้), ขวา = โลโก้ + ฟอร์ม
- * - จอแคบ: โลโก้ + ฟอร์ม (ไม่มีแผงแบรนด์)
- * รายชื่อโมดูลมาจาก config/apps.ts (ชุดเดียวกับหน้ารวมแอป) — ไม่มีข้อความเขียนตายใน component
+ * - จอกว้าง: แบ่งครึ่ง — ซ้าย = แผงสีกรมท่า (สีเดียวกับพื้นภาพ) มีแบนเนอร์จัตุรัส (docs/brand/banners/login-hero/glass-1080x1080) อยู่กลางแผง, ขวา = โลโก้ + ฟอร์ม
+ *   ขนาด = ครึ่งทางระหว่าง min(72%, 72vh, 640px) กับด้านที่สั้นกว่าของแผง; ขอบภาพจางเข้าพื้นทั้ง 4 ด้าน (EDGE_FADE) จึงกลืนเป็นชิ้นเดียวกับแผง
+ * - จอแคบ: โลโก้ + ฟอร์ม (ไม่โหลดภาพ — ซ่อนด้วย CSS และภาพเป็น loading="lazy")
  */
 export function AuthLayout({ children }: { children: ReactNode }) {
   const year = new Date().getFullYear()
-  const modules = apps.filter((a) => a.key !== 'users')
+  const hero = brand.loginHero
 
   return (
-    <div className="grid min-h-full bg-surface lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+    <div className="grid min-h-full bg-surface lg:grid-cols-2">
       {/* แผงแบรนด์ */}
-      <aside className="relative hidden overflow-hidden bg-nav text-white lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
-        <BrandArt />
-
-        <p className="relative text-[13px] font-medium tracking-[0.2em] text-white/55">APEXIS · ERP</p>
-
-        <div className="relative max-w-md">
-          <span aria-hidden className="mb-6 block h-1 w-12 rounded-full bg-accent" />
-          <h2 className="text-[34px] leading-[1.25] font-semibold tracking-tight text-balance">{texts.app.tagline}</h2>
-          <p className="mt-4 text-[15px] leading-relaxed text-white/70">{texts.app.pitch}</p>
-
-          <p className="mt-10 mb-3 text-[13px] font-medium text-white/50">{texts.app.modulesLabel}</p>
-          <ul className="grid grid-cols-2 gap-2">
-            {modules.map((app) => {
-              const Icon = app.icon
-              return (
-                <li key={app.key} className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-nav/70 px-3 py-2.5 backdrop-blur-sm">
-                  <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${app.tone}`}>
-                    <Icon aria-hidden className="size-4" strokeWidth={2} />
-                  </span>
-                  <span className="text-sm text-white/85">{appTexts(app.key).name}</span>
-                </li>
-              )
-            })}
-          </ul>
+      <aside className="relative hidden items-center justify-center overflow-hidden lg:flex" style={{ backgroundColor: hero.background }}>
+        {/* แสงฟุ้งรอบแบนเนอร์ ให้แผงไม่เรียบเกินไป */}
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-32 -left-32 size-[30rem] rounded-full bg-primary/40 blur-3xl" />
+          <div className="absolute -right-24 -bottom-32 size-[26rem] rounded-full bg-accent/20 blur-3xl" />
         </div>
-
-        <p className="relative text-[13px] text-white/45">{format(texts.footer.copyright, { year })}</p>
+        {/* eslint-disable-next-line @next/next/no-img-element -- ภาพ WebP ที่ย่อไว้แล้ว ไม่ต้องผ่าน image optimizer */}
+        <img
+          src={hero.src}
+          width={hero.width}
+          height={hero.height}
+          alt={texts.app.loginHeroAlt}
+          loading="lazy"
+          decoding="async"
+          className="relative aspect-square w-[calc((min(72%,72vh,640px)+min(100%,100vh))/2)]"
+          style={{ maskImage: EDGE_FADE, WebkitMaskImage: EDGE_FADE, maskComposite: 'intersect', WebkitMaskComposite: 'source-in' }}
+        />
+        <p className="absolute bottom-8 left-12 text-[13px] text-white/45 xl:left-16">{format(texts.footer.copyright, { year })}</p>
       </aside>
 
       {/* ฟอร์ม */}
@@ -69,22 +59,6 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   )
 }
 
-/** ลวดลายตกแต่งของแผงแบรนด์: แสงฟุ้ง + ตารางจุด + เส้นโค้งสีส้ม (ล้อเส้นวงโคจรในโลโก้) + กราฟแท่ง (ล้อกราฟในโลโก้) */
-function BrandArt() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0">
-      <div className="absolute -top-40 -left-40 size-[36rem] rounded-full bg-primary/50 blur-3xl" />
-      <div className="absolute -right-32 -bottom-48 size-[28rem] rounded-full bg-accent/15 blur-3xl" />
-      <div className="absolute inset-0 [background-image:radial-gradient(rgb(255_255_255/0.09)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:linear-gradient(to_bottom,transparent,black_30%,black_70%,transparent)]" />
-      <svg className="absolute right-0 bottom-0 h-[48%] w-full" viewBox="0 0 600 500" preserveAspectRatio="xMaxYMax meet" fill="none">
-        {/* กราฟแท่ง */}
-        {[0, 1, 2, 3, 4].map((i) => (
-          <rect key={i} x={360 + i * 44} y={420 - (i + 1) * 46} width="28" height={(i + 1) * 46 + 80} rx="3" fill="white" fillOpacity={0.035 + i * 0.012} />
-        ))}
-        {/* เส้นโค้งสีส้ม */}
-        <path d="M-20 470 C 160 330, 380 250, 640 210" stroke="var(--color-accent)" strokeWidth="2.5" strokeLinecap="round" strokeOpacity="0.9" />
-        <path d="M-20 495 C 170 365, 390 290, 640 255" stroke="var(--color-accent)" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.35" />
-      </svg>
-    </div>
-  )
-}
+/** จางขอบภาพทั้ง 4 ด้าน (6%) ให้กลืนกับพื้นแผง — ข้อความในภาพเริ่มที่ ~9% จากขอบ จึงไม่ถูกจาง */
+const EDGE_FADE =
+  'linear-gradient(to right, transparent, #000 6%, #000 94%, transparent), linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent)'
