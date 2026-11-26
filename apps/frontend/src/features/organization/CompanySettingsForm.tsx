@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import { Alert, Badge, Button, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
+import { businessTypeName, type BusinessType } from '@/config/businessTypes'
 import { AddressFields, emptyAddress, FormBar, StatusSelect, type Address } from '@/features/forms/FormParts'
 import { cx } from '@/lib/cx'
 import { apiRequest, errorMessage } from '@/lib/http'
@@ -26,6 +27,8 @@ export type Company = {
   amount_decimals: number
   quantity_decimals: number
   status: string
+  /** กำหนดตอนสร้างบริษัท แก้ไม่ได้ (ไม่ส่งไปกับ PUT) */
+  business_type?: BusinessType
 }
 
 type Field = 'name' | 'base_currency' | 'email' | 'phone' | 'postal_code' | 'country'
@@ -91,7 +94,7 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
 
     setBusy(true)
     try {
-      const { id: _id, code: _code, ...body } = v
+      const { id: _id, code: _code, business_type: _type, ...body } = v
       const next = { ...v, name: v.name.trim(), address: { ...v.address, country: v.address.country.trim().toUpperCase() || 'TH' } }
       await apiRequest(`/companies/${company.id}`, { method: 'PUT', body: { ...body, name: next.name, address: next.address } })
       setBase(next)
@@ -118,6 +121,7 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
 
       <SettingsSection title={t.sections.general} description={t.sections.generalDescription}>
         <ReadOnlyValue label={f.code} value={v.code} hint={t.readOnlyCode} />
+        {v.business_type && <ReadOnlyValue label={texts.businessTypes.label} value={businessTypeName(v.business_type)} hint={texts.businessTypes.readOnlyHint} />}
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField label={f.legalNameTh} value={v.legal_name_th} maxLength={300} disabled={readOnly} onChange={(e) => set('legal_name_th', e.target.value)} />
         <TextField label={f.legalNameEn} value={v.legal_name_en} maxLength={300} disabled={readOnly} onChange={(e) => set('legal_name_en', e.target.value)} />

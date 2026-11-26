@@ -51,7 +51,7 @@ async function Launcher({ companyId, user }: { companyId: string; user: { name: 
     )
   }
 
-  const available = visibleApps(ctx.permissions)
+  const available = visibleApps(ctx.permissions, ctx.company.business_type)
   const today = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full' }).format(new Date())
   return (
     <div className="flex min-h-full flex-col bg-[radial-gradient(70rem_28rem_at_50%_-6rem,var(--color-primary-soft),transparent)]">

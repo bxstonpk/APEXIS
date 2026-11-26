@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import type { BusinessType } from '@/config/businessTypes'
 import { ApiError } from '@/lib/http'
 import { backendGet } from './backend'
 
@@ -8,6 +9,8 @@ export type CompanySummary = {
   name: string
   tax_id?: string
   status: string
+  /** ประเภทธุรกิจ (กำหนดตอนสร้างบริษัท) — ใช้เลือกแอปที่แสดง; ไม่มีค่า = แสดงทุกแอป */
+  business_type?: BusinessType
 }
 
 export type CompanyContext = {

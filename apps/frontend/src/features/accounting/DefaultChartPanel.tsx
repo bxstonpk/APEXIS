@@ -5,18 +5,23 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Alert, Button, ButtonLink } from '@/components'
 import { format, texts } from '@/config'
+import { businessTypeName } from '@/config/businessTypes'
 import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 
-/** หน้าว่างของผังบัญชี: สร้างผังบัญชีมาตรฐาน (POST /accounts/defaults) หรือสร้างบัญชีเอง */
-export function DefaultChartPanel({ apiPath, createHref }: { apiPath: string; createHref: string | false }) {
+/**
+ * หน้าว่างของผังบัญชี: สร้างผังบัญชีมาตรฐาน (POST /accounts/defaults) หรือสร้างบัญชีเอง
+ * ผังมาตรฐานเป็นชุดตามประเภทธุรกิจของบริษัท (backend เลือกเอง) — แสดงชื่อประเภทให้ผู้ใช้รู้ว่าจะได้ผังชุดไหน
+ */
+export function DefaultChartPanel({ apiPath, createHref, businessType }: { apiPath: string; createHref: string | false; businessType?: string }) {
   const t = texts.accounts.empty
+  const type = businessTypeName(businessType) || texts.businessTypes.label
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function create() {
-    if (!window.confirm(t.confirm)) return
+    if (!window.confirm(format(t.confirm, { type }))) return
     setBusy(true)
     setError(null)
     try {
@@ -36,7 +41,7 @@ export function DefaultChartPanel({ apiPath, createHref }: { apiPath: string; cr
         <BookOpenCheck aria-hidden className="size-6" />
       </span>
       <h2 className="mt-4 text-base font-semibold">{t.title}</h2>
-      <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-muted">{t.hint}</p>
+      <p className="mt-1 max-w-xl text-sm leading-relaxed text-ink-muted">{format(t.hint, { type })}</p>
       {error && (
         <div className="mt-4 w-full max-w-xl text-left">
           <Alert tone="error">{error}</Alert>

@@ -1,7 +1,8 @@
 import { Suspense, type ReactNode } from 'react'
 import { ButtonLink } from '@/components'
-import { appConfig, texts } from '@/config'
-import { appTexts, companyPath, findApp, visibleApps, type AppDefinition } from '@/config/apps'
+import { appConfig, format, texts } from '@/config'
+import { appAvailableFor, appTexts, companyPath, findApp, visibleApps, type AppDefinition } from '@/config/apps'
+import { businessTypeName } from '@/config/businessTypes'
 import { NavSkeleton, PageSkeleton } from '@/features/loading/PageSkeleton'
 import { getCompanyContext } from '@/lib/server/company'
 import { AppNav } from './AppNav'
@@ -11,7 +12,7 @@ import { MessagePanel } from './MessagePanel'
 /**
  * โครงหน้าของแอป (แท็บที่เปิดจากหน้ารวมแอป):
  * [✕ ปิด] [ไอคอน + ชื่อแอป] [เมนูของแอปตามสิทธิ์ ...] [ชื่อบริษัท]
- * ไม่มีสิทธิ์แอปนี้ / ไม่ใช่สมาชิกบริษัท → แสดงข้อความแทนเนื้อหา
+ * ไม่มีสิทธิ์แอปนี้ / ไม่ใช่สมาชิกบริษัท / แอปไม่ใช้กับประเภทธุรกิจของบริษัท (เปิดจาก URL ตรง) → แสดงข้อความแทนเนื้อหา
  *
  * ระหว่างรอสิทธิ์ของผู้ใช้ (เปิดแอปในแท็บใหม่) แสดงแถบแอป + skeleton ทันที — ชื่อ / ไอคอนแอปรู้จาก appKey ไม่ต้องรอ backend
  * การเปลี่ยนหน้าภายในแอปใช้ loading.tsx ของแต่ละแอป (แถบแอปคงอยู่)
@@ -47,7 +48,17 @@ async function AppShellContent({ companyId, appKey, children }: { companyId: str
 
   const launcher = companyPath(companyId)
   const def = findApp(appKey)
-  const app = def && visibleApps(ctx.permissions).find((a) => a.key === def.key)
+  const businessType = ctx.company.business_type
+  if (def && !appAvailableFor(def, businessType)) {
+    return (
+      <MessagePanel
+        title={format(texts.businessTypes.appUnavailable, { type: businessTypeName(businessType) })}
+        description={texts.businessTypes.appUnavailableDescription}
+        action={<ButtonLink href={launcher}>{texts.launcher.pageTitle}</ButtonLink>}
+      />
+    )
+  }
+  const app = def && visibleApps(ctx.permissions, businessType).find((a) => a.key === def.key)
   if (!def || !app) {
     return (
       <MessagePanel

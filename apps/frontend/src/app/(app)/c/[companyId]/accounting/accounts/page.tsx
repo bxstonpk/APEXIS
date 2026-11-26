@@ -104,7 +104,7 @@ export default async function AccountsPage({ params, searchParams }: Props) {
     <>
       <ListHeader title={t.heading} description={t.description} createHref={tree.length > 0 && createHref} count={tree.length} />
       {tree.length === 0 ? (
-        <DefaultChartPanel apiPath={ledgerApi.accountDefaults(companyId)} createHref={createHref} />
+        <DefaultChartPanel apiPath={ledgerApi.accountDefaults(companyId)} createHref={createHref} businessType={ctx.company.business_type} />
       ) : (
         <>
           {toolbar}

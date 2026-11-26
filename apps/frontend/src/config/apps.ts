@@ -9,6 +9,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { can } from '@/lib/permissions'
+import type { BusinessType } from './businessTypes'
 import { texts } from './texts'
 
 /**
@@ -18,6 +19,8 @@ import { texts } from './texts'
  * - แอปแสดงเมื่อผู้ใช้มีสิทธิ์อย่างน้อยหนึ่งเมนู; เมนูแสดงเมื่อมีสิทธิ์ `permission` ของเมนูนั้น
  * - ชื่อแอป / เมนูอยู่ที่ texts.apps[app.key] (locales/th.ts); สีไอคอนเป็น token ใน styles/app.css
  * - เมนูแรกที่มีสิทธิ์ = หน้าแรกของแอป
+ * - `businessTypes`: แอปแสดงเฉพาะบริษัทประเภทธุรกิจที่ระบุ (ไม่ระบุ = ทุกประเภท) เช่น คลังสินค้าไม่แสดงในธุรกิจบริการ
+ *   แอปเฉพาะประเภท (ผลิต / โครงการก่อสร้าง) เพิ่มที่นี่โดยระบุ businessTypes ของตัวเอง
  */
 export type AppMenuItem = {
   /** key ใน texts.apps[app].menu และ path ต่อจาก /c/{companyId}/{app}/ */
@@ -31,6 +34,8 @@ export type AppDefinition = {
   /** class สีพื้นของไอคอน (token --color-app-*) */
   tone: string
   menu: readonly AppMenuItem[]
+  /** ประเภทธุรกิจที่ใช้แอปนี้ — ไม่ระบุ = ทุกประเภท */
+  businessTypes?: readonly BusinessType[]
 }
 
 export type AppKey = keyof typeof texts.apps
@@ -71,6 +76,7 @@ export const apps: readonly AppDefinition[] = [
     key: 'inventory',
     icon: Package,
     tone: 'bg-app-inventory',
+    businessTypes: ['trading', 'manufacturing', 'construction'],
     menu: [
       { path: 'dashboard', permission: 'inventory.report:read' },
       { path: 'documents', permission: 'inventory.document:read' },
@@ -141,9 +147,17 @@ export function appTexts(key: AppKey): { name: string; menu: Record<string, stri
   return texts.apps[key] as { name: string; menu: Record<string, string> }
 }
 
-/** แอปที่ผู้ใช้เห็น — เหลือเฉพาะเมนูที่มีสิทธิ์ และตัดแอปที่ไม่เหลือเมนู */
-export function visibleApps(permissions: readonly string[]): AppDefinition[] {
+/**
+ * แอปใช้กับประเภทธุรกิจนี้ได้หรือไม่ — ไม่รู้ประเภท (ข้อมูลบริษัทเก่า / backend ยังไม่ส่ง) = ใช้ได้ทุกแอป
+ */
+export function appAvailableFor(app: AppDefinition, businessType: BusinessType | null | undefined): boolean {
+  return !app.businessTypes || !businessType || app.businessTypes.includes(businessType)
+}
+
+/** แอปที่ผู้ใช้เห็น — ตัดแอปที่ไม่ใช้กับประเภทธุรกิจ, เหลือเฉพาะเมนูที่มีสิทธิ์ และตัดแอปที่ไม่เหลือเมนู */
+export function visibleApps(permissions: readonly string[], businessType?: BusinessType | null): AppDefinition[] {
   return apps
+    .filter((app) => appAvailableFor(app, businessType))
     .map((app) => ({ ...app, menu: app.menu.filter((m) => can(permissions, m.permission)) }))
     .filter((app) => app.menu.length > 0)
 }
