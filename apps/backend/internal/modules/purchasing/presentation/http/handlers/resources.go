@@ -317,12 +317,82 @@ func (h *Handler) CancelInvoice(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ---------- ใบลดหนี้ผู้ขาย ----------
+
+func (h *Handler) ListCreditNotes(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		f, err := requests.ParseCreditNoteFilter(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		res, err := h.uc.CreditNotes.List(r.Context(), dto.List[dto.DocumentFilter]{Actor: a, Filter: f})
+		return httpx.ToList(res, responses.FromCreditNoteSummary), err
+	})
+}
+
+func (h *Handler) GetCreditNote(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		id, err := pathID[vo.CreditNoteID](r, "creditNoteID")
+		if err != nil {
+			return nil, err
+		}
+		c, err := h.uc.CreditNotes.Get(r.Context(), dto.ByID[vo.CreditNoteID]{Actor: a, ID: id})
+		return one(responses.FromCreditNote(c), err)
+	})
+}
+
+// CreateCreditNote: POST /supplier-credit-notes — ลดเจ้าหนี้ของใบแจ้งหนี้เดิม + ลงบัญชีทันที (ส่งคืนสินค้า stock: เบิกออกจากคลัง)
+func (h *Handler) CreateCreditNote(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusCreated, func(a dto.Actor) (any, error) {
+		req, err := decode[requests.CreditNote](w, r)
+		if err != nil {
+			return nil, err
+		}
+		in, err := req.ToInput()
+		if err != nil {
+			return nil, err
+		}
+		c, err := h.uc.CreditNotes.Create(r.Context(), dto.Create[dto.CreditNoteInput]{Actor: a, Data: in})
+		return one(responses.FromCreditNote(c), err)
+	})
+}
+
+// CancelCreditNote: PATCH /supplier-credit-notes/{creditNoteID} — {"status":"cancelled"}
+func (h *Handler) CancelCreditNote(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		id, err := pathID[vo.CreditNoteID](r, "creditNoteID")
+		if err != nil {
+			return nil, err
+		}
+		if err := cancelled(w, r); err != nil {
+			return nil, err
+		}
+		c, err := h.uc.CreditNotes.Cancel(r.Context(), dto.ByID[vo.CreditNoteID]{Actor: a, ID: id})
+		return one(responses.FromCreditNote(c), err)
+	})
+}
+
 // ---------- รายงาน (GET /reports?book=) ----------
 
 const (
 	BookOutstandingOrders = "outstanding-purchase-orders"
 	BookAPAging           = "ap-aging"
+	BookInputVat          = "input-vat"
 )
+
+func (h *Handler) InputVat(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		f, err := requests.ParseInputVat(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		res, err := h.uc.Reports.InputVat(r.Context(), dto.List[dto.InputVatFilter]{Actor: a, Filter: f})
+		if err != nil {
+			return nil, err
+		}
+		return responses.FromInputVat(BookInputVat, res), nil
+	})
+}
 
 func (h *Handler) OutstandingOrders(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {

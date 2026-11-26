@@ -14,7 +14,21 @@ import { showToast } from '@/lib/toast'
 import type { Payment, Receipt, Transfer } from './types'
 
 /** ปุ่มยกเลิกเอกสาร (PATCH status=cancelled) — ยืนยันก่อน, ไม่มีสิทธิ์ / ยกเลิกแล้ว = ไม่แสดง */
-function CancelBar({ apiPath, no, canCancel, listHref, printHref }: { apiPath: string; no: string; canCancel: boolean; listHref: string; printHref?: string | null }) {
+function CancelBar({
+  apiPath,
+  no,
+  canCancel,
+  listHref,
+  printHref,
+  printLabel,
+}: {
+  apiPath: string
+  no: string
+  canCancel: boolean
+  listHref: string
+  printHref?: string | null
+  printLabel?: string
+}) {
   const t = texts.finance
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -50,7 +64,7 @@ function CancelBar({ apiPath, no, canCancel, listHref, printHref }: { apiPath: s
           {printHref && (
             <ButtonLink href={printHref} variant="secondary">
               <Printer aria-hidden />
-              {texts.sales.actions.print}
+              {printLabel ?? texts.sales.actions.print}
             </ButtonLink>
           )}
         </div>
@@ -84,6 +98,7 @@ export function MoneyDocView({
   entryHref,
   canCancel,
   printHref,
+  printLabel,
 }: {
   mode: 'receipt' | 'payment'
   doc: Receipt | Payment
@@ -91,8 +106,9 @@ export function MoneyDocView({
   listHref: string
   entryHref: string | null
   canCancel: boolean
-  /** ใบเสร็จรับเงิน: ลิงก์หน้าพิมพ์ A4 */
+  /** ลิงก์หน้าพิมพ์ A4 — ใบเสร็จรับเงิน / หนังสือรับรองหัก ณ ที่จ่าย (ใบสำคัญจ่าย) */
   printHref?: string | null
+  printLabel?: string
 }) {
   const t = texts.finance
   const kinds = mode === 'receipt' ? t.kinds.receipt : t.kinds.payment
@@ -198,7 +214,7 @@ export function MoneyDocView({
         </table>
       </div>
 
-      <CancelBar apiPath={apiPath} no={doc.document_no} canCancel={canCancel && doc.status === 'posted'} listHref={listHref} printHref={printHref} />
+      <CancelBar apiPath={apiPath} no={doc.document_no} canCancel={canCancel && doc.status === 'posted'} listHref={listHref} printHref={printHref} printLabel={printLabel} />
     </div>
   )
 }

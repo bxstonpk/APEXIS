@@ -61,7 +61,7 @@ func settingsDTO(s entities.Settings) dto.Settings {
 	return dto.Settings{
 		VatRegistered: s.VatRegistered, VatRate: s.VatRate, JournalID: optString(s.JournalID), ARAccountID: optString(s.ARAccountID),
 		OutputVatAccountID: optString(s.OutputVatAccountID), RevenueAccountID: optString(s.RevenueAccountID),
-		CogsAccountID: optString(s.CogsAccountID),
+		CogsAccountID: optString(s.CogsAccountID), SalesReturnsAccountID: optString(s.SalesReturnsAccountID),
 	}
 }
 

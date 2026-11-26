@@ -37,6 +37,7 @@ type Deps struct {
 	Invoices    repositories.InvoiceRepository
 	Reports     repositories.ReportRepository
 	Settlements repositories.SettlementRepository
+	CreditNotes repositories.CreditNoteRepository
 	Clock       func() time.Time // optional
 }
 
@@ -48,6 +49,7 @@ type UseCases struct {
 	Invoices    *InvoiceUseCases
 	Reports     *ReportUseCases
 	Settlements *SettlementUseCases
+	CreditNotes *CreditNoteUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -60,9 +62,10 @@ func New(d Deps) *UseCases {
 		Suppliers:   &SupplierUseCases{base: b, repo: d.Suppliers},
 		Orders:      &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers},
 		Receipts:    &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
-		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, suppliers: d.Suppliers},
+		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, suppliers: d.Suppliers, credits: d.CreditNotes},
 		Reports:     &ReportUseCases{base: b, reports: d.Reports},
 		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, suppliers: d.Suppliers, settlements: d.Settlements},
+		CreditNotes: &CreditNoteUseCases{base: b, notes: d.CreditNotes, invoices: d.Invoices, settlements: d.Settlements},
 	}
 }
 
@@ -178,7 +181,10 @@ func (b base) itemRefs(ctx context.Context, companyID vo.CompanyID, refs []*dto.
 	return nil
 }
 
-var zero = decimal.Zero
+var (
+	zero       = decimal.Zero
+	decimalOne = decimal.NewFromInt(1)
+)
 
 // numericAmount: ยอดเงิน > 0, อยู่ในช่วง NUMERIC(24,6) และทศนิยมไม่เกินที่บริษัทกำหนด
 func numericAmount(v vo.Money, amountDecimals int) bool {

@@ -170,8 +170,10 @@ func (r *ReportRepository) Aging(ctx context.Context, companyID vo.CompanyID, f 
 
 type taxRow struct {
 	DocDate      time.Time
+	Kind         string
 	DocumentID   uuid.UUID
 	DocumentNo   string
+	ReferenceNo  string
 	CustomerID   uuid.UUID
 	CustomerCode string
 	CustomerName string
@@ -200,7 +202,7 @@ func (r *ReportRepository) taxReport(base func() *gorm.DB, columns string, f dto
 	totals := dto.TaxRow{Base: decimal.Zero, Tax: decimal.Zero}
 	for i, x := range rows {
 		res.Items[i] = dto.TaxRow{
-			Date: dateUTC(x.DocDate), DocumentID: x.DocumentID.String(), DocumentNo: x.DocumentNo,
+			Date: dateUTC(x.DocDate), Kind: x.Kind, DocumentID: x.DocumentID.String(), DocumentNo: x.DocumentNo, ReferenceNo: x.ReferenceNo,
 			Customer: dto.Ref{ID: x.CustomerID.String(), Code: x.CustomerCode, Name: x.CustomerName},
 			TaxID:    x.TaxID, BranchNo: x.BranchNo, TaxType: x.TaxType, Base: x.Base, Tax: x.Tax,
 		}
@@ -219,16 +221,42 @@ func (r *ReportRepository) taxReport(base func() *gorm.DB, columns string, f dto
 const taxCustomer = `c.id AS customer_id, c.code AS customer_code, d.bill_to_name AS customer_name, d.bill_to_tax_id AS tax_id,
 	d.bill_to_branch_no AS branch_no, c.tax_type`
 
-// OutputVat: ใบแจ้งหนี้ / ใบกำกับภาษี (ยังไม่ยกเลิก) ในช่วงวันที่ — ฐาน = ยอดก่อน VAT
+// OutputVat: ใบแจ้งหนี้ / ใบกำกับภาษี + ใบลดหนี้ (ยอดติดลบ) ที่ยังไม่ยกเลิกในช่วงวันที่ — ฐาน = ยอดก่อน VAT
+// UNION ALL เป็นตาราง d แล้วกรอง / เรียง / แบ่งหน้า / รวมยอดใน query เดียว
 func (r *ReportRepository) OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error) {
+	docs := `(SELECT i.id, i.company_id, i.customer_id, i.doc_date, i.document_no, 'invoice' AS kind, '' AS reference_no,
+			i.bill_to_name, i.bill_to_tax_id, i.bill_to_branch_no, i.total_net, i.total_vat
+		FROM sales_invoices AS i WHERE i.company_id = ? AND i.status = 'posted' AND i.doc_date BETWEEN ? AND ?
+		UNION ALL
+		SELECT n.id, n.company_id, n.customer_id, n.doc_date, n.document_no, 'credit_note', iv.document_no,
+			n.bill_to_name, n.bill_to_tax_id, n.bill_to_branch_no, -n.total_net, -n.total_vat
+		FROM sales_credit_notes AS n JOIN sales_invoices AS iv ON iv.id = n.invoice_id
+		WHERE n.company_id = ? AND n.status = 'posted' AND n.doc_date BETWEEN ? AND ?) AS d`
+	c := uuidOf(companyID)
 	base := func() *gorm.DB {
-		q := database.Conn(ctx, r.db).Table("sales_invoices AS d").Joins("JOIN sales_customers AS c ON c.id = d.customer_id").
-			Where("d.company_id = ? AND d.status = 'posted' AND d.doc_date BETWEEN ? AND ?", uuidOf(companyID), f.Start, f.End)
+		q := database.Conn(ctx, r.db).Table(docs, c, f.Start, f.End, c, f.Start, f.End).Joins("JOIN sales_customers AS c ON c.id = d.customer_id")
 		if f.CustomerID != nil {
 			q = q.Where("d.customer_id = ?", uuidOf(*f.CustomerID))
 		}
 		return q
 	}
-	return r.taxReport(base, `d.doc_date, d.id AS document_id, d.document_no, `+taxCustomer+`, d.total_net AS base, d.total_vat AS tax,
+	return r.taxReport(base, `d.doc_date, d.kind, d.id AS document_id, d.document_no, d.reference_no, `+taxCustomer+`, d.total_net AS base, d.total_vat AS tax,
 		COUNT(*) OVER () AS total, SUM(d.total_net) OVER () AS total_base, SUM(d.total_vat) OVER () AS total_tax`, f)
+}
+
+// VatTotals — 1 query: ภาษีขายของช่วงวันที่ = ใบแจ้งหนี้ - ใบลดหนี้ (ที่ยังไม่ยกเลิก)
+func (r *ReportRepository) VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error) {
+	var t struct {
+		Base      decimal.Decimal
+		Tax       decimal.Decimal
+		Documents int
+	}
+	err := database.Conn(ctx, r.db).Raw(`SELECT COALESCE(SUM(net), 0) AS base, COALESCE(SUM(vat), 0) AS tax, COUNT(*) AS documents
+		FROM (SELECT total_net AS net, total_vat AS vat FROM sales_invoices
+		       WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @start AND @end
+		      UNION ALL
+		      SELECT -total_net, -total_vat FROM sales_credit_notes
+		       WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @start AND @end) AS v`,
+		map[string]any{"company": uuidOf(companyID), "start": start, "end": end}).Scan(&t).Error
+	return dto.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, err
 }

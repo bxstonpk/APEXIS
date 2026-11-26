@@ -6,30 +6,33 @@ import "errors"
 
 // รูปแบบข้อมูลไม่ถูกต้อง (400)
 var (
-	ErrInvalidID       = errors.New("invalid id")
-	ErrInvalidCode     = errors.New("invalid code")
-	ErrInvalidName     = errors.New("invalid name")
-	ErrInvalidText     = errors.New("text is too long")
-	ErrInvalidStatus   = errors.New("invalid status")
-	ErrInvalidDate     = errors.New("invalid date")
-	ErrInvalidTaxID    = errors.New("tax id must be 13 digits")
-	ErrInvalidBranchNo = errors.New("branch number must be 5 digits")
-	ErrDuplicateBranch = errors.New("duplicate customer branch number") // detailed
-	ErrInvalidTerm     = errors.New("payment term must be 0 to 365 days")
-	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
-	ErrInvalidVatRate  = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
-	ErrInvalidAmount   = errors.New("invalid amount") // detailed
-	ErrInvalidLine     = errors.New("invalid line")   // detailed
+	ErrInvalidID         = errors.New("invalid id")
+	ErrInvalidCode       = errors.New("invalid code")
+	ErrInvalidName       = errors.New("invalid name")
+	ErrInvalidText       = errors.New("text is too long")
+	ErrInvalidStatus     = errors.New("invalid status")
+	ErrInvalidDate       = errors.New("invalid date")
+	ErrInvalidTaxID      = errors.New("tax id must be 13 digits")
+	ErrInvalidBranchNo   = errors.New("branch number must be 5 digits")
+	ErrDuplicateBranch   = errors.New("duplicate customer branch number") // detailed
+	ErrInvalidTerm       = errors.New("payment term must be 0 to 365 days")
+	ErrInvalidTaxType    = errors.New("tax_type must be individual or juristic")
+	ErrInvalidVatRate    = errors.New("vat rate must be 0 to 100 with at most 2 decimal places")
+	ErrInvalidAmount     = errors.New("invalid amount") // detailed
+	ErrInvalidLine       = errors.New("invalid line")   // detailed
+	ErrInvalidCreditKind = errors.New("kind must be return or allowance")
+	ErrReasonRequired    = errors.New("reason is required (at most 500 characters)")
 )
 
 // ไม่พบ (404)
 var (
-	ErrCustomerNotFound  = errors.New("customer not found")
-	ErrQuotationNotFound = errors.New("quotation not found")
-	ErrOrderNotFound     = errors.New("sales order not found")
-	ErrDeliveryNotFound  = errors.New("delivery not found")
-	ErrInvoiceNotFound   = errors.New("sales invoice not found") // detailed
-	ErrItemNotFound      = errors.New("item not found")          // detailed
+	ErrCustomerNotFound   = errors.New("customer not found")
+	ErrQuotationNotFound  = errors.New("quotation not found")
+	ErrOrderNotFound      = errors.New("sales order not found")
+	ErrDeliveryNotFound   = errors.New("delivery not found")
+	ErrInvoiceNotFound    = errors.New("sales invoice not found") // detailed
+	ErrItemNotFound       = errors.New("item not found")          // detailed
+	ErrCreditNoteNotFound = errors.New("credit note not found")
 )
 
 // ขัดแย้ง (409)
@@ -67,6 +70,13 @@ var (
 	ErrJournalInvalid    = errors.New("journal not found or inactive")
 	ErrWarehouseRequired = errors.New("warehouse_id is required to deliver stock items")
 	ErrBranchNotFound    = errors.New("customer branch not found") // detailed
+	// ใบลดหนี้
+	ErrOverCredit          = errors.New("credit exceeds what is left to credit on the invoice")                   // detailed
+	ErrOverReturn          = errors.New("returned quantity exceeds invoiced quantity not yet returned")           // detailed
+	ErrCreditPrice         = errors.New("unit price must be greater than 0 and not above the invoice unit price") // detailed
+	ErrCreditBeforeInvoice = errors.New("credit note date must not be before the invoice date")
+	ErrInvoiceHasCredits   = errors.New("invoice has credit notes (cancel the credit notes first)")
+	ErrCostUnknown         = errors.New("original cost of the returned item is unknown (no posted delivery)") // detailed
 )
 
 var ErrForbidden = errors.New("permission denied")
@@ -74,6 +84,8 @@ var ErrForbidden = errors.New("permission denied")
 var all = []error{
 	ErrInvalidID, ErrInvalidCode, ErrInvalidName, ErrInvalidText, ErrInvalidStatus, ErrInvalidDate, ErrInvalidTaxID,
 	ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidTaxType, ErrInvalidVatRate, ErrInvalidAmount, ErrInvalidLine,
+	ErrInvalidCreditKind, ErrReasonRequired, ErrCreditNoteNotFound,
+	ErrOverCredit, ErrOverReturn, ErrCreditPrice, ErrCreditBeforeInvoice, ErrInvoiceHasCredits, ErrCostUnknown,
 	ErrCustomerNotFound, ErrQuotationNotFound, ErrOrderNotFound, ErrDeliveryNotFound, ErrInvoiceNotFound,
 	ErrItemNotFound,
 	ErrCodeExists, ErrInUse, ErrDocumentNoUsed, ErrQuotationUsed, ErrTaxIDExists,

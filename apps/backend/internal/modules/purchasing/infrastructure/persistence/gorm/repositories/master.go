@@ -45,7 +45,7 @@ func (r *SettingsRepository) Save(ctx context.Context, companyID vo.CompanyID, s
 	return database.Conn(ctx, r.db).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "company_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
-			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id", "updated_at",
+			"vat_rate", "journal_id", "grir_account_id", "ap_account_id", "input_vat_account_id", "price_variance_account_id", "purchase_returns_account_id", "updated_at",
 		}),
 	}).Create(&m).Error
 }
@@ -156,9 +156,12 @@ func (r *SupplierRepository) FindByID(ctx context.Context, companyID vo.CompanyI
 	return gp.SupplierToEntity(m, branches...), nil
 }
 
-// InUse: มีใบสั่งซื้อ (ทุกสถานะ) ของผู้ขายนี้
+// InUse: มีใบสั่งซื้อ (ทุกสถานะ) หรือใบลดหนี้ของผู้ขายนี้
 func (r *SupplierRepository) InUse(ctx context.Context, companyID vo.CompanyID, id vo.SupplierID) (bool, error) {
-	return exists(ctx, r.db, []string{"SELECT 1 FROM purchasing_orders WHERE company_id = ? AND supplier_id = ?"}, uuidOf(companyID), uuidOf(id))
+	return exists(ctx, r.db, []string{
+		"SELECT 1 FROM purchasing_orders WHERE company_id = ? AND supplier_id = ?",
+		"SELECT 1 FROM purchasing_credit_notes WHERE company_id = ? AND supplier_id = ?",
+	}, uuidOf(companyID), uuidOf(id), uuidOf(companyID), uuidOf(id))
 }
 
 type supplierRow struct {

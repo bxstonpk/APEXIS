@@ -51,12 +51,13 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 
 func WhtTypeToModel(w *entities.WhtType) models.WhtTypeModel {
 	d := w.Data()
-	return models.WhtTypeModel{ID: uuid.UUID(w.ID()), CompanyID: uuid.UUID(w.CompanyID()), Code: d.Code, Name: d.Name, Rate: d.Rate, Status: string(d.Status)}
+	return models.WhtTypeModel{ID: uuid.UUID(w.ID()), CompanyID: uuid.UUID(w.CompanyID()), Code: d.Code, Name: d.Name, Rate: d.Rate,
+		IncomeType: string(d.IncomeType), Status: string(d.Status)}
 }
 
 func WhtTypeToEntity(m models.WhtTypeModel) *entities.WhtType {
 	return entities.RehydrateWhtType(vo.WhtTypeID(m.ID), vo.CompanyID(m.CompanyID), entities.WhtTypeData{
-		Code: m.Code, Name: m.Name, Rate: m.Rate, Status: vo.Status(m.Status),
+		Code: m.Code, Name: m.Name, Rate: m.Rate, IncomeType: vo.IncomeType(m.IncomeType), Status: vo.Status(m.Status),
 	})
 }
 
@@ -157,6 +158,10 @@ func PaymentToModel(p *entities.Payment) models.PaymentModel {
 		Kind:          string(s.Kind), PartyModel: partyModel(s.Party),
 		TotalAmount: s.Totals.Amount, TotalWht: s.Totals.Wht, TotalPaid: s.Totals.Paid,
 	}
+	if s.WhtCertificateNo != "" {
+		no := s.WhtCertificateNo
+		m.WhtCertificateNo = &no
+	}
 	for i, l := range s.Lines {
 		m.Lines = append(m.Lines, models.PaymentLineModel{
 			PaymentID: m.ID, LineNo: i + 1, InvoiceID: OptUUID(l.InvoiceID), InvoiceNo: l.InvoiceNo, SupplierInvoiceNo: l.SupplierInvoiceNo,
@@ -176,6 +181,9 @@ func PaymentToEntity(m models.PaymentModel) *entities.Payment {
 		Date: DateUTC(m.DocDate), Description: m.Description, Status: vo.DocStatus(m.Status),
 		Totals:  entities.PaymentTotals{Amount: m.TotalAmount, Wht: m.TotalWht, Paid: m.TotalPaid},
 		Posting: posting(m.DocumentNo, m.DocumentModel), Cancellation: cancellation(m.DocumentModel),
+	}
+	if m.WhtCertificateNo != nil {
+		s.WhtCertificateNo = *m.WhtCertificateNo
 	}
 	for _, l := range m.Lines {
 		s.Lines = append(s.Lines, entities.PaymentLine{

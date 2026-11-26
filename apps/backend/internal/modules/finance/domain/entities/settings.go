@@ -74,10 +74,12 @@ func (s Settings) WhtPayable(t vo.TaxType) (*vo.GLAccountID, string) {
 // ---------- ประเภทภาษีหัก ณ ที่จ่าย ----------
 
 type WhtTypeData struct {
-	Code   string
-	Name   string // เช่น ค่าบริการ, ค่าเช่า, ค่าขนส่ง
-	Rate   vo.Money
-	Status vo.Status
+	Code string
+	Name string // เช่น ค่าบริการ, ค่าเช่า, ค่าขนส่ง
+	Rate vo.Money
+	// IncomeType: ประเภทเงินได้ตาม 50 ทวิ (มาตรา 40 / 3 เตรส)
+	IncomeType vo.IncomeType
+	Status     vo.Status
 }
 
 // WhtType คือประเภทเงินได้ที่หักภาษี ณ ที่จ่าย พร้อมอัตรา — ใบจ่ายเก็บอัตรา ณ วันจ่ายไว้ในบรรทัด
@@ -126,6 +128,9 @@ func normalizeWhtType(d WhtTypeData) (WhtTypeData, error) {
 		return WhtTypeData{}, domain.ErrInvalidWhtRate
 	}
 	out.Rate = d.Rate
+	if out.IncomeType, err = vo.ParseIncomeType(string(d.IncomeType)); err != nil {
+		return WhtTypeData{}, err
+	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {
 		return WhtTypeData{}, err
 	}

@@ -26,6 +26,7 @@ export default async function Page({ params, searchParams }: Props) {
   const columns: Column<WhtType>[] = [
     { key: 'code', header: t.fields.code, sortKey: 'code', render: (w) => <Link href={rowHref(path, w.id, list.query)} className={rowLinkClass}>{w.code}</Link> },
     { key: 'name', header: t.fields.name, sortKey: 'name', render: (w) => w.name },
+    { key: 'income', header: t.fields.incomeType, render: (w) => t.incomeTypesShort[w.income_type] ?? w.income_type },
     { key: 'rate', header: t.fields.rate, align: 'right', render: (w) => <span className="tabular-nums">{w.rate}</span> },
     { key: 'status', header: texts.common.status, render: (w) => <StatusBadge status={w.status} /> },
   ]

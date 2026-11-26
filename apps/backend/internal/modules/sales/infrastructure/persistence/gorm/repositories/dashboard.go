@@ -37,9 +37,9 @@ func (r *ReportRepository) Dashboard(ctx context.Context, companyID vo.CompanyID
 	if err := db.Raw(`SELECT
 			COALESCE(SUM(total_net) FILTER (WHERE doc_date BETWEEN @start AND @end), 0) AS current,
 			COALESCE(SUM(total_net) FILTER (WHERE doc_date BETWEEN @prev_start AND @prev_end), 0) AS previous,
-			COUNT(*) FILTER (WHERE doc_date BETWEEN @start AND @end) AS invoice_count
-		FROM sales_invoices
-		WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @prev_start AND @end`, args).Scan(&sales).Error; err != nil {
+			COUNT(*) FILTER (WHERE invoice AND doc_date BETWEEN @start AND @end) AS invoice_count
+		FROM `+netSales+`
+		WHERE doc_date BETWEEN @prev_start AND @end`, args).Scan(&sales).Error; err != nil {
 		return out, err
 	}
 	out.SalesCurrent, out.SalesPrevious, out.InvoiceCount = sales.Current, sales.Previous, sales.InvoiceCount
@@ -49,8 +49,8 @@ func (r *ReportRepository) Dashboard(ctx context.Context, companyID vo.CompanyID
 		Net   decimal.Decimal
 	}
 	if err := db.Raw(`SELECT to_char(doc_date, 'YYYY-MM') AS month, SUM(total_net) AS net
-		FROM sales_invoices
-		WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @months_from AND @trend_end
+		FROM `+netSales+`
+		WHERE doc_date BETWEEN @months_from AND @trend_end
 		GROUP BY 1`, args).Scan(&months).Error; err != nil {
 		return out, err
 	}
@@ -133,8 +133,8 @@ func (r *ReportRepository) Dashboard(ctx context.Context, companyID vo.CompanyID
 		Net  decimal.Decimal
 	}
 	if err := db.Raw(`SELECT c.id, c.code, c.name, SUM(d.total_net) AS net
-		FROM sales_invoices AS d JOIN sales_customers AS c ON c.id = d.customer_id
-		WHERE d.company_id = @company AND d.status = 'posted' AND d.doc_date BETWEEN @start AND @end
+		FROM `+netSales+` JOIN sales_customers AS c ON c.id = d.customer_id
+		WHERE d.doc_date BETWEEN @start AND @end
 		GROUP BY c.id, c.code, c.name
 		ORDER BY net DESC, c.code
 		LIMIT 5`, args).Scan(&top).Error; err != nil {
@@ -146,3 +146,8 @@ func (r *ReportRepository) Dashboard(ctx context.Context, companyID vo.CompanyID
 	}
 	return out, nil
 }
+
+// netSales: ยอดขายสุทธิ = ใบแจ้งหนี้ (บวก) + ใบลดหนี้ (ลบ) ที่ยังไม่ยกเลิก — invoice = true เฉพาะใบแจ้งหนี้ (นับจำนวนใบ)
+const netSales = `(SELECT customer_id, doc_date, total_net, true AS invoice FROM sales_invoices WHERE company_id = @company AND status = 'posted'
+	UNION ALL
+	SELECT customer_id, doc_date, -total_net, false FROM sales_credit_notes WHERE company_id = @company AND status = 'posted') AS d`

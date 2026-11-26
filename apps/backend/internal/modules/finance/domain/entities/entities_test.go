@@ -160,3 +160,22 @@ func TestTransferRulesAndCancel(t *testing.T) {
 		t.Fatalf("cancel twice: %v", err)
 	}
 }
+
+func TestWhtTypeIncomeType(t *testing.T) {
+	company := vo.NewID[vo.CompanyID]()
+	d := WhtTypeData{Code: "SVC", Name: "ค่าบริการ", Rate: decimal.NewFromInt(3), Status: vo.StatusActive}
+	if _, err := NewWhtType(company, d); !errors.Is(err, domain.ErrInvalidIncomeType) {
+		t.Fatalf("missing income type: %v", err)
+	}
+	d.IncomeType = "40_9"
+	if _, err := NewWhtType(company, d); !errors.Is(err, domain.ErrInvalidIncomeType) {
+		t.Fatalf("unknown income type: %v", err)
+	}
+	for _, it := range vo.IncomeTypes {
+		d.IncomeType = it
+		w, err := NewWhtType(company, d)
+		if err != nil || w.Data().IncomeType != it {
+			t.Fatalf("income type %s: %v", it, err)
+		}
+	}
+}

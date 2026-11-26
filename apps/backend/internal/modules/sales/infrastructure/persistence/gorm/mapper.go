@@ -49,7 +49,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 	return models.SettingsModel{
 		CompanyID: uuid.UUID(companyID), VatRegistered: s.VatRegistered, VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		ARAccountID: OptUUID(s.ARAccountID), OutputVatAccountID: OptUUID(s.OutputVatAccountID), RevenueAccountID: OptUUID(s.RevenueAccountID),
-		CogsAccountID: OptUUID(s.CogsAccountID),
+		CogsAccountID: OptUUID(s.CogsAccountID), SalesReturnsAccountID: OptUUID(s.SalesReturnsAccountID),
 	}
 }
 
@@ -58,6 +58,7 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRegistered: m.VatRegistered, VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		ARAccountID: OptID[vo.AccountID](m.ARAccountID), OutputVatAccountID: OptID[vo.AccountID](m.OutputVatAccountID),
 		RevenueAccountID: OptID[vo.AccountID](m.RevenueAccountID), CogsAccountID: OptID[vo.AccountID](m.CogsAccountID),
+		SalesReturnsAccountID: OptID[vo.AccountID](m.SalesReturnsAccountID),
 	}
 }
 
@@ -347,6 +348,48 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 		}
 	}
 	return entities.RehydrateInvoice(s)
+}
+
+// ---------- ใบลดหนี้ ----------
+
+func CreditNoteToModel(c *entities.CreditNote) models.CreditNoteModel {
+	s := c.State()
+	m := models.CreditNoteModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
+		InvoiceID: uuid.UUID(s.InvoiceID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
+		StockModel: stockModel(s.Stock), Kind: string(s.Kind), Reason: s.Reason,
+		BillToName: s.BillTo.Name, BillToTaxID: s.BillTo.TaxID, BillToBranchNo: s.BillTo.BranchNo, BillToAddress: s.BillTo.Address,
+		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
+	}
+	for i, l := range s.Lines {
+		m.Lines = append(m.Lines, models.CreditNoteLineModel{
+			CreditNoteID: m.ID, LineNo: i + 1, InvoiceLineNo: l.InvoiceLineNo, ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity,
+			UnitPrice: l.UnitPrice, Net: l.Amounts.Net, Vat: l.Amounts.Vat, Gross: l.Amounts.Gross, AccountID: uuid.UUID(l.AccountID),
+			Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptUUID(l.InventoryAccountID),
+		})
+	}
+	return m
+}
+
+func CreditNoteToEntity(m models.CreditNoteModel) *entities.CreditNote {
+	s := entities.CreditNoteState{
+		ID: vo.CreditNoteID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), InvoiceID: vo.InvoiceID(m.InvoiceID),
+		CustomerID: vo.CustomerID(m.PostedModel.CustomerID), Date: DateUTC(m.DocDate), Kind: vo.CreditNoteKind(m.Kind), Reason: m.Reason,
+		Description: m.PostedModel.Description,
+		BillTo:      entities.BillTo{Name: m.BillToName, TaxID: m.BillToTaxID, BranchNo: m.BillToBranchNo, Address: m.BillToAddress},
+		Vat:         services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+		Stock:       stockOf(m.StockModel), Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross},
+		Status: vo.DocStatus(m.PostedModel.Status), Posting: postingOf(m.DocumentNo, m.PostedModel), Cancellation: cancellationOf(m.PostedModel),
+		Lines: make([]entities.CreditNoteLine, len(m.Lines)),
+	}
+	for i, l := range m.Lines {
+		s.Lines[i] = entities.CreditNoteLine{
+			InvoiceLineNo: l.InvoiceLineNo, ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			Amounts: services.Amounts{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, AccountID: vo.AccountID(l.AccountID),
+			CostLine: entities.CostLine{Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptID[vo.AccountID](l.InventoryAccountID)},
+		}
+	}
+	return entities.RehydrateCreditNote(s)
 }
 
 func addressToModel(a thaiaddress.Address) models.AddressColumns { return models.AddressColumns(a) }

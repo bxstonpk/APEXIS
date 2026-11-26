@@ -39,14 +39,14 @@ export type PaymentLine = {
   account_id: string | null
   description: string
   amount: string
-  wht_type: Ref | null
+  wht_type: (Ref & { income_type: IncomeType }) | null
   wht_rate: string
   wht_base: string
   wht: string
 }
 
 export type Receipt = DocumentSummary & { created_by: string; lines: ReceiptLine[]; methods: Method[] }
-export type Payment = DocumentSummary & { created_by: string; lines: PaymentLine[]; methods: Method[] }
+export type Payment = DocumentSummary & { created_by: string; lines: PaymentLine[]; methods: Method[]; wht_certificate_no: string | null }
 
 export type Transfer = {
   id: string
@@ -75,7 +75,11 @@ export type CashAccount = {
   status: 'active' | 'inactive'
 }
 
-export type WhtType = { id: string; code: string; name: string; rate: string; status: 'active' | 'inactive' }
+/** ประเภทเงินได้ตามแบบ 50 ทวิ (มาตรา 40 / 3 เตรส) — ตรงกับ backend finance */
+export const INCOME_TYPES = ['40_1', '40_2', '40_3', '40_4a', '40_4b', '3_tres', 'other'] as const
+export type IncomeType = (typeof INCOME_TYPES)[number]
+
+export type WhtType = { id: string; code: string; name: string; rate: string; income_type: IncomeType; status: 'active' | 'inactive' }
 
 export type FinanceSettings = {
   receipt_journal_id: string | null
@@ -114,6 +118,19 @@ export type WithholdingReport = {
   }[]
   total_base: string
   total_wht: string
+}
+
+/** GET /reports?book=vat-summary — สรุป ภ.พ.30 (ภาษีขาย − ภาษีซื้อ ในช่วงวันที่) */
+export type VatTotals = { base: string; tax: string; documents: number }
+export type VatSummary = {
+  book: 'vat-summary'
+  start_date: string
+  end_date: string
+  output: VatTotals
+  input: VatTotals
+  net_tax: string
+  payable: string
+  refundable: string
 }
 
 export const DOC_QUERY_KEYS = ['q', 'status', 'kind', 'cash_account_id', 'start_date', 'end_date', 'sort', 'page', 'page_size'] as const

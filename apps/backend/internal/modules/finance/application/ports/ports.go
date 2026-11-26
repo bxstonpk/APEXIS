@@ -118,3 +118,18 @@ type Settlements interface {
 	Unsettle(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
 	Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID) ([]OpenInvoice, error)
 }
+
+// ---------- ภาษีมูลค่าเพิ่ม (ภ.พ.30) ----------
+
+// VatTotals: ยอดรวมเอกสารภาษีของช่วงวันที่ (ใบกำกับหักใบลดหนี้แล้ว)
+type VatTotals struct {
+	Base      vo.Money
+	Tax       vo.Money
+	Documents int
+}
+
+// Vat: ยอดภาษีขาย (sales) / ภาษีซื้อ (purchasing) ของช่วงวันที่ — ใช้ทำสรุป ภ.พ.30
+type Vat interface {
+	OutputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (VatTotals, error)
+	InputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (VatTotals, error)
+}

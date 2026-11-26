@@ -354,11 +354,13 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 }
 
 // WhtType: POST / PUT /withholding-tax-types — rate เป็น % เช่น "3"
+// income_type: ประเภทเงินได้ตาม 50 ทวิ (40_1 / 40_2 / 40_3 / 40_4a / 40_4b / 3_tres / other) — บังคับตอนสร้าง, PUT ไม่ส่ง = คงค่าเดิม
 type WhtType struct {
-	Code   string   `json:"code"`
-	Name   string   `json:"name"`
-	Rate   *Decimal `json:"rate"`
-	Status string   `json:"status"`
+	Code       string   `json:"code"`
+	Name       string   `json:"name"`
+	Rate       *Decimal `json:"rate"`
+	IncomeType string   `json:"income_type"`
+	Status     string   `json:"status"`
 }
 
 func (r WhtType) ToData(isCreate bool) (entities.WhtTypeData, error) {
@@ -376,7 +378,10 @@ func (r WhtType) ToData(isCreate bool) (entities.WhtTypeData, error) {
 		}
 		st = vo.StatusActive
 	}
-	return entities.WhtTypeData{Code: r.Code, Name: r.Name, Rate: rate, Status: st}, nil
+	if isCreate && r.IncomeType == "" {
+		return entities.WhtTypeData{}, invalid("income_type is required")
+	}
+	return entities.WhtTypeData{Code: r.Code, Name: r.Name, Rate: rate, IncomeType: vo.IncomeType(r.IncomeType), Status: st}, nil
 }
 
 // ---------- URL query ----------
@@ -502,4 +507,10 @@ func ParseWithholding(v url.Values) (dto.WithholdingFilter, error) {
 	}
 	f.Page, err = listing.ParsePage(v)
 	return f, err
+}
+
+// ParseVatSummary: GET /reports?book=vat-summary&start_date=&end_date= (บังคับทั้งคู่)
+func ParseVatSummary(v url.Values) (dto.VatSummaryFilter, error) {
+	start, end, err := ParseDateRange(v)
+	return dto.VatSummaryFilter{Start: start, End: end}, err
 }

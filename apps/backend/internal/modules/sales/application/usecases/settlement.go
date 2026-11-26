@@ -70,7 +70,12 @@ func (uc *SettlementUseCases) Settle(ctx context.Context, companyID vo.CompanyID
 
 // Unsettle: คืนยอดค้างให้ใบแจ้งหนี้ของเอกสารนี้ (ยกเลิกใบรับเงิน) — ไม่พบรายการที่มีผล = ไม่ทำอะไร
 func (uc *SettlementUseCases) Unsettle(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error {
-	lines, err := uc.settlements.LockDocument(ctx, companyID, documentID)
+	return unsettle(ctx, uc.invoices, uc.settlements, companyID, documentID)
+}
+
+// unsettle: คืนยอดของเอกสารที่ตัดยอดใบแจ้งหนี้ (ใบรับเงินของ finance / ใบลดหนี้) แล้วยกเลิกประวัติการตัดยอด
+func unsettle(ctx context.Context, invoices repositories.InvoiceRepository, settlements repositories.SettlementRepository, companyID vo.CompanyID, documentID uuid.UUID) error {
+	lines, err := settlements.LockDocument(ctx, companyID, documentID)
 	if err != nil || len(lines) == 0 {
 		return err
 	}
@@ -80,17 +85,17 @@ func (uc *SettlementUseCases) Unsettle(ctx context.Context, companyID vo.Company
 		ids[i] = l.InvoiceID
 		amounts[l.InvoiceID] = amounts[l.InvoiceID].Add(l.Amount)
 	}
-	invoices, err := uc.invoices.LockForSettlement(ctx, companyID, ids)
+	locked, err := invoices.LockForSettlement(ctx, companyID, ids)
 	if err != nil {
 		return err
 	}
-	for _, inv := range invoices {
+	for _, inv := range locked {
 		inv.Unreceive(amounts[inv.ID()])
 	}
-	if err := uc.invoices.SaveReceived(ctx, invoices); err != nil {
+	if err := invoices.SaveReceived(ctx, locked); err != nil {
 		return err
 	}
-	return uc.settlements.Cancel(ctx, companyID, documentID)
+	return settlements.Cancel(ctx, companyID, documentID)
 }
 
 // Open: ใบแจ้งหนี้ค้างรับของลูกค้า (หน้ารับเงินของ finance)

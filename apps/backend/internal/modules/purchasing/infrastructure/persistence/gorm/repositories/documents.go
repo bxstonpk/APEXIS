@@ -298,6 +298,7 @@ type invoiceRow struct {
 	TotalVat          decimal.Decimal
 	TotalGross        decimal.Decimal
 	PaidAmount        decimal.Decimal
+	CreditedAmount    decimal.Decimal
 	Description       string
 	VatRate           decimal.Decimal
 	PriceIncludesVat  bool
@@ -313,13 +314,15 @@ func (r invoiceRow) summary() dto.InvoiceSummary {
 	return dto.InvoiceSummary{
 		DocumentSummary: r.DocRow.summary(), SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: gp.DateUTC(r.InvoiceDate),
 		DueDate: gp.DateUTC(r.DueDate), Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
-		Paid: r.PaidAmount, Outstanding: r.TotalGross.Sub(r.PaidAmount),
+		// paid_amount รวมยอดตัดจากใบลดหนี้ (ตัดยอดผ่าน purchasing_invoice_settlements เหมือนใบจ่าย) — แยกให้เห็นเป็นยอดจ่าย / ลดหนี้
+		Paid: r.PaidAmount.Sub(r.CreditedAmount), Credited: r.CreditedAmount, Outstanding: r.TotalGross.Sub(r.PaidAmount),
 	}
 }
 
 var (
-	invoiceSummaryColumns = invoiceTable.columns("d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount")
-	invoiceColumns        = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by, d.bill_from_name, d.bill_from_tax_id, d.bill_from_branch_no, d.bill_from_address"
+	invoiceSummaryColumns = invoiceTable.columns(`d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount,
+		COALESCE((SELECT SUM(c.total_gross) FROM purchasing_credit_notes AS c WHERE c.invoice_id = d.id AND c.status = 'posted'), 0) AS credited_amount`)
+	invoiceColumns = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by, d.bill_from_name, d.bill_from_tax_id, d.bill_from_branch_no, d.bill_from_address"
 )
 
 func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error) {
@@ -340,11 +343,17 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	if err := database.Conn(ctx, r.db).Where("invoice_id = ?", h.ID).Order("line_no").Find(&lines).Error; err != nil {
 		return dto.Invoice{}, err
 	}
+	credits, err := lineCredits(ctx, r.db, uuidOf(companyID), h.ID)
+	if err != nil {
+		return dto.Invoice{}, err
+	}
 	out.Lines = make([]dto.InvoiceLine, len(lines))
 	for i, l := range lines {
+		c := credits[l.LineNo]
 		line := dto.InvoiceLine{
-			OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
 			Amounts: dto.Totals{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, Cleared: l.Cleared, Variance: l.Net.Sub(l.Cleared),
+			Returned: c.Returned, CreditedNet: c.Net,
 		}
 		if l.VarianceAccountID != nil {
 			line.VarianceAccountID = l.VarianceAccountID.String()

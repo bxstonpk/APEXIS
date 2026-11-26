@@ -27,6 +27,7 @@ type (
 	OrderID         uuid.UUID
 	DeliveryID      uuid.UUID
 	InvoiceID       uuid.UUID
+	CreditNoteID    uuid.UUID
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
 	StockDocumentID uuid.UUID
@@ -49,15 +50,16 @@ func ParseID[T anyID](s string) (T, error) {
 
 func IDString[T anyID](id T) string { return uuid.UUID(id).String() }
 
-func (id CustomerID) String() string  { return IDString(id) }
-func (id QuotationID) String() string { return IDString(id) }
-func (id OrderID) String() string     { return IDString(id) }
-func (id DeliveryID) String() string  { return IDString(id) }
-func (id InvoiceID) String() string   { return IDString(id) }
-func (id ItemID) String() string      { return IDString(id) }
-func (id AccountID) String() string   { return IDString(id) }
-func (id JournalID) String() string   { return IDString(id) }
-func (id EntryID) String() string     { return IDString(id) }
+func (id CustomerID) String() string   { return IDString(id) }
+func (id QuotationID) String() string  { return IDString(id) }
+func (id OrderID) String() string      { return IDString(id) }
+func (id DeliveryID) String() string   { return IDString(id) }
+func (id InvoiceID) String() string    { return IDString(id) }
+func (id CreditNoteID) String() string { return IDString(id) }
+func (id ItemID) String() string       { return IDString(id) }
+func (id AccountID) String() string    { return IDString(id) }
+func (id JournalID) String() string    { return IDString(id) }
+func (id EntryID) String() string      { return IDString(id) }
 
 // ---------- ข้อความ ----------
 
@@ -212,23 +214,36 @@ func parseEnum[T ~string](raw string, allowed []T, invalid error) (T, error) {
 type DocType string
 
 const (
-	DocQuotation DocType = "sales.quotation"
-	DocOrder     DocType = "sales.order"
-	DocDelivery  DocType = "sales.delivery"
-	DocInvoice   DocType = "sales.invoice" // ใบแจ้งหนี้ / ใบกำกับภาษี (รวมแบบส่งของพร้อมออกบิล)
+	DocQuotation  DocType = "sales.quotation"
+	DocOrder      DocType = "sales.order"
+	DocDelivery   DocType = "sales.delivery"
+	DocInvoice    DocType = "sales.invoice"     // ใบแจ้งหนี้ / ใบกำกับภาษี (รวมแบบส่งของพร้อมออกบิล)
+	DocCreditNote DocType = "sales.credit_note" // ใบลดหนี้ (รับคืนสินค้า / ลดราคา)
 )
 
-var DocTypes = []DocType{DocQuotation, DocOrder, DocDelivery, DocInvoice}
+var DocTypes = []DocType{DocQuotation, DocOrder, DocDelivery, DocInvoice, DocCreditNote}
 
 func (t DocType) Prefix() string {
-	return map[DocType]string{DocQuotation: "QT", DocOrder: "SO", DocDelivery: "DO", DocInvoice: "IV"}[t]
+	return map[DocType]string{DocQuotation: "QT", DocOrder: "SO", DocDelivery: "DO", DocInvoice: "IV", DocCreditNote: "CN"}[t]
 }
 
 func (t DocType) Name() string {
 	return map[DocType]string{
 		DocQuotation: "ใบเสนอราคา", DocOrder: "ใบสั่งขาย", DocDelivery: "ใบส่งของ",
-		DocInvoice: "ใบแจ้งหนี้ / ใบกำกับภาษี",
+		DocInvoice: "ใบแจ้งหนี้ / ใบกำกับภาษี", DocCreditNote: "ใบลดหนี้",
 	}[t]
+}
+
+// CreditNoteKind: return = รับคืนสินค้า (คืนสต็อกเมื่อเป็นสินค้า stock), allowance = ลดราคา / ส่วนลดภายหลัง (ไม่มีสินค้าคืน)
+type CreditNoteKind string
+
+const (
+	CreditReturn    CreditNoteKind = "return"
+	CreditAllowance CreditNoteKind = "allowance"
+)
+
+func ParseCreditNoteKind(raw string) (CreditNoteKind, error) {
+	return parseEnum(raw, []CreditNoteKind{CreditReturn, CreditAllowance}, domain.ErrInvalidCreditKind)
 }
 
 // ---------- สิทธิ์ ----------

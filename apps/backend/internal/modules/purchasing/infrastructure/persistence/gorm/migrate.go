@@ -87,6 +87,9 @@ func mergeDuplicateSuppliers(tx *gorm.DB) ([]integration.PartyMerge, error) {
 			{`UPDATE purchasing_invoices AS i SET supplier_id = ? WHERE i.supplier_id = ? AND NOT (i.status = 'posted' AND EXISTS (
 					SELECT 1 FROM purchasing_invoices AS k WHERE k.company_id = i.company_id AND k.supplier_id = ?
 						AND k.status = 'posted' AND k.supplier_invoice_no = i.supplier_invoice_no))`, []any{d.Keep, d.ID, d.Keep}},
+			// ใบลดหนี้: ตามใบแจ้งหนี้ที่ย้ายไปแล้ว (ใบแจ้งหนี้ที่ค้างไว้ที่รหัสเดิม ใบลดหนี้ก็ค้างไว้ด้วย)
+			{`UPDATE purchasing_credit_notes AS c SET supplier_id = i.supplier_id FROM purchasing_invoices AS i
+				WHERE c.supplier_id = ? AND i.id = c.invoice_id AND i.supplier_id = ?`, []any{d.ID, d.Keep}},
 			{`UPDATE purchasing_suppliers SET deleted_at = ? WHERE id = ?`, []any{now, d.ID}},
 		}
 		for _, s := range steps {

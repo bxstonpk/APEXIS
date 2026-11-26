@@ -1,16 +1,16 @@
 /**
  * ภาพของแบรนด์ — เปลี่ยนโลโก้ทั้งแอปได้ที่นี่ที่เดียว (ข้อความ alt อยู่ที่ texts.app.logoAlt)
  *
- * ต้นฉบับ: docs/brand/Apexis_Enterprise_Growth_Logo.png (1536x1024)
- * ไฟล์ที่ใช้บนเว็บอยู่ใน public/brand/ (ตัดขอบโปร่งใส ย่อเป็น WebP กว้าง 640px — แสดงจริงประมาณครึ่งหนึ่ง)
- * favicon / apple-touch-icon อยู่ใน public/ (ทำจากสัญลักษณ์ "A" ของโลโก้)
+ * โลโก้: แนว "Folded Apex" (ริบบิ้นพับเป็นตัว A ยอดส้ม + เงา) — ต้นฉบับ docs/brand/logo/apexis-logo.html (+ apexis-mark.svg)
+ * ไฟล์บนเว็บ: public/brand/apexis-logo.webp (แนวนอน 720×207, แสดงจริงประมาณครึ่งหนึ่ง)
+ * favicon / apple-touch-icon อยู่ใน public/ (export จาก #favicon / #touch ในไฟล์ต้นฉบับเดียวกัน)
  * ภาพแผงแบรนด์หน้า login: ต้นฉบับ docs/brand/banners/login-hero/glass-1080x1080.html (จัตุรัส) → WebP 1280px (ข้อความ alt อยู่ที่ texts.app.loginHeroAlt)
  */
 export const brand = {
   logo: {
     src: '/brand/apexis-logo.webp',
-    width: 640,
-    height: 358,
+    width: 720,
+    height: 207,
   },
   /** ภาพแบนเนอร์บนแผงซ้ายของหน้า login / เปลี่ยนรหัสผ่าน (จอกว้างเท่านั้น) — แผงใช้พื้น loginHero.background */
   loginHero: {

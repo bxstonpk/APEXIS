@@ -28,6 +28,7 @@ type Deps struct {
 	Ledger      ports.Ledger
 	Receivables ports.Settlements // sales
 	Payables    ports.Settlements // purchasing
+	Vat         ports.Vat         // ภาษีขาย (sales) / ภาษีซื้อ (purchasing) — สรุป ภ.พ.30
 	Accounts    repositories.CashAccountRepository
 	Settings    repositories.SettingsRepository
 	WhtTypes    repositories.WhtTypeRepository
@@ -61,7 +62,7 @@ func New(d Deps) *UseCases {
 		Receipts:  &ReceiptUseCases{base: b, receipts: d.Receipts, receivables: d.Receivables},
 		Payments:  &PaymentUseCases{base: b, payments: d.Payments, payables: d.Payables, whtTypes: d.WhtTypes},
 		Transfers: &TransferUseCases{base: b, transfers: d.Transfers},
-		Reports:   &ReportUseCases{base: b, reports: d.Reports},
+		Reports:   &ReportUseCases{base: b, reports: d.Reports, vat: d.Vat},
 	}
 }
 

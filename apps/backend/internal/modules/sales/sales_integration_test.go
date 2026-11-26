@@ -116,6 +116,7 @@ func setup(t *testing.T) (api, string) {
 	inv.RegisterRoutes(mux)
 	pur := purchasing.New(db, idm, org, led, inv)
 	sal := sales.New(db, idm, org, led, inv)
+	lastSales = sal
 	sal.RegisterRoutes(mux)
 	// ใบเสร็จรับเงินอยู่ที่ finance — ตัดยอดใบแจ้งหนี้ขายผ่าน sales.SettleReceivables
 	fin := finance.New(db, idm, org, led, sal, pur)

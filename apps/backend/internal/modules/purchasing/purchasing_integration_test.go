@@ -26,6 +26,7 @@ type obj = map[string]any
 type api struct {
 	t   *testing.T
 	srv *httptest.Server
+	pur *purchasing.Module
 }
 
 type resp struct {
@@ -91,7 +92,7 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
-		"purchasing_invoice_settlements",
+		"purchasing_credit_note_lines", "purchasing_credit_notes", "purchasing_invoice_settlements",
 		"purchasing_invoice_lines", "purchasing_invoices", "purchasing_receipt_lines", "purchasing_receipts",
 		"purchasing_order_lines", "purchasing_orders", "purchasing_supplier_branches", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
@@ -138,7 +139,7 @@ func setup(t *testing.T) api {
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", idm.Authenticate(reg))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return api{t: t, srv: srv}
+	return api{t: t, srv: srv, pur: pur}
 }
 
 func TestPurchasingFlow(t *testing.T) {

@@ -7,9 +7,15 @@
   <linearGradient id="mgloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
   <filter id="mglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
 </defs>
+<filter id="mdrop" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#101c3b" flood-opacity=".38"/></filter>
+<filter id="msoft" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="3"/></filter>
+<ellipse cx="60" cy="112" rx="46" ry="4.5" fill="#101c3b" opacity=".3" filter="url(#msoft)"/>
+<g filter="url(#mdrop)">
 <path d="M60 8 L14 110 H38 L60 58 Z" fill="url(#mmid)"/>
 <path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#mblue)"/>
-<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".3"/>
+<path d="M60 58 L82 110 H91 L63 52 Z" fill="#101c3b" opacity=".45"/>
+<path d="M44 44 L60 36 L76 44 L73.5 50 L60 43.5 L46.5 50 Z" fill="#101c3b" opacity=".38"/>
+<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#mgloss)" opacity=".7"/>
 <path d="M60 8 L76 44 L60 36 L44 44 Z" fill="url(#mfire)"/>
-<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".18"/>
-<path d="M60 8 L106 110 H82 L60 58 Z" fill="url(#mgloss)" opacity=".7"/></svg>
+<path d="M60 8 L76 44 L60 36 Z" fill="#fff" opacity=".2"/>
+</g></svg>

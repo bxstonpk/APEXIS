@@ -161,7 +161,8 @@ func (r *CustomerRepository) InUse(ctx context.Context, companyID vo.CompanyID, 
 		"SELECT 1 FROM sales_quotations WHERE company_id = ? AND customer_id = ?",
 		"SELECT 1 FROM sales_orders WHERE company_id = ? AND customer_id = ?",
 		"SELECT 1 FROM sales_invoices WHERE company_id = ? AND customer_id = ?",
-	}, c, i, c, i, c, i)
+		"SELECT 1 FROM sales_credit_notes WHERE company_id = ? AND customer_id = ?",
+	}, c, i, c, i, c, i, c, i)
 }
 
 type customerRow struct {

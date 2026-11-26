@@ -17,14 +17,15 @@ import (
 )
 
 type SettingsModel struct {
-	CompanyID              uuid.UUID       `gorm:"type:uuid;primaryKey"`
-	VatRate                decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_pur_settings_vat,vat_rate BETWEEN 0 AND 100"`
-	JournalID              *uuid.UUID      `gorm:"type:uuid"`
-	GRIRAccountID          *uuid.UUID      `gorm:"column:grir_account_id;type:uuid"`
-	APAccountID            *uuid.UUID      `gorm:"column:ap_account_id;type:uuid"`
-	InputVatAccountID      *uuid.UUID      `gorm:"type:uuid"`
-	PriceVarianceAccountID *uuid.UUID      `gorm:"type:uuid"`
-	UpdatedAt              time.Time       `gorm:"not null"`
+	CompanyID                uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	VatRate                  decimal.Decimal `gorm:"type:numeric(5,2);not null;check:chk_pur_settings_vat,vat_rate BETWEEN 0 AND 100"`
+	JournalID                *uuid.UUID      `gorm:"type:uuid"`
+	GRIRAccountID            *uuid.UUID      `gorm:"column:grir_account_id;type:uuid"`
+	APAccountID              *uuid.UUID      `gorm:"column:ap_account_id;type:uuid"`
+	InputVatAccountID        *uuid.UUID      `gorm:"type:uuid"`
+	PriceVarianceAccountID   *uuid.UUID      `gorm:"type:uuid"`
+	PurchaseReturnsAccountID *uuid.UUID      `gorm:"type:uuid"`
+	UpdatedAt                time.Time       `gorm:"not null"`
 }
 
 func (SettingsModel) TableName() string { return "purchasing_settings" }
@@ -216,6 +217,73 @@ type InvoiceLineModel struct {
 
 func (InvoiceLineModel) TableName() string { return "purchasing_invoice_lines" }
 
+// CreditNoteModel: ใบลดหนี้ผู้ขาย — เลขที่ใบลดหนี้ของผู้ขายห้ามซ้ำต่อผู้ขาย (เฉพาะที่ยังไม่ยกเลิก)
+// ยอดลดหนี้ตัดยอดค้างของใบแจ้งหนี้เดิมผ่าน purchasing_invoice_settlements (document_id = id ใบลดหนี้)
+type CreditNoteModel struct {
+	ID                   uuid.UUID             `gorm:"type:uuid;primaryKey"`
+	CompanyID            uuid.UUID             `gorm:"type:uuid;not null;index:idx_pur_credit_notes_date,priority:1;uniqueIndex:uq_pur_credit_notes_no,priority:1;uniqueIndex:uq_pur_credit_notes_supplier_no,priority:1,where:status = 'posted'"`
+	DocumentNo           string                `gorm:"size:30;not null;uniqueIndex:uq_pur_credit_notes_no,priority:2"`
+	FiscalYear           int                   `gorm:"not null"`
+	FiscalPeriodID       uuid.UUID             `gorm:"type:uuid;not null"`
+	InvoiceID            uuid.UUID             `gorm:"type:uuid;not null;index"`
+	Invoice              *InvoiceModel         `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
+	OrderID              uuid.UUID             `gorm:"type:uuid;not null;index"`
+	Order                *OrderModel           `gorm:"foreignKey:OrderID;constraint:OnDelete:RESTRICT"`
+	SupplierID           uuid.UUID             `gorm:"type:uuid;not null;index;uniqueIndex:uq_pur_credit_notes_supplier_no,priority:2,where:status = 'posted'"`
+	Supplier             *SupplierModel        `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
+	SupplierCreditNoteNo string                `gorm:"size:50;not null;uniqueIndex:uq_pur_credit_notes_supplier_no,priority:3,where:status = 'posted';check:chk_pur_credit_notes_supplier_no,supplier_credit_note_no <> ''"`
+	BillFromName         string                `gorm:"size:200;not null;default:''"`
+	BillFromTaxID        string                `gorm:"size:13;not null;default:''"`
+	BillFromBranchNo     string                `gorm:"size:5;not null;default:''"`
+	BillFromAddress      string                `gorm:"size:500;not null;default:''"`
+	CreditNoteDate       time.Time             `gorm:"type:date;not null"`
+	PostingDate          time.Time             `gorm:"type:date;not null;index:idx_pur_credit_notes_date,priority:2"`
+	Kind                 string                `gorm:"size:20;not null;check:chk_pur_credit_notes_kind,kind IN ('return','allowance')"`
+	Reason               string                `gorm:"size:500;not null;check:chk_pur_credit_notes_reason,reason <> ''"`
+	Description          string                `gorm:"size:500;not null;default:''"`
+	VatRate              decimal.Decimal       `gorm:"type:numeric(5,2);not null"`
+	PriceIncludesVat     bool                  `gorm:"not null"`
+	TotalNet             decimal.Decimal       `gorm:"type:numeric(24,6);not null;check:chk_pur_credit_notes_net,total_net >= 0"`
+	TotalVat             decimal.Decimal       `gorm:"type:numeric(24,6);not null"`
+	TotalGross           decimal.Decimal       `gorm:"type:numeric(24,6);not null;check:chk_pur_credit_notes_total,total_gross = total_net + total_vat"`
+	WarehouseID          *uuid.UUID            `gorm:"type:uuid"`
+	System               string                `gorm:"size:20;not null;check:chk_pur_credit_notes_system,system IN ('perpetual','periodic')"`
+	StockDocumentID      *uuid.UUID            `gorm:"type:uuid"`
+	StockDocumentNo      string                `gorm:"size:30;not null;default:''"`
+	EntryID              *uuid.UUID            `gorm:"type:uuid"`
+	EntryNo              string                `gorm:"size:30;not null;default:''"`
+	Status               string                `gorm:"size:20;not null;check:chk_pur_credit_notes_status,status IN ('posted','cancelled')"`
+	CreatedBy            uuid.UUID             `gorm:"type:uuid;not null"`
+	PostedAt             time.Time             `gorm:"not null"`
+	CancelledBy          *uuid.UUID            `gorm:"type:uuid"`
+	CancelledAt          *time.Time            `gorm:"check:chk_pur_credit_notes_cancelled,(status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL)"`
+	Lines                []CreditNoteLineModel `gorm:"foreignKey:CreditNoteID;constraint:OnDelete:CASCADE"`
+	CreatedAt            time.Time             `gorm:"not null"`
+	UpdatedAt            time.Time             `gorm:"not null"`
+}
+
+func (CreditNoteModel) TableName() string { return "purchasing_credit_notes" }
+
+// CreditNoteLineModel: invoice_line_no อ้าง line_no ของใบแจ้งหนี้เดิม; ลดราคา = quantity 0
+type CreditNoteLineModel struct {
+	CreditNoteID       uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	LineNo             int             `gorm:"primaryKey"`
+	InvoiceLineNo      int             `gorm:"not null;check:chk_pur_credit_note_lines_invoice_line,invoice_line_no > 0"`
+	ItemID             uuid.UUID       `gorm:"type:uuid;not null"`
+	Quantity           decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_credit_note_lines_qty,quantity >= 0"`
+	UnitPrice          decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Net                decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_credit_note_lines_net,net > 0"`
+	Vat                decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Gross              decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_credit_note_lines_gross,gross = net + vat"`
+	AccountID          uuid.UUID       `gorm:"type:uuid;not null"`
+	Stock              bool            `gorm:"not null"`
+	Cost               decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_pur_credit_note_lines_cost,cost >= 0"`
+	InventoryAccountID *uuid.UUID      `gorm:"type:uuid"`
+	Variance           decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
+}
+
+func (CreditNoteLineModel) TableName() string { return "purchasing_credit_note_lines" }
+
 // SequenceModel: เลขลำดับล่าสุดต่อชนิดเอกสาร + คีย์ช่วงนับของรูปแบบเลขที่ (เช่น F2026, Y2026M02)
 type SequenceModel struct {
 	CompanyID uuid.UUID `gorm:"type:uuid;primaryKey"`
@@ -230,7 +298,7 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&SettingsModel{}, &SupplierModel{}, &SupplierBranchModel{}, &OrderModel{}, &OrderLineModel{},
 		&ReceiptModel{}, &ReceiptLineModel{}, &InvoiceModel{}, &InvoiceLineModel{}, &SequenceModel{},
-		&SettlementModel{},
+		&SettlementModel{}, &CreditNoteModel{}, &CreditNoteLineModel{},
 	); err != nil {
 		return err
 	}

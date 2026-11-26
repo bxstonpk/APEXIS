@@ -13,6 +13,7 @@ package sales
 import (
 	"context"
 	nethttp "net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -62,6 +63,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, invent
 		Orders:      gormrepo.NewOrderRepository(db),
 		Deliveries:  gormrepo.NewDeliveryRepository(db),
 		Invoices:    gormrepo.NewInvoiceRepository(db),
+		CreditNotes: gormrepo.NewCreditNoteRepository(db),
 		Settlements: gormrepo.NewSettlementRepository(db),
 		Reports:     gormrepo.NewReportRepository(db),
 	})
@@ -145,4 +147,14 @@ func (m *Module) Permissions() []string {
 		out[i] = string(p)
 	}
 	return out
+}
+
+// OutputVat: ยอดภาษีขายของช่วงวันที่ (ใบแจ้งหนี้ที่ผ่านรายการ หักใบลดหนี้) — finance ใช้ทำสรุป ภ.พ.30
+// ไม่ตรวจสิทธิ์ของขาย (finance ตรวจ finance.report:read แล้ว); start / end เป็นวันที่ (UTC, ไม่มีเวลา)
+func (m *Module) OutputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error) {
+	t, err := m.UseCases.Reports.VatTotals(ctx, vo.CompanyID(companyID), start, end)
+	if err != nil {
+		return integration.VatTotals{}, reject(err)
+	}
+	return integration.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }

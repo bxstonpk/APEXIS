@@ -1,5 +1,5 @@
 // Package purchasing คือจัดซื้อ: ผู้ขาย (จด / ไม่จด VAT), ใบสั่งซื้อ (อนุมัติ), ใบรับสินค้า, ใบแจ้งหนี้ผู้ขาย
-// และรายงานใบสั่งซื้อค้างรับ / อายุเจ้าหนี้
+// ใบลดหนี้ผู้ขาย (ส่งคืนสินค้า / ลดราคา) และรายงานใบสั่งซื้อค้างรับ / อายุเจ้าหนี้ / ภาษีซื้อ
 //
 // กฎ VAT: ใบสั่งซื้อเก็บสถานะจด VAT / อัตรา / ราคารวมหรือแยก VAT ของผู้ขาย ณ ตอนสร้าง —
 // ใบรับสินค้าและใบแจ้งหนี้ใช้ค่าในใบสั่งซื้อเสมอ; ต้นทุนสินค้าไม่รวม VAT
@@ -20,6 +20,7 @@ package purchasing
 import (
 	"context"
 	nethttp "net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -73,6 +74,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, invent
 		Invoices:    gormrepo.NewInvoiceRepository(db),
 		Reports:     gormrepo.NewReportRepository(db),
 		Settlements: gormrepo.NewSettlementRepository(db),
+		CreditNotes: gormrepo.NewCreditNoteRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -159,4 +161,14 @@ func (m *Module) Permissions() []string {
 		out[i] = string(p)
 	}
 	return out
+}
+
+// InputVat: ยอดภาษีซื้อของช่วงวันที่ (ใบแจ้งหนี้ผู้ขายที่ผ่านรายการ หักใบลดหนี้) — finance ใช้ทำสรุป ภ.พ.30
+// นับเฉพาะเอกสารที่มี VAT ตามวันที่ลงบัญชี (ชุดเดียวกับ book=input-vat); ไม่ตรวจสิทธิ์ — finance ตรวจ finance.report:read แล้ว
+func (m *Module) InputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error) {
+	t, err := m.UseCases.Reports.VatTotals(ctx, vo.CompanyID(companyID), start, end)
+	if err != nil {
+		return integration.VatTotals{}, reject(err)
+	}
+	return integration.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }

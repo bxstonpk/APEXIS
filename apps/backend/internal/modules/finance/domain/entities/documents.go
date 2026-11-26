@@ -272,6 +272,8 @@ type PaymentState struct {
 	Status       vo.DocStatus
 	Posting      Posting
 	Cancellation *Cancellation
+	// WhtCertificateNo: เลขที่หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) — ออกเมื่อมีภาษีหัก ("" = ไม่มี), ยกเลิกใบจ่ายแล้วเลขยังคงอยู่ (หนังสือรับรองเป็นโมฆะ)
+	WhtCertificateNo string
 }
 
 // Payment คือใบสำคัญจ่าย — จ่ายชำระหนี้ผู้ขาย 1 ราย (หลายใบแจ้งหนี้) หรือจ่ายเงินอื่น (หลายบัญชี), จ่ายได้หลายช่องทาง

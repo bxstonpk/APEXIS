@@ -5,21 +5,22 @@ import "errors"
 
 // 400
 var (
-	ErrInvalidID        = errors.New("invalid id")
-	ErrInvalidCode      = errors.New("invalid code")
-	ErrInvalidName      = errors.New("invalid name")
-	ErrInvalidText      = errors.New("text is too long")
-	ErrInvalidStatus    = errors.New("invalid status")
-	ErrInvalidType      = errors.New("type must be cash or bank")
-	ErrInvalidAccountNo = errors.New("bank account number may contain only digits and - (up to 30)")
-	ErrBankDetails      = errors.New("bank accounts require bank_name and account_no")
-	ErrInvalidDate      = errors.New("invalid date")
-	ErrInvalidKind      = errors.New("invalid document kind")
-	ErrInvalidTaxType   = errors.New("tax_type must be individual or juristic")
-	ErrInvalidWhtRate   = errors.New("withholding tax rate must be more than 0 and at most 100 with at most 2 decimal places")
-	ErrInvalidReceipt   = errors.New("invalid receipt")  // detailed
-	ErrInvalidPayment   = errors.New("invalid payment")  // detailed
-	ErrInvalidTransfer  = errors.New("invalid transfer") // detailed
+	ErrInvalidID         = errors.New("invalid id")
+	ErrInvalidCode       = errors.New("invalid code")
+	ErrInvalidName       = errors.New("invalid name")
+	ErrInvalidText       = errors.New("text is too long")
+	ErrInvalidStatus     = errors.New("invalid status")
+	ErrInvalidType       = errors.New("type must be cash or bank")
+	ErrInvalidAccountNo  = errors.New("bank account number may contain only digits and - (up to 30)")
+	ErrBankDetails       = errors.New("bank accounts require bank_name and account_no")
+	ErrInvalidDate       = errors.New("invalid date")
+	ErrInvalidKind       = errors.New("invalid document kind")
+	ErrInvalidTaxType    = errors.New("tax_type must be individual or juristic")
+	ErrInvalidWhtRate    = errors.New("withholding tax rate must be more than 0 and at most 100 with at most 2 decimal places")
+	ErrInvalidIncomeType = errors.New("income_type must be one of 40_1, 40_2, 40_3, 40_4a, 40_4b, 3_tres, other")
+	ErrInvalidReceipt    = errors.New("invalid receipt")  // detailed
+	ErrInvalidPayment    = errors.New("invalid payment")  // detailed
+	ErrInvalidTransfer   = errors.New("invalid transfer") // detailed
 )
 
 // 404

@@ -165,3 +165,13 @@ type PartyMerge struct {
 	From uuid.UUID
 	To   uuid.UUID
 }
+
+// ---------- ภาษีมูลค่าเพิ่ม (สรุป ภ.พ.30) ----------
+
+// VatTotals คือยอดรวมของเอกสารภาษีในช่วงวันที่ — ใบกำกับภาษีหักด้วยใบลดหนี้แล้ว
+// sales.Module.OutputVat (ภาษีขาย) / purchasing.Module.InputVat (ภาษีซื้อ) คืนค่านี้ให้ finance ทำสรุป ภ.พ.30
+type VatTotals struct {
+	Base      decimal.Decimal // มูลค่าสินค้า / บริการ (ก่อน VAT)
+	Tax       decimal.Decimal // ภาษีมูลค่าเพิ่ม
+	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
+}

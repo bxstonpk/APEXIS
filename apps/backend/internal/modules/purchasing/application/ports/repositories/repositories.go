@@ -6,6 +6,7 @@ package repositories
 import (
 	"apexis/backend/internal/platform/dashperiod"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -75,6 +76,20 @@ type InvoiceRepository interface {
 	Open(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID) ([]dto.OpenInvoice, error)
 }
 
+type CreditNoteRepository interface {
+	Create(ctx context.Context, c *entities.CreditNote) error
+	UpdateStatus(ctx context.Context, c *entities.CreditNote) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.CreditNoteID) (*entities.CreditNote, error)
+	// SupplierNoUsed: เลขที่ใบลดหนี้ของผู้ขายนี้ถูกบันทึกแล้ว (ยังไม่ยกเลิก)
+	SupplierNoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error)
+	// InvoiceCredits: ยอดส่งคืน / ลดหนี้แล้วต่อ line_no ของใบแจ้งหนี้ (ใบลดหนี้ที่ยังไม่ยกเลิก) — query เดียว
+	InvoiceCredits(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID) (map[int]dto.LineCredit, error)
+	// HasPosted: ใบแจ้งหนี้มีใบลดหนี้ที่ยังไม่ยกเลิก
+	HasPosted(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID) (bool, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.CreditNoteID) (dto.CreditNote, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.CreditNoteSummary], error)
+}
+
 // SettlementRepository: ประวัติการตัดยอดใบแจ้งหนี้จากเอกสารจ่ายเงินของ finance (ใช้คำนวณอายุเจ้าหนี้ ณ วันที่)
 type SettlementRepository interface {
 	Create(ctx context.Context, companyID vo.CompanyID, doc dto.SettlementDoc, lines []dto.SettlementLine) error
@@ -89,4 +104,8 @@ type ReportRepository interface {
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
 	// Dashboard: ภาพรวมแอปจัดซื้อในช่วง (aggregate ไม่กี่ query)
 	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
+	// InputVat: รายงานภาษีซื้อ (ใบแจ้งหนี้ + ใบลดหนี้ติดลบ) แบ่งหน้าใน DB พร้อมยอดรวมทุกแถว
+	InputVat(ctx context.Context, companyID vo.CompanyID, f dto.InputVatFilter) (listing.Result[dto.InputVatRow], dto.InputVatRow, error)
+	// VatTotals: ยอดรวมภาษีซื้อของช่วงวันที่ (ใบแจ้งหนี้ - ใบลดหนี้) — query เดียว
+	VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error)
 }

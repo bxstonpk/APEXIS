@@ -198,6 +198,25 @@ func (t TaxType) Form() string {
 	return ""
 }
 
+// IncomeType คือประเภทเงินได้ตามหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) — ใช้เลือกช่องที่พิมพ์
+type IncomeType string
+
+const (
+	Income40_1  IncomeType = "40_1"   // เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ ตามมาตรา 40 (1)
+	Income40_2  IncomeType = "40_2"   // ค่าธรรมเนียม ค่านายหน้า ฯลฯ ตามมาตรา 40 (2)
+	Income40_3  IncomeType = "40_3"   // ค่าแห่งลิขสิทธิ์ ฯลฯ ตามมาตรา 40 (3)
+	Income40_4a IncomeType = "40_4a"  // ดอกเบี้ย ฯลฯ ตามมาตรา 40 (4) (ก)
+	Income40_4b IncomeType = "40_4b"  // เงินปันผล เงินส่วนแบ่งกำไร ฯลฯ ตามมาตรา 40 (4) (ข)
+	Income3Tres IncomeType = "3_tres" // ตามคำสั่งกรมสรรพากรที่ออกตามมาตรา 3 เตรส (ค่าบริการ ค่าเช่า ค่าจ้างทำของ ค่าโฆษณา ค่าขนส่ง ฯลฯ)
+	IncomeOther IncomeType = "other"  // อื่น ๆ
+)
+
+var IncomeTypes = []IncomeType{Income40_1, Income40_2, Income40_3, Income40_4a, Income40_4b, Income3Tres, IncomeOther}
+
+func ParseIncomeType(raw string) (IncomeType, error) {
+	return parseEnum(raw, IncomeTypes, domain.ErrInvalidIncomeType)
+}
+
 // DocType คือชนิดเอกสารที่ลงทะเบียนกับ organization เพื่อตั้งรูปแบบเลขที่
 type DocType string
 
@@ -205,16 +224,19 @@ const (
 	DocReceipt  DocType = "finance.receipt"
 	DocPayment  DocType = "finance.payment"
 	DocTransfer DocType = "finance.transfer"
+	// DocWhtCertificate: เลขที่หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) — ออกพร้อมใบสำคัญจ่ายที่มีภาษีหัก ณ ที่จ่าย
+	DocWhtCertificate DocType = "finance.wht_certificate"
 )
 
-var DocTypes = []DocType{DocReceipt, DocPayment, DocTransfer}
+var DocTypes = []DocType{DocReceipt, DocPayment, DocTransfer, DocWhtCertificate}
 
 func (t DocType) Prefix() string {
-	return map[DocType]string{DocReceipt: "RV", DocPayment: "PV", DocTransfer: "TF"}[t]
+	return map[DocType]string{DocReceipt: "RV", DocPayment: "PV", DocTransfer: "TF", DocWhtCertificate: "WT"}[t]
 }
 
 func (t DocType) Name() string {
-	return map[DocType]string{DocReceipt: "ใบเสร็จรับเงิน / ใบรับเงิน", DocPayment: "ใบสำคัญจ่าย", DocTransfer: "ใบโอนเงินระหว่างบัญชี"}[t]
+	return map[DocType]string{DocReceipt: "ใบเสร็จรับเงิน / ใบรับเงิน", DocPayment: "ใบสำคัญจ่าย", DocTransfer: "ใบโอนเงินระหว่างบัญชี",
+		DocWhtCertificate: "หนังสือรับรองการหักภาษี ณ ที่จ่าย"}[t]
 }
 
 // Permission ของ finance

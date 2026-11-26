@@ -61,6 +61,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receiv
 		Ledger:      services.NewLedger(ledger),
 		Receivables: services.NewReceivables(receivables),
 		Payables:    services.NewPayables(payables),
+		Vat:         services.NewVat(receivables, payables),
 		Accounts:    gormrepo.NewCashAccountRepository(db),
 		Settings:    gormrepo.NewSettingsRepository(db),
 		WhtTypes:    gormrepo.NewWhtTypeRepository(db),

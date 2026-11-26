@@ -11,7 +11,7 @@ import { today } from '@/lib/format'
 import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 import { focusFirstInvalid, normalizeCode, requiredMessage, type FieldErrors } from '@/lib/validation'
-import type { CashAccount, Ref, WhtType } from './types'
+import { INCOME_TYPES, type CashAccount, type IncomeType, type Ref, type WhtType } from './types'
 
 // ---------------------------------------------------------------- บัญชีเงินสด / ธนาคาร
 
@@ -133,7 +133,7 @@ export function WhtTypeForm({ apiPath, listHref, canManage, item }: { apiPath: s
   const f = t.fields
   const readOnly = !canManage
   const form = useResourceForm({ apiPath, id: item?.id, listHref })
-  const [v, setV] = useState({ code: item?.code ?? '', name: item?.name ?? '', rate: item?.rate ?? '', status: item?.status ?? 'active' })
+  const [v, setV] = useState({ code: item?.code ?? '', name: item?.name ?? '', rate: item?.rate ?? '', income_type: item?.income_type ?? ('3_tres' as IncomeType), status: item?.status ?? 'active' })
   const [errors, setErrors] = useState<FieldErrors<'code' | 'name' | 'rate'>>({})
   const set = (k: keyof typeof v, val: string) => setV((s) => ({ ...s, [k]: val }))
 
@@ -147,13 +147,13 @@ export function WhtTypeForm({ apiPath, listHref, canManage, item }: { apiPath: s
     setErrors(errs)
     if (readOnly) return
     if (Object.keys(errs).length) return focusFirstInvalid(e.currentTarget)
-    form.save({ code: v.code, name: v.name.trim(), rate, status: v.status })
+    form.save({ code: v.code, name: v.name.trim(), rate, income_type: v.income_type, status: v.status })
   }
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={texts.branches.form.general} description={t.description}>
+      <FormSection title={texts.branches.form.general} description={`${t.description} — ${t.incomeTypeHint}`}>
         <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField
@@ -165,6 +165,15 @@ export function WhtTypeForm({ apiPath, listHref, canManage, item }: { apiPath: s
           disabled={readOnly}
           error={errors.rate}
           onChange={(e) => set('rate', e.target.value)}
+        />
+        <SelectField
+          label={f.incomeType}
+          required
+          value={v.income_type}
+          disabled={readOnly}
+          options={INCOME_TYPES.map((k) => ({ value: k, label: t.incomeTypes[k]! }))}
+          onChange={(e) => set('income_type', e.target.value)}
+          className="sm:col-span-2"
         />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
       </FormSection>
