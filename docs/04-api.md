@@ -177,7 +177,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
 | GET | `/accounts/tree` | `ledger.account:read` | ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส ไม่แบ่งหน้า — 1 คิวรี; หน้าผังบัญชีสร้างต้นไม้จาก `parent` (ผังบัญชีมีหลักร้อยบัญชี จึงส่งทั้งชุด) |
-| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจของบริษัท (บริการ 245 / ซื้อขาย 259 / ผลิต 273 / ก่อสร้าง 261 บัญชี — ดู 01-requirements LED-10; บริษัทใหม่ได้ผังนี้ตอนสร้างบริษัทแล้ว) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
+| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจของบริษัท (บริการ 245 / ซื้อขาย 259 / ผลิต 274 / ก่อสร้าง 261 บัญชี — ดู 01-requirements LED-10; บริษัทใหม่ได้ผังนี้ตอนสร้างบริษัทแล้ว) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
 
 | Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
 |---|---|---|---|---|
@@ -437,6 +437,51 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 ตอนเริ่มโปรแกรม `identity.RenamePermissions` แปลงสิทธิ์ของบทบาทเดิม (ทำซ้ำได้): `cashbank.account:*` → `finance.cash_account:*`, `sales.receipt:*` → `finance.receipt:*`,
 `purchasing.payment:*` → `finance.payment:*`; ผู้มี `purchasing.settings:*` / `purchasing.report:read` / `sales.report:read` ได้ `finance.settings:*` / `finance.report:read` เพิ่ม
+
+## 4.11 Endpoint — manufacturing (ผลิต)
+
+ใช้ได้เฉพาะบริษัทประเภท `manufacturing` — ประเภทอื่นตอบ 422 `the_manufacturing_app_is_available_only_to_manufacturing_companies`
+
+| Resource | Path | Filter เพิ่ม | สิทธิ์ |
+|---|---|---|---|
+| ค่าตั้ง | `GET`, `PUT /manufacturing-settings` | — | `manufacturing.settings:read\|manage` |
+| สูตรการผลิต | `GET`, `POST /boms`; `GET`, `PUT`, `DELETE /boms/{bomID}` | `q, item_id, status`; sort `code\|name\|updated_at` | `manufacturing.bom:read\|manage` |
+| ใบสั่งผลิต | `GET`, `POST /production-orders`; `GET`, `PUT /production-orders/{orderID}` | `q, status, item_id, from, to`; sort `date\|document_no\|created_at` (ค่าเริ่มต้น `-date,-document_no`) | `manufacturing.order:read\|manage` |
+| การทำงานของใบสั่งผลิต | `POST /production-orders/{orderID}/release`, `/issue`, `/return`, `/complete`, `/cancel` | — | `manufacturing.order:manage` |
+
+```jsonc
+// POST /boms, PUT /boms/{id} — แทนที่ทั้งก้อน; scrap_percent ไม่ส่ง = 0; account_id ไม่ส่ง = เครดิตบัญชีปันเข้างานในค่าตั้ง
+{ "code": "FG-1", "name": "สูตรโต๊ะ", "item_id": "…", "output_quantity": "2", "status": "active", "is_default": true,
+  "components": [ { "item_id": "…", "quantity": "4", "scrap_percent": "10" } ],
+  "conversion_costs": [ { "description": "ค่าแรง", "account_id": null, "amount": "50" } ] }
+// POST /production-orders — เลขที่ออกทันที (ชนิด manufacturing.production_order ค่าเริ่มต้น MO{fy}-{seq:6}, ตั้งรูปแบบได้ที่ /document-numberings)
+{ "date": "2026-03-01", "item_id": "…", "bom_id": "…", "quantity": "4", "warehouse_id": "…",
+  "planned_start": "2026-03-02", "planned_end": "2026-03-10", "description": "" }
+// PUT /production-orders/{id} — draft เท่านั้น; body เดียวกัน + materials (ไม่ส่ง = คำนวณจากสูตรใหม่)
+{ "...": "...", "materials": [ { "item_id": "…", "required_quantity": "9" } ] }
+// POST /production-orders/{id}/issue | /return
+{ "date": "2026-03-02", "lines": [ { "item_id": "…", "quantity": "12" } ] }
+// POST /production-orders/{id}/complete
+{ "date": "2026-03-05", "completed_quantity": "3" }
+// POST /production-orders/{id}/cancel
+{ "reason": "ผลิตผิดสเปก" }
+```
+
+- สูตร: `{id, code, name, item{id,code,name,uom}, output_quantity, status, is_default, components[{line_no, item, quantity, scrap_percent}], conversion_costs[{line_no, description, account{id,code,name}|null, amount}], created_at, updated_at}` (รายการไม่มี components / conversion_costs); รหัสซ้ำ / สูตรหลักที่ใช้งานอยู่ซ้ำของสินค้าเดียวกัน = 409; ลบสูตรที่มีใบสั่งผลิตอ้าง = 409
+- ใบสั่งผลิต: `{id, document_no, date, item, bom{id,code,name}, quantity, warehouse{id,code,name}, planned_start, planned_end, status, description, materials[{line_no, item, required_quantity, issued_quantity, returned_quantity, net_quantity, cost}], conversion_cost, movements[{id, kind: issue|return|receipt, date, document_id, document_no, value, entry_no, cancelled}], costs{materials, conversion, total, unit_cost|null}, completed_quantity, completed_at, cancelled_at, cancel_reason, created_by, created_at}` — รายการมี `total_cost` แทน materials / movements / costs
+  - `conversion_cost` = ค่าแรง / ค่าใช้จ่ายมาตรฐานตามจำนวนสั่ง; `costs.conversion` = ที่ปันเข้างานแล้ว (ตอนปิดงาน ตามจำนวนที่ผลิตได้); `unit_cost` = รวม / จำนวนที่ผลิตได้ (6 ตำแหน่ง)
+  - `movements[].document_no` = เลขที่เอกสารสต็อกของ inventory (เบิก GI / รับเข้า GR); `entry_no` ว่าง = ปีบัญชีระบบสิ้นงวด (ไม่ลงบัญชี)
+- ระบบบัญชีตามปีบัญชีของ inventory — **periodic (ค่าเริ่มต้นทุกประเภทธุรกิจ)**: สต็อก / ต้นทุน FIFO / ต้นทุนจริงของสินค้าสำเร็จรูปครบ ไม่มีรายการบัญชี; **perpetual**: เบิก Dr งานระหว่างผลิต / Cr สินค้าคงเหลือ, คืนกลับด้าน, ปิดงาน Dr สินค้าสำเร็จรูป / Cr งานระหว่างผลิต + Cr บัญชีปันเข้างาน (ดู 01-requirements MFG-08)
+- 422: สถานะไม่ถูกต้อง (`production_order_is_not_a_draft` / `..._not_released`), วัตถุดิบไม่อยู่ในใบ, คืนเกินที่เบิกสุทธิ, วันที่ก่อนวันที่ใบสั่งผลิต, สต็อกไม่พอ / งวดปิด / สินค้าสำเร็จรูปถูกใช้แล้วตอนยกเลิก (`rejected_by_inventory…`), ค่าตั้งไม่ครบ (`manufacturing_settings_are_incomplete: wip_account_id`), สินค้าไม่มีบัญชีสินค้าคงเหลือ (perpetual)
+- ค่าตั้ง: `GET` คืน `{journal_id, wip_account_id, conversion_account_id, default_warehouse_id, journal{id,code,name}, wip_account, conversion_account, default_warehouse}`; `PUT` ส่ง 4 id (ไม่ส่ง = ไม่ตั้ง) — บริษัทผลิตใหม่ได้ GEN / 1105050000 / 5065000000 ให้อัตโนมัติ
+
+### รายงาน (`manufacturing.report:read`)
+
+| `book` | parameter | ผลลัพธ์ |
+|---|---|---|
+| `production-cost` | `start_date, end_date` (บังคับ, วันที่ปิดงาน), `item_id, page, page_size` | ใบสั่งผลิตที่ปิดงาน: `order{id,document_no}, date, item, quantity, materials, conversion, total, unit_cost` + `totals{materials, conversion, total}` ทั้งช่วง |
+| `material-usage` | เหมือน `production-cost` | ใบสั่งผลิต × วัตถุดิบ: `standard_quantity` (ปริมาณที่ต้องใช้ × จำนวนที่ผลิตได้ / จำนวนสั่ง), `actual_quantity` (เบิกสุทธิ), `variance_quantity`, `actual_cost`, `variance_value` (ผลต่าง × ต้นทุนเฉลี่ยที่เบิก) |
+| `wip` | `end_date` (บังคับ), `page, page_size` | ใบที่ปล่อยผลิตแล้วแต่ยังไม่ปิดงาน ณ วันที่: `order, date, item, quantity, materials` (เบิก − คืนถึงวันที่) + `total` |
 
 ## Dashboard (ภาพรวมของแต่ละแอป)
 
