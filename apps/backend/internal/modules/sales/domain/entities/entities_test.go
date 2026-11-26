@@ -112,12 +112,12 @@ func TestInvoiceJournalWithDeliveryOneLinePerAccount(t *testing.T) {
 		return InvoiceLine{ItemID: item, Quantity: d(qty), UnitPrice: d(price), Amounts: services.LineAmounts(d(qty), d(price), tr.Vat, 2),
 			RevenueAccountID: rev, CostLine: CostLine{Stock: true, Cost: d(cost), InventoryAccountID: &inv}}
 	}
-	i, err := NewInvoice(InvoiceState{Date: day, Vat: tr.Vat, WithDelivery: true, Stock: Stock{System: vo.Perpetual},
+	i, err := NewInvoice(InvoiceState{Kind: vo.KindInvoice, Date: day, Vat: tr.Vat, Stock: Stock{System: vo.Perpetual},
 		Lines: []InvoiceLine{line("1", "1000", "600"), line("2", "500", "700")}}, 30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	j := i.Journal(ar, vat, cogs)
+	j := i.Journal(JournalAccounts{AR: ar, OutputVat: vat, Cogs: cogs})
 	got := map[vo.AccountID]string{}
 	for _, l := range j {
 		got[l.AccountID] = l.Debit.String() + "/" + l.Credit.String()

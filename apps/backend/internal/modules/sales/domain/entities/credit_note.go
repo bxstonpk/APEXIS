@@ -39,6 +39,7 @@ type CreditNoteState struct {
 	Reason       string // เหตุที่ลดหนี้ (ต้องพิมพ์ในใบลดหนี้)
 	Description  string
 	Vat          services.VatTerms // ตามใบแจ้งหนี้เดิม
+	VatKind      vo.VatKind        // output = ใบลดหนี้ / ใบกำกับภาษี; undue = ลดภาษีขายยังไม่ถึงกำหนด (ขายบริการที่ยังไม่ออกใบกำกับ)
 	Stock        Stock             // ใบรับคืนของ inventory (return + สินค้า stock)
 	Lines        []CreditNoteLine
 	Totals       services.Amounts
@@ -75,6 +76,9 @@ func NewCreditNote(s CreditNoteState, invoiceDate time.Time) (*CreditNote, error
 		}
 		s.Totals = s.Totals.Add(l.Amounts)
 	}
+	if s.VatKind == "" {
+		s.VatKind = vo.VatOutput
+	}
 	s.ID, s.Status, s.Cancellation = vo.NewID[vo.CreditNoteID](), vo.DocPosted, nil
 	return &CreditNote{s: s}, nil
 }
@@ -87,7 +91,7 @@ func (c *CreditNote) SetEntry(id vo.EntryID, no string) {
 	c.s.Posting.EntryID, c.s.Posting.EntryNo = &id, no
 }
 
-// Journal: Dr บัญชีของบรรทัด (ก่อน VAT) + Dr ภาษีขาย / Cr ลูกหนี้ (รวม VAT) [+ Dr สินค้าคงเหลือ / Cr ต้นทุนขาย]
+// Journal: Dr บัญชีของบรรทัด (ก่อน VAT) + Dr ภาษีขาย (หรือภาษีขายยังไม่ถึงกำหนด ตาม VatKind — ผู้เรียกส่งบัญชีมา) / Cr ลูกหนี้ (รวม VAT) [+ Dr สินค้าคงเหลือ / Cr ต้นทุนขาย]
 func (c *CreditNote) Journal(ar, outputVat, cogs vo.AccountID) []services.JournalLine {
 	j := services.NewJournal()
 	costs := make([]CostLine, 0, len(c.s.Lines))

@@ -44,24 +44,64 @@ type ShipmentInput struct {
 	Quantity    vo.Quantity
 }
 
-type DeliveryInput struct {
-	OrderID     vo.OrderID
-	Date        time.Time
-	WarehouseID *vo.WarehouseID
-	Reference   string
+// SaleLineInput: บรรทัดเอกสารขายที่ออกตรง (ไม่อ้างใบสั่งขาย)
+type SaleLineInput struct {
+	ItemID      vo.ItemID
 	Description string
-	Lines       []ShipmentInput
+	Quantity    vo.Quantity
+	UnitPrice   vo.Money
 }
 
-// InvoiceInput: WithDelivery = ใบส่งของ / ใบกำกับภาษี (ตัดสต็อกพร้อมออกบิล; ต้องมี WarehouseID เมื่อมีสินค้า stock)
-type InvoiceInput struct {
-	OrderID      vo.OrderID
-	Date         time.Time
-	WithDelivery bool
-	WarehouseID  *vo.WarehouseID
-	Reference    string
-	Description  string
-	Lines        []ShipmentInput
+// DepositInput: มัดจำที่หักในเอกสารขาย — Amount = ฐานก่อน VAT
+type DepositInput struct {
+	DepositID vo.InvoiceID
+	Amount    vo.Money
+}
+
+// SaleInput: ขายสินค้า / ขายบริการ — อ้างใบสั่งขาย (OrderID + OrderLines) หรือออกตรง (CustomerID + Lines)
+// VatRate nil = ตามค่าตั้งขาย; WarehouseID บังคับเมื่อมีสินค้า stock
+type SaleInput struct {
+	Kind             vo.InvoiceKind
+	OrderID          *vo.OrderID
+	OrderLines       []ShipmentInput
+	CustomerID       vo.CustomerID
+	CustomerBranchNo string
+	PriceIncludesVat bool
+	VatRate          *vo.Money
+	Lines            []SaleLineInput
+	Date             time.Time
+	WarehouseID      *vo.WarehouseID
+	Reference        string
+	Description      string
+	Deposits         []DepositInput
+}
+
+// DepositDocInput: ใบรับเงินมัดจำ — Amount ตาม PriceIncludesVat (รวม / ไม่รวม VAT)
+type DepositDocInput struct {
+	CustomerID       vo.CustomerID
+	CustomerBranchNo string
+	OrderID          *vo.OrderID
+	Date             time.Time
+	Description      string
+	Reference        string
+	Amount           vo.Money
+	PriceIncludesVat bool
+	VatRate          *vo.Money
+}
+
+// TaxInvoiceInput: ออกใบกำกับภาษีของใบแจ้งหนี้บริการก่อนรับเงิน
+type TaxInvoiceInput struct {
+	InvoiceID vo.InvoiceID
+	Date      time.Time
+}
+
+// BillingNoteInput: ใบวางบิล
+type BillingNoteInput struct {
+	CustomerID  vo.CustomerID
+	Date        time.Time
+	DueDate     time.Time
+	Description string
+	InvoiceIDs  []vo.InvoiceID
 }
 
 // CreditNoteInput: ใบลดหนี้อ้างใบแจ้งหนี้ — WarehouseID บังคับเมื่อรับคืนสินค้า stock
@@ -104,9 +144,10 @@ type DocumentFilter struct {
 	Search     string
 	Statuses   []string
 	CustomerID *vo.CustomerID
-	OrderID    *vo.OrderID   // ใบส่งของ / ใบแจ้งหนี้ของใบสั่งขายนี้
-	InvoiceID  *vo.InvoiceID // ใบลดหนี้ของใบแจ้งหนี้นี้
-	ItemID     *vo.ItemID    // ใบเสนอราคา / ใบสั่งขาย: มีบรรทัดของสินค้านี้
+	OrderID    *vo.OrderID    // เอกสารขายของใบสั่งขายนี้
+	InvoiceID  *vo.InvoiceID  // ใบลดหนี้ของใบแจ้งหนี้นี้
+	ItemID     *vo.ItemID     // ใบเสนอราคา / ใบสั่งขาย: มีบรรทัดของสินค้านี้
+	Kind       vo.InvoiceKind // เอกสารขาย: ชนิด (ตั้งโดย handler ตาม endpoint)
 	StartDate  *time.Time
 	EndDate    *time.Time
 	Sort       []listing.Sort
@@ -149,6 +190,7 @@ type Ref struct {
 	ID   string
 	Code string
 	Name string
+	Type string // สินค้า: service | stock | non_stock
 }
 
 type Totals struct {
@@ -158,14 +200,16 @@ type Totals struct {
 }
 
 type Settings struct {
-	VatRegistered         bool
-	VatRate               vo.Money
-	JournalID             *string
-	ARAccountID           *string
-	OutputVatAccountID    *string
-	RevenueAccountID      *string
-	CogsAccountID         *string
-	SalesReturnsAccountID *string
+	VatRegistered           bool
+	VatRate                 vo.Money
+	JournalID               *string
+	ARAccountID             *string
+	OutputVatAccountID      *string
+	RevenueAccountID        *string
+	CogsAccountID           *string
+	SalesReturnsAccountID   *string
+	UndueOutputVatAccountID *string
+	DepositAccountID        *string
 }
 
 type Customer struct {
@@ -258,26 +302,12 @@ type StockInfo struct {
 	StockDocumentNo string
 }
 
-type DeliveryLine struct {
-	OrderLineNo int
-	Item        Ref
-	Quantity    vo.Quantity
-	Cost        vo.Money
-}
-
-type Delivery struct {
-	PostedSummary
-	StockInfo
-	TotalCost   vo.Money
-	Reference   string
-	Description string
-	Lines       []DeliveryLine
-}
-
 type InvoiceLine struct {
 	LineNo           int // เลขบรรทัดของใบแจ้งหนี้ (ใบลดหนี้อ้างด้วย invoice_line_no)
-	OrderLineNo      int
+	OrderLineNo      int // 0 = ออกตรง
 	Item             Ref
+	Description      string
+	Service          bool
 	Quantity         vo.Quantity
 	UnitPrice        vo.Money
 	Amounts          Totals
@@ -289,12 +319,30 @@ type InvoiceLine struct {
 
 type InvoiceSummary struct {
 	PostedSummary
-	WithDelivery bool
-	DueDate      time.Time
-	Totals       Totals
-	Received     vo.Money // ยอดรับชำระ (ใบเสร็จ) — ไม่รวมใบลดหนี้
-	Credited     vo.Money // ยอดใบลดหนี้ (รวม VAT)
-	Outstanding  vo.Money // ยอดรวม - รับชำระ - ลดหนี้
+	Kind             string
+	DueDate          time.Time
+	Totals           Totals
+	Received         vo.Money // ยอดรับชำระ (ใบเสร็จ) — ไม่รวมใบลดหนี้ / มัดจำที่หัก
+	Credited         vo.Money // ยอดใบลดหนี้ (รวม VAT)
+	DepositGross     vo.Money // มัดจำที่หัก (รวม VAT)
+	Outstanding      vo.Money // ยอดรวม - มัดจำ - รับชำระ - ลดหนี้
+	VatStatus        string   // output | undue | partial
+	VatRecognized    vo.Money
+	VatUndue         vo.Money
+	TaxInvoice       *TaxInvoiceRef
+	DepositRemaining *vo.Money // มัดจำ: ฐานที่ยังหักได้
+	DepositApplied   *vo.Money
+}
+
+type TaxInvoiceRef struct {
+	No   string
+	Date time.Time
+}
+
+type DepositApplied struct {
+	Deposit Ref // Code = เลขที่ใบมัดจำ
+	Amount  vo.Money
+	Vat     vo.Money
 }
 
 // ---------- ใบลดหนี้ ----------
@@ -302,6 +350,8 @@ type InvoiceSummary struct {
 type CreditNoteSummary struct {
 	PostedSummary // Order = ใบแจ้งหนี้เดิม (Code = เลขที่ใบแจ้งหนี้)
 	Kind          string
+	VatKind       string // output | undue
+	InvoiceKind   string // ชนิดเอกสารที่ลดหนี้: invoice | service_invoice
 	Reason        string
 	Totals        Totals
 }
@@ -356,6 +406,82 @@ type Invoice struct {
 	Reference        string
 	Description      string
 	Lines            []InvoiceLine
+	DepositsApplied  []DepositApplied
+	VatRecognitions  []VatRecognition
+}
+
+// VatRecognition: ภาษีขายของใบแจ้งหนี้บริการที่ถึงกำหนดแล้ว — Kind = receipt (ใบรับเงินของ finance) | tax_invoice
+type VatRecognition struct {
+	Kind     string
+	Document Ref // Code = เลขที่
+	Date     time.Time
+	Base     vo.Money
+	Vat      vo.Money
+}
+
+// OpenDeposit: มัดจำที่รับเงินครบแล้วและยังหักได้
+type OpenDeposit struct {
+	ID         string
+	DocumentNo string
+	Date       time.Time
+	VatRate    vo.Money
+	Base       vo.Money
+	Vat        vo.Money
+	Remaining  vo.Money
+}
+
+// ---------- ใบวางบิล ----------
+
+type BillingNoteInvoice struct {
+	ID          string
+	DocumentNo  string
+	Kind        string
+	Date        time.Time
+	DueDate     time.Time
+	Gross       vo.Money
+	Outstanding vo.Money
+}
+
+type BillingNoteSummary struct {
+	ID          string
+	DocumentNo  string
+	Date        time.Time
+	DueDate     time.Time
+	Customer    Ref
+	Status      string // open | paid | cancelled
+	Total       vo.Money
+	Outstanding vo.Money
+	CancelledAt *time.Time
+}
+
+type BillingNote struct {
+	BillingNoteSummary
+	Description string
+	CreatedBy   string
+	Invoices    []BillingNoteInvoice
+}
+
+// UndueVatRow: ใบแจ้งหนี้บริการที่ยังมีภาษีขายยังไม่ถึงกำหนด ณ วันที่
+type UndueVatRow struct {
+	Invoice       Ref // Code = เลขที่
+	Date          time.Time
+	Customer      Ref
+	Gross         vo.Money
+	VatTotal      vo.Money
+	VatRecognized vo.Money
+	VatUndue      vo.Money
+}
+
+type UndueVatReport struct {
+	EndDate time.Time
+	Rows    listing.Result[UndueVatRow]
+	Totals  UndueVatRow
+}
+
+type UndueVatFilter struct {
+	End        time.Time
+	CustomerID *vo.CustomerID
+	Page       listing.Page
 }
 
 type OutstandingRow struct {
@@ -384,13 +510,14 @@ type Aging struct {
 	Totals AgingRow
 }
 
-// TaxRow: รายงานภาษีขาย (ใบแจ้งหนี้ + ใบลดหนี้เป็นยอดติดลบ) / ภาษีถูกหัก ณ ที่จ่าย (ใบเสร็จ)
+// TaxRow: รายงานภาษีขาย — เฉพาะเอกสารที่ภาษีเกิดแล้ว (ใบลดหนี้เป็นยอดติดลบ)
 type TaxRow struct {
 	Date        time.Time
-	Kind        string // invoice | credit_note
+	Kind        string // invoice | deposit | tax_invoice | receipt | credit_note
 	DocumentID  string
 	DocumentNo  string
-	ReferenceNo string // ใบลดหนี้: เลขที่ใบกำกับภาษีเดิม
+	ReferenceNo string // ใบลดหนี้: ใบกำกับเดิม; ใบกำกับ / ใบรับเงิน: ใบแจ้งหนี้บริการ
+	ReferenceID string
 	Customer    Ref
 	TaxID       string
 	BranchNo    string
@@ -420,11 +547,22 @@ type SettlementLine struct {
 	Amount    vo.Money
 }
 
+// SettledInvoice: VatBase / Vat = ภาษีขายที่ถึงกำหนดจากการรับเงินครั้งนี้ (ขายบริการ ม.78/1)
 type SettledInvoice struct {
 	ID         vo.InvoiceID
 	DocumentNo string
+	Kind       vo.InvoiceKind
 	Net        vo.Money
 	Gross      vo.Money
+	VatBase    vo.Money
+	Vat        vo.Money
+}
+
+// JournalLine: บรรทัดที่ finance ต้องลงเพิ่มในรายการรับเงินเดียวกัน (Dr ภาษีขายยังไม่ถึงกำหนด / Cr ภาษีขาย)
+type JournalLine struct {
+	AccountID vo.AccountID
+	Debit     vo.Money
+	Credit    vo.Money
 }
 
 // SettlementResult: ลูกค้า ณ วันรับเงิน + บัญชีลูกหนี้ (ค่าตั้งขาย) + ใบแจ้งหนี้ตามลำดับที่ส่งมา
@@ -438,17 +576,21 @@ type SettlementParty struct {
 }
 
 type SettlementResult struct {
-	Customer    SettlementParty
-	ARAccountID vo.AccountID
-	Invoices    []SettledInvoice
+	Customer     SettlementParty
+	ARAccountID  vo.AccountID
+	Invoices     []SettledInvoice
+	ExtraJournal []JournalLine
 }
 
 type OpenInvoice struct {
 	ID          string
 	DocumentNo  string
+	Kind        string
 	Date        time.Time
 	DueDate     time.Time
 	Net         vo.Money
 	Gross       vo.Money
 	Outstanding vo.Money
+	VatUndue    vo.Money // ขายบริการ: ภาษียังไม่ถึงกำหนดที่เหลือ
+	TaxInvoice  bool     // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }

@@ -82,7 +82,6 @@ func mergeDuplicateCustomers(tx *gorm.DB) ([]integration.PartyMerge, error) {
 				WHERE customer_id = ?`, []any{d.Keep, d.BranchNo, d.ID}},
 			{`UPDATE sales_orders SET customer_id = ?, customer_branch_no = CASE WHEN customer_branch_no = '' THEN ? ELSE customer_branch_no END
 				WHERE customer_id = ?`, []any{d.Keep, d.BranchNo, d.ID}},
-			{`UPDATE sales_deliveries SET customer_id = ? WHERE customer_id = ?`, []any{d.Keep, d.ID}},
 			{`UPDATE sales_invoices SET customer_id = ? WHERE customer_id = ?`, []any{d.Keep, d.ID}},
 			{`UPDATE sales_credit_notes SET customer_id = ? WHERE customer_id = ?`, []any{d.Keep, d.ID}},
 			{`UPDATE sales_customers SET deleted_at = ? WHERE id = ?`, []any{now, d.ID}},

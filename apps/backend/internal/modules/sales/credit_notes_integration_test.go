@@ -46,7 +46,7 @@ func TestCreditNotes(t *testing.T) {
 	so := a.expect(a.do("POST", base+"/sales-orders", owner, obj{"customer_id": cust, "date": "2026-03-05",
 		"lines": []obj{{"item_id": itemA, "quantity": "5", "unit_price": "100"}, {"item_id": svc, "quantity": "1", "unit_price": "1000"}}}), 201, "order").id()
 	a.expect(a.do("PATCH", base+"/sales-orders/"+so, owner, obj{"status": "approved"}), 200, "approve")
-	iv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": so, "date": "2026-03-07", "with_delivery": true, "warehouse_id": wh,
+	iv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": so, "date": "2026-03-07", "warehouse_id": wh,
 		"lines": []obj{{"order_line_no": 1, "quantity": "5"}, {"order_line_no": 2, "quantity": "1"}}}), 201, "invoice").data()
 	ivID, ivNo := iv["id"].(string), iv["document_no"].(string)
 	if l := objs(iv["lines"]); l[0]["line_no"] != float64(1) || l[1]["line_no"] != float64(2) || l[0]["returned_quantity"] != "0" || iv["credited_amount"] != "0" {

@@ -89,6 +89,9 @@ func run(logger *slog.Logger) error {
 	for _, r := range finance.PermissionMigrations() {
 		renames = append(renames, identity.PermissionRename{From: r.From, To: r.To, Keep: r.Keep})
 	}
+	for _, r := range sales.PermissionMigrations() {
+		renames = append(renames, identity.PermissionRename{From: r.From, To: r.To, Keep: r.Keep})
+	}
 	if err := identity.RenamePermissions(db, renames); err != nil {
 		return err
 	}

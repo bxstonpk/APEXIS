@@ -131,7 +131,7 @@ func itemMap(items []dto.PurchaseItem) map[uuid.UUID]integration.Item {
 	out := make(map[uuid.UUID]integration.Item, len(items))
 	for _, i := range items {
 		out[uuid.UUID(i.ID)] = integration.Item{
-			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Uom: i.Uom, Stock: i.Stock, Active: i.Active,
+			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Uom: i.Uom, Stock: i.Stock, Service: i.Service, Active: i.Active,
 			PurchaseAccountID: accountUUID(i.Accounts.Purchase), InventoryAccountID: accountUUID(i.Accounts.Inventory),
 			RevenueAccountID: accountUUID(i.Accounts.Revenue),
 		}

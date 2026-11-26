@@ -26,7 +26,7 @@ func TestSalesDashboard(t *testing.T) {
 		return id
 	}
 	invoice := func(orderID, date string) {
-		a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": date, "with_delivery": true,
+		a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": date,
 			"lines": []obj{{"order_line_no": 1, "quantity": "1"}}}), 201, "invoice "+date)
 	}
 	invoice(order("2026-02-10", "500"), "2026-02-10")  // ช่วงก่อนหน้า (ครบกำหนด 20 ก.พ. -> เกิน 39 วัน ณ 31 มี.ค.)
@@ -59,7 +59,7 @@ func TestSalesDashboard(t *testing.T) {
 	if qs := d["quotations"].(obj); qs["open_count"].(float64) != 1 || qs["open_amount"] != "214" {
 		t.Fatalf("quotations = %v", qs)
 	}
-	if o := d["orders"].(obj); o["draft_count"].(float64) != 1 || o["to_deliver_count"].(float64) != 1 || o["to_invoice_count"].(float64) != 1 {
+	if o := d["orders"].(obj); o["draft_count"].(float64) != 1 || o["to_deliver_count"] != nil || o["to_invoice_count"].(float64) != 1 {
 		t.Fatalf("orders = %v", o)
 	}
 	ar := d["receivables"].(obj)

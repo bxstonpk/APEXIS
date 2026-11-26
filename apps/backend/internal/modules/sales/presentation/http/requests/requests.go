@@ -145,6 +145,9 @@ type Settings struct {
 	CogsAccountID      *string  `json:"cogs_account_id"`
 	// SalesReturnsAccountID: บัญชีรับคืนสินค้าและส่วนลดจ่าย (ใบลดหนี้) — null = ลดบัญชีรายได้ของบรรทัด
 	SalesReturnsAccountID *string `json:"sales_returns_account_id"`
+	// UndueOutputVatAccountID: ภาษีขายยังไม่ถึงกำหนด (ขายบริการ); DepositAccountID: เงินมัดจำรับ
+	UndueOutputVatAccountID *string `json:"undue_output_vat_account_id"`
+	DepositAccountID        *string `json:"deposit_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -167,6 +170,8 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 		{"ar_account_id", r.ARAccountID, &out.ARAccountID}, {"output_vat_account_id", r.OutputVatAccountID, &out.OutputVatAccountID},
 		{"revenue_account_id", r.RevenueAccountID, &out.RevenueAccountID}, {"cogs_account_id", r.CogsAccountID, &out.CogsAccountID},
 		{"sales_returns_account_id", r.SalesReturnsAccountID, &out.SalesReturnsAccountID},
+		{"undue_output_vat_account_id", r.UndueOutputVatAccountID, &out.UndueOutputVatAccountID},
+		{"deposit_account_id", r.DepositAccountID, &out.DepositAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -346,7 +351,7 @@ type Status struct {
 	Status string `json:"status"`
 }
 
-// ---------- ส่งของ / ออกบิล / รับเงิน ----------
+// ---------- เอกสารขาย ----------
 
 type Shipment struct {
 	OrderLineNo int      `json:"order_line_no"`
@@ -368,57 +373,235 @@ func shipments(in []Shipment) ([]dto.ShipmentInput, error) {
 	return out, nil
 }
 
-// Delivery: POST /deliveries — warehouse_id บังคับเมื่อมีสินค้า stock
-type Delivery struct {
-	OrderID     string     `json:"order_id"`
-	Date        string     `json:"date"`
-	WarehouseID *string    `json:"warehouse_id"`
-	Reference   string     `json:"reference"`
-	Description string     `json:"description"`
-	Lines       []Shipment `json:"lines"`
+// SaleLine: บรรทัดเอกสารขาย — อ้างใบสั่งขายใช้ order_line_no + quantity; ออกตรงใช้ item_id / description / quantity / unit_price
+type SaleLine struct {
+	OrderLineNo int      `json:"order_line_no"`
+	ItemID      string   `json:"item_id"`
+	Description string   `json:"description"`
+	Quantity    *Decimal `json:"quantity"`
+	UnitPrice   *Decimal `json:"unit_price"`
 }
 
-func (r Delivery) ToInput() (dto.DeliveryInput, error) {
-	if err := required(map[string]string{"order_id": r.OrderID, "date": r.Date}); err != nil {
-		return dto.DeliveryInput{}, err
+type DepositUse struct {
+	DepositID string   `json:"deposit_id"`
+	Amount    *Decimal `json:"amount"`
+}
+
+func depositUses(in []DepositUse) ([]dto.DepositInput, error) {
+	out := make([]dto.DepositInput, len(in))
+	for i, d := range in {
+		dep, err := id[vo.InvoiceID](fmt.Sprintf("deposits[%d].deposit_id", i+1), d.DepositID)
+		if err != nil {
+			return nil, err
+		}
+		amt, err := d.Amount.required(fmt.Sprintf("deposits[%d].amount", i+1))
+		if err != nil {
+			return nil, err
+		}
+		out[i] = dto.DepositInput{DepositID: dep, Amount: amt}
 	}
-	order, err := id[vo.OrderID]("order_id", r.OrderID)
-	if err != nil {
-		return dto.DeliveryInput{}, err
+	return out, nil
+}
+
+// Sale: POST /sales-invoices (ขายสินค้า) / POST /service-invoices (ขายบริการ)
+//
+//	อ้างใบสั่งขาย: order_id + lines[{order_line_no, quantity}] (ลูกค้า / ราคา / VAT ตามใบสั่งขาย)
+//	ออกตรง: customer_id (+ customer_branch_no) + price_includes_vat (+ vat_rate) + lines[{item_id, description, quantity, unit_price}]
+//	warehouse_id บังคับเมื่อมีสินค้า stock (ขายสินค้า); deposits = มัดจำที่หัก (ฐานก่อน VAT)
+type Sale struct {
+	OrderID          string       `json:"order_id"`
+	CustomerID       string       `json:"customer_id"`
+	CustomerBranchNo string       `json:"customer_branch_no"`
+	PriceIncludesVat bool         `json:"price_includes_vat"`
+	VatRate          *Decimal     `json:"vat_rate"`
+	Date             string       `json:"date"`
+	WarehouseID      *string      `json:"warehouse_id"`
+	Reference        string       `json:"reference"`
+	Description      string       `json:"description"`
+	Lines            []SaleLine   `json:"lines"`
+	Deposits         []DepositUse `json:"deposits"`
+}
+
+func (r Sale) ToInput(kind vo.InvoiceKind) (dto.SaleInput, error) {
+	if err := required(map[string]string{"date": r.Date}); err != nil {
+		return dto.SaleInput{}, err
+	}
+	out := dto.SaleInput{Kind: kind, CustomerBranchNo: r.CustomerBranchNo, PriceIncludesVat: r.PriceIncludesVat, Reference: r.Reference, Description: r.Description}
+	var err error
+	if out.Date, err = date("date", r.Date); err != nil {
+		return out, err
+	}
+	if out.WarehouseID, err = optionalID[vo.WarehouseID]("warehouse_id", r.WarehouseID); err != nil {
+		return out, err
+	}
+	if kind == vo.KindServiceInvoice && out.WarehouseID != nil {
+		return out, invalid("warehouse_id is not used by a service invoice")
+	}
+	if out.Deposits, err = depositUses(r.Deposits); err != nil {
+		return out, err
+	}
+	if len(r.Lines) == 0 {
+		return out, invalid("lines is required")
+	}
+	if r.OrderID != "" {
+		order, err := id[vo.OrderID]("order_id", r.OrderID)
+		if err != nil {
+			return out, err
+		}
+		if r.CustomerID != "" || r.VatRate != nil {
+			return out, invalid("customer_id and vat_rate come from the sales order (do not send them with order_id)")
+		}
+		out.OrderID = &order
+		out.OrderLines = make([]dto.ShipmentInput, len(r.Lines))
+		for i, l := range r.Lines {
+			if l.OrderLineNo < 1 {
+				return out, invalid("lines[%d].order_line_no is required", i+1)
+			}
+			q, err := l.Quantity.required(fmt.Sprintf("lines[%d].quantity", i+1))
+			if err != nil {
+				return out, err
+			}
+			out.OrderLines[i] = dto.ShipmentInput{OrderLineNo: l.OrderLineNo, Quantity: q}
+		}
+		return out, nil
+	}
+	if err := required(map[string]string{"customer_id": r.CustomerID}); err != nil {
+		return out, err
+	}
+	if out.CustomerID, err = id[vo.CustomerID]("customer_id", r.CustomerID); err != nil {
+		return out, err
+	}
+	if r.VatRate != nil {
+		rate, err := r.VatRate.required("vat_rate")
+		if err != nil {
+			return out, err
+		}
+		out.VatRate = &rate
+	}
+	out.Lines = make([]dto.SaleLineInput, len(r.Lines))
+	for i, l := range r.Lines {
+		item, err := id[vo.ItemID](fmt.Sprintf("lines[%d].item_id", i+1), l.ItemID)
+		if err != nil {
+			return out, err
+		}
+		q, err := l.Quantity.required(fmt.Sprintf("lines[%d].quantity", i+1))
+		if err != nil {
+			return out, err
+		}
+		price, err := l.UnitPrice.required(fmt.Sprintf("lines[%d].unit_price", i+1))
+		if err != nil {
+			return out, err
+		}
+		out.Lines[i] = dto.SaleLineInput{ItemID: item, Description: l.Description, Quantity: q, UnitPrice: price}
+	}
+	return out, nil
+}
+
+// Deposit: POST /sales-deposits — amount รวม / ไม่รวม VAT ตาม price_includes_vat
+type Deposit struct {
+	CustomerID       string   `json:"customer_id"`
+	CustomerBranchNo string   `json:"customer_branch_no"`
+	OrderID          *string  `json:"order_id"`
+	Date             string   `json:"date"`
+	Description      string   `json:"description"`
+	Reference        string   `json:"reference"`
+	Amount           *Decimal `json:"amount"`
+	PriceIncludesVat bool     `json:"price_includes_vat"`
+	VatRate          *Decimal `json:"vat_rate"`
+}
+
+func (r Deposit) ToInput() (dto.DepositDocInput, error) {
+	if err := required(map[string]string{"date": r.Date}); err != nil {
+		return dto.DepositDocInput{}, err
+	}
+	out := dto.DepositDocInput{CustomerBranchNo: r.CustomerBranchNo, Description: r.Description, Reference: r.Reference, PriceIncludesVat: r.PriceIncludesVat}
+	var err error
+	if out.Date, err = date("date", r.Date); err != nil {
+		return out, err
+	}
+	if out.OrderID, err = optionalID[vo.OrderID]("order_id", r.OrderID); err != nil {
+		return out, err
+	}
+	if out.OrderID == nil {
+		if err := required(map[string]string{"customer_id": r.CustomerID}); err != nil {
+			return out, err
+		}
+		if out.CustomerID, err = id[vo.CustomerID]("customer_id", r.CustomerID); err != nil {
+			return out, err
+		}
+	}
+	if out.Amount, err = r.Amount.required("amount"); err != nil {
+		return out, err
+	}
+	if r.VatRate != nil {
+		rate, err := r.VatRate.required("vat_rate")
+		if err != nil {
+			return out, err
+		}
+		out.VatRate = &rate
+	}
+	return out, nil
+}
+
+// TaxInvoice: POST /service-invoices/{id}/tax-invoice
+type TaxInvoice struct {
+	Date string `json:"date"`
+}
+
+func (r TaxInvoice) ToInput(invoiceID vo.InvoiceID) (dto.TaxInvoiceInput, error) {
+	if err := required(map[string]string{"date": r.Date}); err != nil {
+		return dto.TaxInvoiceInput{}, err
 	}
 	d, err := date("date", r.Date)
-	if err != nil {
-		return dto.DeliveryInput{}, err
-	}
-	wh, err := optionalID[vo.WarehouseID]("warehouse_id", r.WarehouseID)
-	if err != nil {
-		return dto.DeliveryInput{}, err
-	}
-	ls, err := shipments(r.Lines)
-	return dto.DeliveryInput{OrderID: order, Date: d, WarehouseID: wh, Reference: r.Reference, Description: r.Description, Lines: ls}, err
+	return dto.TaxInvoiceInput{InvoiceID: invoiceID, Date: d}, err
 }
 
-// Invoice: POST /sales-invoices — with_delivery = ใบส่งของ / ใบกำกับภาษี (ตัดสต็อกพร้อมออกบิล)
-type Invoice struct {
-	OrderID      string     `json:"order_id"`
-	Date         string     `json:"date"`
-	WithDelivery bool       `json:"with_delivery"`
-	WarehouseID  *string    `json:"warehouse_id"`
-	Reference    string     `json:"reference"`
-	Description  string     `json:"description"`
-	Lines        []Shipment `json:"lines"`
+// BillingNote: POST /billing-notes
+type BillingNote struct {
+	CustomerID  string   `json:"customer_id"`
+	Date        string   `json:"date"`
+	DueDate     string   `json:"due_date"`
+	Description string   `json:"description"`
+	InvoiceIDs  []string `json:"invoice_ids"`
 }
 
-func (r Invoice) ToInput() (dto.InvoiceInput, error) {
-	in, err := Delivery{OrderID: r.OrderID, Date: r.Date, WarehouseID: r.WarehouseID, Reference: r.Reference, Description: r.Description, Lines: r.Lines}.ToInput()
+func (r BillingNote) ToInput() (dto.BillingNoteInput, error) {
+	if err := required(map[string]string{"customer_id": r.CustomerID, "date": r.Date, "due_date": r.DueDate}); err != nil {
+		return dto.BillingNoteInput{}, err
+	}
+	out := dto.BillingNoteInput{Description: r.Description}
+	var err error
+	if out.CustomerID, err = id[vo.CustomerID]("customer_id", r.CustomerID); err != nil {
+		return out, err
+	}
+	if out.Date, err = date("date", r.Date); err != nil {
+		return out, err
+	}
+	if out.DueDate, err = date("due_date", r.DueDate); err != nil {
+		return out, err
+	}
+	if len(r.InvoiceIDs) == 0 {
+		return out, invalid("invoice_ids is required")
+	}
+	out.InvoiceIDs = make([]vo.InvoiceID, len(r.InvoiceIDs))
+	for i, raw := range r.InvoiceIDs {
+		if out.InvoiceIDs[i], err = id[vo.InvoiceID](fmt.Sprintf("invoice_ids[%d]", i+1), raw); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// ParseUndueVatFilter: ?end_date=&customer_id=&page=&page_size=
+func ParseUndueVatFilter(v url.Values) (dto.UndueVatFilter, error) {
+	end, err := requiredDate(v, "end_date")
 	if err != nil {
-		return dto.InvoiceInput{}, err
+		return dto.UndueVatFilter{}, err
 	}
-	if !r.WithDelivery && in.WarehouseID != nil {
-		return dto.InvoiceInput{}, invalid("warehouse_id is only used with with_delivery")
-	}
-	return dto.InvoiceInput{OrderID: in.OrderID, Date: in.Date, WithDelivery: r.WithDelivery, WarehouseID: in.WarehouseID,
-		Reference: in.Reference, Description: in.Description, Lines: in.Lines}, nil
+	q := &query{v: v}
+	f := dto.UndueVatFilter{End: end, CustomerID: optionalIDParam[vo.CustomerID](q, "customer_id"),
+		Page: parse(q, func() (listing.Page, error) { return listing.ParsePage(v) })}
+	return f, q.err
 }
 
 // ---------- ใบลดหนี้ ----------
@@ -549,6 +732,7 @@ const (
 	KindQuotation DocKind = iota
 	KindOrder
 	KindPosted
+	KindBilling
 )
 
 // ParseDocumentFilter: ?q=&status=&customer_id=&order_id=&invoice_id=&item_id=&start_date=&end_date=&sort=date|document_no|created_at&page=&page_size=
@@ -562,6 +746,8 @@ func ParseDocumentFilter(v url.Values, kind DocKind) (dto.DocumentFilter, error)
 				return strs(listing.ParseList(v, "status", vo.ParseQuotationStatus))
 			case KindOrder:
 				return strs(listing.ParseList(v, "status", vo.ParseOrderStatus))
+			case KindBilling:
+				return strs(listing.ParseList(v, "status", vo.ParseBillingStatus))
 			default:
 				return strs(listing.ParseList(v, "status", vo.ParseDocStatus))
 			}

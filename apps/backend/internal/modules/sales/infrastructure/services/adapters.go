@@ -61,6 +61,7 @@ type OrganizationAccess interface {
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	RegisterDocumentTypes(types ...integration.DocumentType)
 	DocumentFormat(ctx context.Context, companyID uuid.UUID, docType string) (numbering.Format, error)
+	CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
@@ -72,6 +73,10 @@ func NewOrganization(org OrganizationAccess) *Organization { return &Organizatio
 func (o *Organization) CompanySettings(ctx context.Context, companyID vo.CompanyID) (ports.CompanySettings, error) {
 	active, amount, quantity, err := o.org.CompanySettings(ctx, uuid.UUID(companyID))
 	return ports.CompanySettings{Active: active, AmountDecimals: amount, QuantityDecimals: quantity}, err
+}
+
+func (o *Organization) BusinessType(ctx context.Context, companyID vo.CompanyID) (integration.BusinessType, error) {
+	return o.org.CompanyBusinessType(ctx, uuid.UUID(companyID))
 }
 
 func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (ports.Period, error) {
@@ -171,7 +176,7 @@ func items(in map[uuid.UUID]integration.Item) map[vo.ItemID]ports.Item {
 	out := make(map[vo.ItemID]ports.Item, len(in))
 	for id, i := range in {
 		out[vo.ItemID(id)] = ports.Item{
-			ID: vo.ItemID(id), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
+			ID: vo.ItemID(id), Code: i.Code, Name: i.Name, Stock: i.Stock, Service: i.Service, Active: i.Active,
 			InventoryAccountID: optAccount(i.InventoryAccountID), RevenueAccountID: optAccount(i.RevenueAccountID),
 		}
 	}

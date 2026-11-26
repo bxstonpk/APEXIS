@@ -11,6 +11,7 @@ import (
 
 	"apexis/backend/internal/modules/finance/application/ports"
 	domain "apexis/backend/internal/modules/finance/domain/errors"
+	journal "apexis/backend/internal/modules/finance/domain/services"
 	vo "apexis/backend/internal/modules/finance/domain/value_objects"
 	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/numbering"
@@ -160,7 +161,7 @@ func (l *Ledger) Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.
 type ReceivablesAccess interface {
 	SettleReceivables(ctx context.Context, companyID, customerID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
 	UnsettleReceivables(ctx context.Context, companyID, documentID uuid.UUID) error
-	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID) ([]integration.OpenInvoice, error)
+	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error)
 	OutputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
 }
 
@@ -178,7 +179,7 @@ type settleFunc func(ctx context.Context, companyID, partyID uuid.UUID, doc inte
 type Settlements struct {
 	settle   settleFunc
 	unsettle func(ctx context.Context, companyID, documentID uuid.UUID) error
-	open     func(ctx context.Context, companyID, partyID uuid.UUID) ([]integration.OpenInvoice, error)
+	open     func(ctx context.Context, companyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error)
 }
 
 var _ ports.Settlements = (*Settlements)(nil)
@@ -188,7 +189,10 @@ func NewReceivables(s ReceivablesAccess) *Settlements {
 }
 
 func NewPayables(p PayablesAccess) *Settlements {
-	return &Settlements{settle: p.SettlePayables, unsettle: p.UnsettlePayables, open: p.OpenPayables}
+	open := func(ctx context.Context, companyID, partyID uuid.UUID, _ *uuid.UUID) ([]integration.OpenInvoice, error) {
+		return p.OpenPayables(ctx, companyID, partyID)
+	}
+	return &Settlements{settle: p.SettlePayables, unsettle: p.UnsettlePayables, open: open}
 }
 
 func (s *Settlements) Settle(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, doc ports.SettlementDoc, lines []ports.Settlement) (ports.SettlementResult, error) {
@@ -207,7 +211,11 @@ func (s *Settlements) Settle(ctx context.Context, companyID vo.CompanyID, partyI
 		ControlAccountID: vo.GLAccountID(res.ControlAccountID), Invoices: make([]ports.SettledInvoice, len(res.Invoices)),
 	}
 	for i, x := range res.Invoices {
-		out.Invoices[i] = ports.SettledInvoice{ID: vo.InvoiceID(x.InvoiceID), DocumentNo: x.DocumentNo, PartnerRef: x.PartnerRef, Net: x.Net, Gross: x.Gross}
+		out.Invoices[i] = ports.SettledInvoice{ID: vo.InvoiceID(x.InvoiceID), DocumentNo: x.DocumentNo, PartnerRef: x.PartnerRef, Kind: x.Kind,
+			Net: x.Net, Gross: x.Gross, VatBase: x.VatBase, Vat: x.Vat}
+	}
+	for _, l := range res.ExtraJournal {
+		out.ExtraJournal = append(out.ExtraJournal, journal.JournalLine{AccountID: vo.GLAccountID(l.AccountID), Debit: l.Debit, Credit: l.Credit})
 	}
 	return out, nil
 }
@@ -216,12 +224,12 @@ func (s *Settlements) Unsettle(ctx context.Context, companyID vo.CompanyID, docu
 	return s.unsettle(ctx, uuid.UUID(companyID), documentID)
 }
 
-func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID) ([]ports.OpenInvoice, error) {
-	rows, err := s.open(ctx, uuid.UUID(companyID), partyID)
+func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]ports.OpenInvoice, error) {
+	rows, err := s.open(ctx, uuid.UUID(companyID), partyID, billingNoteID)
 	out := make([]ports.OpenInvoice, len(rows))
 	for i, r := range rows {
 		out[i] = ports.OpenInvoice{ID: vo.InvoiceID(r.ID), DocumentNo: r.DocumentNo, PartnerRef: r.PartnerRef, Date: r.Date, DueDate: r.DueDate,
-			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding, Kind: r.Kind, VatUndue: r.VatUndue, TaxInvoice: r.TaxInvoice}
 	}
 	return out, err
 }

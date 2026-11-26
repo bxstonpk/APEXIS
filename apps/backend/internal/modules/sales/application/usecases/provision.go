@@ -13,6 +13,8 @@ const (
 	codeGeneralJournal = "GEN"
 	codeTradeAR        = "1103010100" // ลูกหนี้การค้า
 	codeOutputVat      = "2102021100" // ภาษีขาย
+	codeUndueVat       = "2102020900" // ภาษีขายยังไม่ถึงกำหนดชำระ (ขายบริการ ม.78/1)
+	codeDeposit        = "2102021000" // เงินมัดจำรับ
 )
 
 // salesDefaultCodes: บัญชีรายได้ / ต้นทุนขาย / รับคืน ตามประเภทธุรกิจ ("" = ไม่ตั้ง)
@@ -34,7 +36,7 @@ var salesDefaults = map[integration.BusinessType]salesDefaultCodes{
 func (uc *SettingsUseCases) Provision(ctx context.Context, companyID vo.CompanyID, bt integration.BusinessType) error {
 	codes := salesDefaults[bt]
 	return uc.tx.WithinTransaction(ctx, func(ctx context.Context) error {
-		accounts, err := uc.ledger.AccountsByCode(ctx, companyID, nonEmpty(codeTradeAR, codeOutputVat, codes.Revenue, codes.Cogs, codes.Returns))
+		accounts, err := uc.ledger.AccountsByCode(ctx, companyID, nonEmpty(codeTradeAR, codeOutputVat, codeUndueVat, codeDeposit, codes.Revenue, codes.Cogs, codes.Returns))
 		if err != nil {
 			return err
 		}
@@ -49,6 +51,8 @@ func (uc *SettingsUseCases) Provision(ctx context.Context, companyID vo.CompanyI
 		s.RevenueAccountID = pick(accounts, codes.Revenue)
 		s.CogsAccountID = pick(accounts, codes.Cogs)
 		s.SalesReturnsAccountID = pick(accounts, codes.Returns)
+		s.UndueOutputVatAccountID = pick(accounts, codeUndueVat)
+		s.DepositAccountID = pick(accounts, codeDeposit)
 		if s, err = entities.NewSettings(s); err != nil {
 			return err
 		}

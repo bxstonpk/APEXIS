@@ -286,6 +286,7 @@ type PurchaseItem struct {
 	Name     string
 	Uom      string // รหัสหน่วยนับ
 	Stock    bool   // ชนิด stock (รับเข้าคลัง)
+	Service  bool   // ชนิดบริการ
 	Active   bool
 	Accounts vo.GLAccounts
 }

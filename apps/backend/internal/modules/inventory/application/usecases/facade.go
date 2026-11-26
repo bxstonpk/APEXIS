@@ -48,7 +48,7 @@ func (uc *FacadeUseCases) resolve(ctx context.Context, companyID vo.CompanyID, s
 	out := make([]dto.PurchaseItem, len(rows))
 	for i, r := range rows {
 		out[i] = dto.PurchaseItem{
-			ID: r.ID, Code: r.Code, Name: r.Name, Uom: r.Uom, Stock: r.Type == vo.ItemStock, Active: r.Status == vo.StatusActive,
+			ID: r.ID, Code: r.Code, Name: r.Name, Uom: r.Uom, Stock: r.Type == vo.ItemStock, Service: r.Type == vo.ItemService, Active: r.Status == vo.StatusActive,
 			Accounts: r.Item.Or(r.Category).Or(s.Defaults),
 		}
 	}

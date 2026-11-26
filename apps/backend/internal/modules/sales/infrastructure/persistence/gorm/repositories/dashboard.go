@@ -148,6 +148,8 @@ func (r *ReportRepository) Dashboard(ctx context.Context, companyID vo.CompanyID
 }
 
 // netSales: ยอดขายสุทธิ = ใบแจ้งหนี้ (บวก) + ใบลดหนี้ (ลบ) ที่ยังไม่ยกเลิก — invoice = true เฉพาะใบแจ้งหนี้ (นับจำนวนใบ)
-const netSales = `(SELECT customer_id, doc_date, total_net, true AS invoice FROM sales_invoices WHERE company_id = @company AND status = 'posted'
+// ใบรับเงินมัดจำไม่ใช่ยอดขาย (เป็นหนี้สิน) — ไม่นับ
+const netSales = `(SELECT customer_id, doc_date, total_net, true AS invoice FROM sales_invoices
+		WHERE company_id = @company AND status = 'posted' AND kind <> 'deposit'
 	UNION ALL
 	SELECT customer_id, doc_date, -total_net, false FROM sales_credit_notes WHERE company_id = @company AND status = 'posted') AS d`

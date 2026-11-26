@@ -55,7 +55,7 @@ func TestCustomerBranches(t *testing.T) {
 	}
 	orderID := order["id"].(string)
 	a.expect(a.do("PATCH", base+"/sales-orders/"+orderID, owner, obj{"status": "approved"}), 200, "approve")
-	inv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": "2026-03-03", "with_delivery": true,
+	inv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": "2026-03-03",
 		"lines": []obj{{"order_line_no": 1, "quantity": "1"}}}), 201, "invoice").data()
 	bill := inv["bill_to"].(obj)
 	if bill["name"] != "บริษัท หนึ่ง จำกัด" || bill["tax_id"] != tax || bill["branch_no"] != "00001" || !strings.Contains(bill["address"].(string), "บางนา-ตราด") {

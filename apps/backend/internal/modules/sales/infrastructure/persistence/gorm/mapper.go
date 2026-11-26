@@ -50,6 +50,7 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 		CompanyID: uuid.UUID(companyID), VatRegistered: s.VatRegistered, VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		ARAccountID: OptUUID(s.ARAccountID), OutputVatAccountID: OptUUID(s.OutputVatAccountID), RevenueAccountID: OptUUID(s.RevenueAccountID),
 		CogsAccountID: OptUUID(s.CogsAccountID), SalesReturnsAccountID: OptUUID(s.SalesReturnsAccountID),
+		UndueOutputVatAccountID: OptUUID(s.UndueOutputVatAccountID), DepositAccountID: OptUUID(s.DepositAccountID),
 	}
 }
 
@@ -58,7 +59,8 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		VatRegistered: m.VatRegistered, VatRate: m.VatRate, JournalID: OptID[vo.JournalID](m.JournalID),
 		ARAccountID: OptID[vo.AccountID](m.ARAccountID), OutputVatAccountID: OptID[vo.AccountID](m.OutputVatAccountID),
 		RevenueAccountID: OptID[vo.AccountID](m.RevenueAccountID), CogsAccountID: OptID[vo.AccountID](m.CogsAccountID),
-		SalesReturnsAccountID: OptID[vo.AccountID](m.SalesReturnsAccountID),
+		SalesReturnsAccountID:   OptID[vo.AccountID](m.SalesReturnsAccountID),
+		UndueOutputVatAccountID: OptID[vo.AccountID](m.UndueOutputVatAccountID), DepositAccountID: OptID[vo.AccountID](m.DepositAccountID),
 	}
 }
 
@@ -231,7 +233,7 @@ func OrderToEntity(m models.OrderModel) *entities.Order {
 	return entities.RehydrateOrder(s)
 }
 
-// ---------- ใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จ ----------
+// ---------- เอกสารขายที่ลงบัญชี ----------
 
 func posted(customerID vo.CustomerID, description string, p entities.Posting, status vo.DocStatus, c *entities.Cancellation) models.PostedModel {
 	m := models.PostedModel{
@@ -276,78 +278,110 @@ func stockOf(m models.StockModel) entities.Stock {
 	}
 }
 
-func DeliveryToModel(d *entities.Delivery) models.DeliveryModel {
-	s := d.State()
-	m := models.DeliveryModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
-		OrderID: uuid.UUID(s.OrderID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
-		StockModel: stockModel(s.Stock), Reference: s.Reference, TotalCost: decimal.Zero,
-	}
-	for i, l := range s.Lines {
-		m.TotalCost = m.TotalCost.Add(l.Cost)
-		m.Lines = append(m.Lines, models.DeliveryLineModel{
-			DeliveryID: m.ID, LineNo: i + 1, OrderLineNo: l.OrderLineNo, ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity,
-			Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptUUID(l.InventoryAccountID),
-		})
-	}
-	return m
+// DepositUseRow คือมัดจำที่หัก + เลขที่ของมัดจำ (JOIN ตอนโหลด)
+type DepositUseRow struct {
+	models.DepositUseModel
+	DepositNo string
 }
 
-func DeliveryToEntity(m models.DeliveryModel) *entities.Delivery {
-	s := entities.DeliveryState{
-		ID: vo.DeliveryID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), CustomerID: vo.CustomerID(m.PostedModel.CustomerID),
-		Date: DateUTC(m.DocDate), Reference: m.Reference, Description: m.PostedModel.Description, Stock: stockOf(m.StockModel),
-		Status: vo.DocStatus(m.PostedModel.Status), Posting: postingOf(m.DocumentNo, m.PostedModel), Cancellation: cancellationOf(m.PostedModel),
-		Lines: make([]entities.DeliveryLine, len(m.Lines)),
-	}
-	for i, l := range m.Lines {
-		s.Lines[i] = entities.DeliveryLine{
-			OrderLineNo: l.OrderLineNo, ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity,
-			CostLine: entities.CostLine{Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptID[vo.AccountID](l.InventoryAccountID)},
-		}
-	}
-	return entities.RehydrateDelivery(s)
-}
-
-func InvoiceToModel(inv *entities.Invoice) models.InvoiceModel {
+func InvoiceToModel(inv *entities.Invoice) (models.InvoiceModel, []models.DepositUseModel) {
 	s := inv.State()
+	depBase, depVat := inv.DepositTotals()
 	m := models.InvoiceModel{
-		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
-		OrderID: uuid.UUID(s.OrderID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
-		StockModel: stockModel(s.Stock), WithDelivery: s.WithDelivery, DueDate: s.DueDate, Reference: s.Reference,
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date, Kind: string(s.Kind),
+		OrderID: OptUUID(s.OrderID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
+		StockModel: stockModel(s.Stock), DueDate: s.DueDate, Reference: s.Reference,
 		BillToName: s.BillTo.Name, BillToTaxID: s.BillTo.TaxID, BillToBranchNo: s.BillTo.BranchNo, BillToAddress: s.BillTo.Address,
 		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
-		ReceivedAmount: s.Received,
+		ReceivedAmount: s.Received, DepositBase: depBase, DepositVat: depVat,
+		VatDeferred: s.Deferral.Vat, VatRecognized: s.Deferral.VatRecognized, VatCredited: s.Deferral.VatCredited,
+		BaseDeferred: s.Deferral.Base, BaseRecognized: s.Deferral.BaseRecognized, BaseCredited: s.Deferral.BaseCredited,
+		DepositApplied: s.Applied, DepositAppliedVat: s.AppliedVat,
+		TaxInvoiceBase: decimal.Zero, TaxInvoiceVat: decimal.Zero,
+	}
+	if t := s.TaxInvoice; t != nil {
+		d := t.Date
+		m.TaxInvoiceNo, m.TaxInvoiceDate, m.TaxInvoiceEntryID, m.TaxInvoiceEntryNo = t.No, &d, OptUUID(t.EntryID), t.EntryNo
+		m.TaxInvoiceBase, m.TaxInvoiceVat = t.Base, t.Vat
 	}
 	for i, l := range s.Lines {
 		m.Lines = append(m.Lines, models.InvoiceLineModel{
-			InvoiceID: m.ID, LineNo: i + 1, OrderLineNo: l.OrderLineNo, ItemID: uuid.UUID(l.ItemID), Quantity: l.Quantity,
-			UnitPrice: l.UnitPrice, Net: l.Amounts.Net, Vat: l.Amounts.Vat, Gross: l.Amounts.Gross, RevenueAccountID: uuid.UUID(l.RevenueAccountID),
-			Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptUUID(l.InventoryAccountID),
+			InvoiceID: m.ID, LineNo: i + 1, OrderLineNo: l.OrderLineNo, ItemID: uuid.UUID(l.ItemID), Description: l.Description, Service: l.Service,
+			Quantity: l.Quantity, UnitPrice: l.UnitPrice, Net: l.Amounts.Net, Vat: l.Amounts.Vat, Gross: l.Amounts.Gross,
+			RevenueAccountID: uuid.UUID(l.RevenueAccountID), Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptUUID(l.InventoryAccountID),
 		})
 	}
-	return m
+	deps := make([]models.DepositUseModel, len(s.Deposits))
+	for i, d := range s.Deposits {
+		deps[i] = models.DepositUseModel{InvoiceID: m.ID, Position: i + 1, DepositID: uuid.UUID(d.DepositID), Amount: d.Amount, Vat: d.Vat}
+	}
+	return m, deps
 }
 
-func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
+func InvoiceToEntity(m models.InvoiceModel, deposits []DepositUseRow) *entities.Invoice {
 	s := entities.InvoiceState{
-		ID: vo.InvoiceID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), CustomerID: vo.CustomerID(m.PostedModel.CustomerID),
-		Date: DateUTC(m.DocDate), DueDate: DateUTC(m.DueDate), Reference: m.Reference, Description: m.PostedModel.Description,
-		BillTo:       entities.BillTo{Name: m.BillToName, TaxID: m.BillToTaxID, BranchNo: m.BillToBranchNo, Address: m.BillToAddress},
-		Vat:          services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
-		WithDelivery: m.WithDelivery, Stock: stockOf(m.StockModel), Received: m.ReceivedAmount,
+		ID: vo.InvoiceID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Kind: vo.InvoiceKind(m.Kind), OrderID: OptID[vo.OrderID](m.OrderID),
+		CustomerID: vo.CustomerID(m.PostedModel.CustomerID),
+		Date:       DateUTC(m.DocDate), DueDate: DateUTC(m.DueDate), Reference: m.Reference, Description: m.PostedModel.Description,
+		BillTo: entities.BillTo{Name: m.BillToName, TaxID: m.BillToTaxID, BranchNo: m.BillToBranchNo, Address: m.BillToAddress},
+		Vat:    services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
+		Stock:  stockOf(m.StockModel), Received: m.ReceivedAmount,
 		Totals: services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross},
+		Deferral: entities.VatDeferral{Vat: m.VatDeferred, VatRecognized: m.VatRecognized, VatCredited: m.VatCredited,
+			Base: m.BaseDeferred, BaseRecognized: m.BaseRecognized, BaseCredited: m.BaseCredited},
+		Applied: m.DepositApplied, AppliedVat: m.DepositAppliedVat,
 		Status: vo.DocStatus(m.PostedModel.Status), Posting: postingOf(m.DocumentNo, m.PostedModel), Cancellation: cancellationOf(m.PostedModel),
 		Lines: make([]entities.InvoiceLine, len(m.Lines)),
 	}
+	if m.TaxInvoiceDate != nil {
+		s.TaxInvoice = &entities.TaxInvoice{No: m.TaxInvoiceNo, Date: DateUTC(*m.TaxInvoiceDate), EntryID: OptID[vo.EntryID](m.TaxInvoiceEntryID),
+			EntryNo: m.TaxInvoiceEntryNo, Base: m.TaxInvoiceBase, Vat: m.TaxInvoiceVat}
+	}
 	for i, l := range m.Lines {
 		s.Lines[i] = entities.InvoiceLine{
-			OrderLineNo: l.OrderLineNo, ItemID: vo.ItemID(l.ItemID), Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			OrderLineNo: l.OrderLineNo, ItemID: vo.ItemID(l.ItemID), Description: l.Description, Service: l.Service,
+			Quantity: l.Quantity, UnitPrice: l.UnitPrice,
 			Amounts: services.Amounts{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, RevenueAccountID: vo.AccountID(l.RevenueAccountID),
 			CostLine: entities.CostLine{Stock: l.Stock, Cost: l.Cost, InventoryAccountID: OptID[vo.AccountID](l.InventoryAccountID)},
 		}
 	}
+	for _, d := range deposits {
+		s.Deposits = append(s.Deposits, entities.DepositUse{DepositID: vo.InvoiceID(d.DepositID), DepositNo: d.DepositNo, Amount: d.Amount, Vat: d.Vat})
+	}
 	return entities.RehydrateInvoice(s)
+}
+
+// ---------- ใบวางบิล ----------
+
+func BillingNoteToModel(b *entities.BillingNote) models.BillingNoteModel {
+	s := b.State()
+	m := models.BillingNoteModel{
+		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.DocumentNo, DocDate: s.Date, DueDate: s.DueDate,
+		CustomerID: uuid.UUID(s.CustomerID), Description: s.Description, Status: string(s.Status), CreatedBy: uuid.UUID(s.By), CreatedAt: s.At,
+	}
+	if c := s.Cancellation; c != nil {
+		by, at := uuid.UUID(c.By), c.At
+		m.CancelledBy, m.CancelledAt = &by, &at
+	}
+	for i, id := range s.InvoiceIDs {
+		m.Invoices = append(m.Invoices, models.BillingNoteInvoiceModel{BillingNoteID: m.ID, Position: i + 1, InvoiceID: uuid.UUID(id)})
+	}
+	return m
+}
+
+func BillingNoteToEntity(m models.BillingNoteModel) *entities.BillingNote {
+	s := entities.BillingNoteState{
+		ID: vo.BillingNoteID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), DocumentNo: m.DocumentNo, CustomerID: vo.CustomerID(m.CustomerID),
+		Date: DateUTC(m.DocDate), DueDate: DateUTC(m.DueDate), Description: m.Description, Status: vo.BillingNoteStatus(m.Status),
+		By: vo.UserID(m.CreatedBy), At: m.CreatedAt,
+	}
+	if m.CancelledBy != nil && m.CancelledAt != nil {
+		s.Cancellation = &entities.Cancellation{By: vo.UserID(*m.CancelledBy), At: *m.CancelledAt}
+	}
+	for _, x := range m.Invoices {
+		s.InvoiceIDs = append(s.InvoiceIDs, vo.InvoiceID(x.InvoiceID))
+	}
+	return entities.RehydrateBillingNote(s)
 }
 
 // ---------- ใบลดหนี้ ----------
@@ -357,7 +391,7 @@ func CreditNoteToModel(c *entities.CreditNote) models.CreditNoteModel {
 	m := models.CreditNoteModel{
 		ID: uuid.UUID(s.ID), CompanyID: uuid.UUID(s.CompanyID), DocumentNo: s.Posting.DocumentNo, DocDate: s.Date,
 		InvoiceID: uuid.UUID(s.InvoiceID), PostedModel: posted(s.CustomerID, s.Description, s.Posting, s.Status, s.Cancellation),
-		StockModel: stockModel(s.Stock), Kind: string(s.Kind), Reason: s.Reason,
+		StockModel: stockModel(s.Stock), Kind: string(s.Kind), VatKind: string(s.VatKind), Reason: s.Reason,
 		BillToName: s.BillTo.Name, BillToTaxID: s.BillTo.TaxID, BillToBranchNo: s.BillTo.BranchNo, BillToAddress: s.BillTo.Address,
 		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
 	}
@@ -375,6 +409,7 @@ func CreditNoteToEntity(m models.CreditNoteModel) *entities.CreditNote {
 	s := entities.CreditNoteState{
 		ID: vo.CreditNoteID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), InvoiceID: vo.InvoiceID(m.InvoiceID),
 		CustomerID: vo.CustomerID(m.PostedModel.CustomerID), Date: DateUTC(m.DocDate), Kind: vo.CreditNoteKind(m.Kind), Reason: m.Reason,
+		VatKind:     vo.VatKind(m.VatKind),
 		Description: m.PostedModel.Description,
 		BillTo:      entities.BillTo{Name: m.BillToName, TaxID: m.BillToTaxID, BranchNo: m.BillToBranchNo, Address: m.BillToAddress},
 		Vat:         services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},

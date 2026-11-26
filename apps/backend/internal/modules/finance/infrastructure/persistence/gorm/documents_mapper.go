@@ -120,7 +120,7 @@ func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
 	for i, l := range s.Lines {
 		m.Lines = append(m.Lines, models.ReceiptLineModel{
 			ReceiptID: m.ID, LineNo: i + 1, InvoiceID: OptUUID(l.InvoiceID), InvoiceNo: l.InvoiceNo, AccountID: OptUUID(l.AccountID),
-			Description: l.Description, Amount: l.Amount, Wht: l.Wht,
+			Description: l.Description, Amount: l.Amount, Wht: l.Wht, InvoiceKind: l.InvoiceKind, VatBase: l.VatBase, Vat: l.Vat,
 		})
 	}
 	for i, x := range s.Methods {
@@ -139,7 +139,7 @@ func ReceiptToEntity(m models.ReceiptModel) *entities.Receipt {
 	for _, l := range m.Lines {
 		s.Lines = append(s.Lines, entities.ReceiptLine{
 			InvoiceID: OptID[vo.InvoiceID](l.InvoiceID), InvoiceNo: l.InvoiceNo, AccountID: OptID[vo.GLAccountID](l.AccountID),
-			Description: l.Description, Amount: l.Amount, Wht: l.Wht,
+			Description: l.Description, Amount: l.Amount, Wht: l.Wht, InvoiceKind: l.InvoiceKind, VatBase: l.VatBase, Vat: l.Vat,
 		})
 	}
 	for _, x := range m.Methods {

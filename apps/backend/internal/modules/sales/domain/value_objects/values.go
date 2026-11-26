@@ -25,8 +25,8 @@ type (
 	CustomerID      uuid.UUID
 	QuotationID     uuid.UUID
 	OrderID         uuid.UUID
-	DeliveryID      uuid.UUID
 	InvoiceID       uuid.UUID
+	BillingNoteID   uuid.UUID
 	CreditNoteID    uuid.UUID
 	ItemID          uuid.UUID
 	WarehouseID     uuid.UUID
@@ -50,16 +50,16 @@ func ParseID[T anyID](s string) (T, error) {
 
 func IDString[T anyID](id T) string { return uuid.UUID(id).String() }
 
-func (id CustomerID) String() string   { return IDString(id) }
-func (id QuotationID) String() string  { return IDString(id) }
-func (id OrderID) String() string      { return IDString(id) }
-func (id DeliveryID) String() string   { return IDString(id) }
-func (id InvoiceID) String() string    { return IDString(id) }
-func (id CreditNoteID) String() string { return IDString(id) }
-func (id ItemID) String() string       { return IDString(id) }
-func (id AccountID) String() string    { return IDString(id) }
-func (id JournalID) String() string    { return IDString(id) }
-func (id EntryID) String() string      { return IDString(id) }
+func (id CustomerID) String() string    { return IDString(id) }
+func (id QuotationID) String() string   { return IDString(id) }
+func (id OrderID) String() string       { return IDString(id) }
+func (id BillingNoteID) String() string { return IDString(id) }
+func (id InvoiceID) String() string     { return IDString(id) }
+func (id CreditNoteID) String() string  { return IDString(id) }
+func (id ItemID) String() string        { return IDString(id) }
+func (id AccountID) String() string     { return IDString(id) }
+func (id JournalID) String() string     { return IDString(id) }
+func (id EntryID) String() string       { return IDString(id) }
 
 // ---------- ข้อความ ----------
 
@@ -214,24 +214,69 @@ func parseEnum[T ~string](raw string, allowed []T, invalid error) (T, error) {
 type DocType string
 
 const (
-	DocQuotation  DocType = "sales.quotation"
-	DocOrder      DocType = "sales.order"
-	DocDelivery   DocType = "sales.delivery"
-	DocInvoice    DocType = "sales.invoice"     // ใบแจ้งหนี้ / ใบกำกับภาษี (รวมแบบส่งของพร้อมออกบิล)
-	DocCreditNote DocType = "sales.credit_note" // ใบลดหนี้ (รับคืนสินค้า / ลดราคา)
+	DocQuotation      DocType = "sales.quotation"
+	DocOrder          DocType = "sales.order"
+	DocInvoice        DocType = "sales.invoice"         // ขายสินค้า: ใบส่งของ / ใบแจ้งหนี้ / ใบกำกับภาษี (ภาษีเกิดเมื่อส่งมอบ)
+	DocServiceInvoice DocType = "sales.service_invoice" // ขายบริการ: ใบแจ้งหนี้ (ภาษีเกิดเมื่อรับชำระ / ออกใบกำกับก่อน)
+	DocTaxInvoice     DocType = "sales.tax_invoice"     // ใบกำกับภาษีที่ออกก่อนรับชำระ (จากใบแจ้งหนี้บริการ)
+	DocDeposit        DocType = "sales.deposit"         // รับเงินมัดจำ: ใบรับเงินมัดจำ / ใบกำกับภาษี
+	DocBillingNote    DocType = "sales.billing_note"    // ใบวางบิล (ไม่มีผลทางบัญชี)
+	DocCreditNote     DocType = "sales.credit_note"     // ใบลดหนี้ (รับคืนสินค้า / ลดราคา)
 )
 
-var DocTypes = []DocType{DocQuotation, DocOrder, DocDelivery, DocInvoice, DocCreditNote}
+var DocTypes = []DocType{DocQuotation, DocOrder, DocInvoice, DocServiceInvoice, DocTaxInvoice, DocDeposit, DocBillingNote, DocCreditNote}
 
 func (t DocType) Prefix() string {
-	return map[DocType]string{DocQuotation: "QT", DocOrder: "SO", DocDelivery: "DO", DocInvoice: "IV", DocCreditNote: "CN"}[t]
+	return map[DocType]string{
+		DocQuotation: "QT", DocOrder: "SO", DocInvoice: "IV", DocServiceInvoice: "SV", DocTaxInvoice: "TX",
+		DocDeposit: "DP", DocBillingNote: "BN", DocCreditNote: "CN",
+	}[t]
 }
 
 func (t DocType) Name() string {
 	return map[DocType]string{
-		DocQuotation: "ใบเสนอราคา", DocOrder: "ใบสั่งขาย", DocDelivery: "ใบส่งของ",
-		DocInvoice: "ใบแจ้งหนี้ / ใบกำกับภาษี", DocCreditNote: "ใบลดหนี้",
+		DocQuotation: "ใบเสนอราคา", DocOrder: "ใบสั่งขาย", DocInvoice: "ขายสินค้า (ใบส่งของ / ใบแจ้งหนี้ / ใบกำกับภาษี)",
+		DocServiceInvoice: "ขายบริการ (ใบแจ้งหนี้)", DocTaxInvoice: "ใบกำกับภาษี (ขายบริการ)",
+		DocDeposit: "ใบรับเงินมัดจำ / ใบกำกับภาษี", DocBillingNote: "ใบวางบิล", DocCreditNote: "ใบลดหนี้",
 	}[t]
+}
+
+// InvoiceKind คือชนิดของเอกสารขายที่ตั้งลูกหนี้ (ตาราง sales_invoices)
+//
+//	invoice: ขายสินค้า — ภาษีขายเกิดทันที (ม.78) ตัดสต็อกพร้อมกัน
+//	service_invoice: ขายบริการ — ภาษีขายยังไม่ถึงกำหนดจนรับชำระ / ออกใบกำกับก่อน (ม.78/1)
+//	deposit: ใบรับเงินมัดจำ / ใบกำกับภาษี — ภาษีเกิดตามวันที่ใบ; รับเงินที่ finance แล้วหักในเอกสารขายภายหลัง
+type InvoiceKind string
+
+const (
+	KindInvoice        InvoiceKind = "invoice"
+	KindServiceInvoice InvoiceKind = "service_invoice"
+	KindDeposit        InvoiceKind = "deposit"
+)
+
+func (k InvoiceKind) DocType() DocType {
+	return map[InvoiceKind]DocType{KindInvoice: DocInvoice, KindServiceInvoice: DocServiceInvoice, KindDeposit: DocDeposit}[k]
+}
+
+// VatKind คือบัญชีภาษีของใบลดหนี้: output = ภาษีขาย (ใบลดหนี้ / ใบกำกับภาษี), undue = ภาษีขายยังไม่ถึงกำหนด (ใบลดหนี้ธรรมดา)
+type VatKind string
+
+const (
+	VatOutput VatKind = "output"
+	VatUndue  VatKind = "undue"
+)
+
+// BillingNoteStatus: open / cancelled (paid คำนวณจากยอดค้างของใบแจ้งหนี้ในใบวางบิล)
+type BillingNoteStatus string
+
+const (
+	BillingOpen      BillingNoteStatus = "open"
+	BillingPaid      BillingNoteStatus = "paid"
+	BillingCancelled BillingNoteStatus = "cancelled"
+)
+
+func ParseBillingStatus(raw string) (BillingNoteStatus, error) {
+	return parseEnum(raw, []BillingNoteStatus{BillingOpen, BillingPaid, BillingCancelled}, domain.ErrInvalidStatus)
 }
 
 // CreditNoteKind: return = รับคืนสินค้า (คืนสต็อกเมื่อเป็นสินค้า stock), allowance = ลดราคา / ส่วนลดภายหลัง (ไม่มีสินค้าคืน)
@@ -260,8 +305,8 @@ const (
 	PermOrderRead       Permission = "sales.order:read"
 	PermOrderManage     Permission = "sales.order:manage"
 	PermOrderApprove    Permission = "sales.order:approve"
-	PermDeliveryRead    Permission = "sales.delivery:read"
-	PermDeliveryPost    Permission = "sales.delivery:post"
+	PermBillingRead     Permission = "sales.billing_note:read"
+	PermBillingManage   Permission = "sales.billing_note:manage"
 	PermInvoiceRead     Permission = "sales.invoice:read"
 	PermInvoicePost     Permission = "sales.invoice:post"
 	PermReportRead      Permission = "sales.report:read"
@@ -280,8 +325,8 @@ var AllPermissions = []Permission{
 	PermOrderRead,
 	PermOrderManage,
 	PermOrderApprove,
-	PermDeliveryRead,
-	PermDeliveryPost,
+	PermBillingRead,
+	PermBillingManage,
 	PermInvoiceRead,
 	PermInvoicePost,
 	PermReportRead,

@@ -35,7 +35,7 @@ func openInvoices(rows []ports.OpenInvoice) []dto.OpenInvoice {
 	out := make([]dto.OpenInvoice, len(rows))
 	for i, r := range rows {
 		out[i] = dto.OpenInvoice{ID: uuid.UUID(r.ID).String(), DocumentNo: r.DocumentNo, PartnerRef: r.PartnerRef, Date: r.Date,
-			DueDate: r.DueDate, Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+			DueDate: r.DueDate, Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding, Kind: r.Kind, VatUndue: r.VatUndue, TaxInvoice: r.TaxInvoice}
 	}
 	return out
 }
@@ -57,9 +57,10 @@ func (uc *ReceiptUseCases) List(ctx context.Context, a dto.Actor, f dto.Document
 }
 
 // OpenInvoices: ใบแจ้งหนี้ขายค้างรับของลูกค้า (เลือกในหน้ารับเงิน)
-func (uc *ReceiptUseCases) OpenInvoices(ctx context.Context, a dto.Actor, customerID uuid.UUID) ([]dto.OpenInvoice, error) {
+// OpenInvoices: เอกสารขายค้างรับของลูกค้า (ขายสินค้า / ขายบริการ / มัดจำ) — billingNoteID = เฉพาะใบในใบวางบิล
+func (uc *ReceiptUseCases) OpenInvoices(ctx context.Context, a dto.Actor, customerID uuid.UUID, billingNoteID *uuid.UUID) ([]dto.OpenInvoice, error) {
 	return read(ctx, uc.base, a, vo.PermReceiptRead, func() ([]dto.OpenInvoice, error) {
-		rows, err := uc.receivables.Open(ctx, a.CompanyID, customerID)
+		rows, err := uc.receivables.Open(ctx, a.CompanyID, customerID, billingNoteID)
 		return openInvoices(rows), err
 	})
 }
@@ -106,6 +107,7 @@ func (uc *ReceiptUseCases) Create(ctx context.Context, a dto.Actor, in dto.Recei
 			return err
 		}
 		ar := vo.GLAccountID{}
+		var extra []services.JournalLine // ภาษีขายถึงกำหนด (ขายบริการ) จาก sales — ลงในรายการเดียวกัน
 		if in.Kind == vo.ReceiptCustomer {
 			settle := make([]ports.Settlement, len(lines))
 			for i, l := range lines {
@@ -117,9 +119,10 @@ func (uc *ReceiptUseCases) Create(ctx context.Context, a dto.Actor, in dto.Recei
 				return err
 			}
 			for i := range state.Lines {
-				state.Lines[i].InvoiceNo = res.Invoices[i].DocumentNo
+				x := res.Invoices[i]
+				state.Lines[i].InvoiceNo, state.Lines[i].InvoiceKind, state.Lines[i].VatBase, state.Lines[i].Vat = x.DocumentNo, x.Kind, x.VatBase, x.Vat
 			}
-			state.Party, ar = partyFrom(res.Party), res.ControlAccountID
+			state.Party, ar, extra = partyFrom(res.Party), res.ControlAccountID, res.ExtraJournal
 			r = entities.RehydrateReceipt(withReceiptParty(r.State(), state))
 		}
 		whtAccount := vo.GLAccountID{}
@@ -130,7 +133,7 @@ func (uc *ReceiptUseCases) Create(ctx context.Context, a dto.Actor, in dto.Recei
 			whtAccount = *settings.WhtReceivedAccountID
 		}
 		entryID, entryNo, err := uc.post(ctx, a, *settings.ReceiptJournalID, in.Date, receiptDescription(r.State()), posting.DocumentNo,
-			ports.LedgerEntry{Lines: r.Journal(ar, whtAccount)})
+			ports.LedgerEntry{Lines: append(r.Journal(ar, whtAccount), extra...)})
 		if err != nil {
 			return err
 		}
@@ -150,7 +153,8 @@ func (uc *ReceiptUseCases) Create(ctx context.Context, a dto.Actor, in dto.Recei
 func withReceiptParty(s, filled entities.ReceiptState) entities.ReceiptState {
 	s.Party = filled.Party
 	for i := range s.Lines {
-		s.Lines[i].InvoiceNo = filled.Lines[i].InvoiceNo
+		f := filled.Lines[i]
+		s.Lines[i].InvoiceNo, s.Lines[i].InvoiceKind, s.Lines[i].VatBase, s.Lines[i].Vat = f.InvoiceNo, f.InvoiceKind, f.VatBase, f.Vat
 	}
 	return s
 }
@@ -209,7 +213,7 @@ func (uc *PaymentUseCases) List(ctx context.Context, a dto.Actor, f dto.Document
 // OpenInvoices: ใบแจ้งหนี้ผู้ขายค้างจ่าย (เลือกในหน้าจ่ายเงิน)
 func (uc *PaymentUseCases) OpenInvoices(ctx context.Context, a dto.Actor, supplierID uuid.UUID) ([]dto.OpenInvoice, error) {
 	return read(ctx, uc.base, a, vo.PermPaymentRead, func() ([]dto.OpenInvoice, error) {
-		rows, err := uc.payables.Open(ctx, a.CompanyID, supplierID)
+		rows, err := uc.payables.Open(ctx, a.CompanyID, supplierID, nil)
 		return openInvoices(rows), err
 	})
 }

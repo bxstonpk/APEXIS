@@ -172,6 +172,8 @@ type Receipt struct {
 	Description string        `json:"description"`
 	Lines       []ReceiptLine `json:"lines"`
 	Methods     []Method      `json:"methods"`
+	// BillingNoteID: ใบวางบิลที่หน้ารับเงินใช้ดึงใบแจ้งหนี้ — รับไว้เพื่ออ้างอิงเท่านั้น (ไม่บันทึก / ไม่ตรวจ)
+	BillingNoteID *string `json:"billing_note_id"`
 }
 
 func (r Receipt) ToInput() (dto.ReceiptInput, error) {
