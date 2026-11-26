@@ -25,6 +25,7 @@ type Deps struct {
 	Tx            ports.TransactionManager
 	Auth          ports.Authorizer
 	Members       ports.Membership
+	Provisioner   ports.CompanyProvisioner // optional (nil = ไม่ตั้งค่าเริ่มต้นให้ module อื่น)
 	Companies     repositories.CompanyRepository
 	Branches      repositories.BranchRepository
 	BusinessUnits repositories.BusinessUnitRepository
@@ -56,7 +57,7 @@ func New(d Deps) *UseCases {
 	}
 	b := base{tx: d.Tx, auth: d.Auth, companies: d.Companies}
 	return &UseCases{
-		Companies: &CompanyUseCases{base: b, members: d.Members},
+		Companies: &CompanyUseCases{base: b, members: d.Members, provisioner: d.Provisioner},
 		Branches: &BranchUseCases{
 			master: newMaster(b, d.Branches, vo.PermBranchRead, vo.PermBranchManage), repo: d.Branches,
 		},

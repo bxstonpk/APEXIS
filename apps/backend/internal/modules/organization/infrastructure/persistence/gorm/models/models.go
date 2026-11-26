@@ -41,9 +41,11 @@ type CompanyModel struct {
 	FiscalYearStartMonth int            `gorm:"not null;check:chk_org_companies_fy_month,fiscal_year_start_month BETWEEN 1 AND 12"`
 	AmountDecimals       int            `gorm:"not null;default:2;check:chk_org_companies_amount_decimals,amount_decimals BETWEEN 0 AND 6"`
 	QuantityDecimals     int            `gorm:"not null;default:2;check:chk_org_companies_quantity_decimals,quantity_decimals BETWEEN 0 AND 6"`
-	Status               string         `gorm:"size:20;not null;check:chk_org_companies_status,status IN ('active','inactive')"`
-	CreatedAt            time.Time      `gorm:"not null"`
-	UpdatedAt            time.Time      `gorm:"not null"`
+	// BusinessType: default 'trading' ใช้เติมค่าให้บริษัทเดิมตอน migrate (บริษัทเดิมได้ผังบัญชีที่มีบัญชีสินค้าแล้ว) — บริษัทใหม่ต้องระบุเสมอ
+	BusinessType string    `gorm:"size:20;not null;default:'trading';check:chk_org_companies_business_type,business_type IN ('service','trading','manufacturing','construction')"`
+	Status       string    `gorm:"size:20;not null;check:chk_org_companies_status,status IN ('active','inactive')"`
+	CreatedAt    time.Time `gorm:"not null"`
+	UpdatedAt    time.Time `gorm:"not null"`
 }
 
 func (CompanyModel) TableName() string { return "organization_companies" }

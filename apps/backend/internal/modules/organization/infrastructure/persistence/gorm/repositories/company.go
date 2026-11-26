@@ -29,7 +29,7 @@ func (r *CompanyRepository) Create(ctx context.Context, c *entities.Company) err
 	return create(ctx, r.db, &m, domain.ErrCodeExists)
 }
 
-// Update แก้ทุก column ยกเว้น code (แก้ไม่ได้) และ created_at
+// Update แก้ทุก column ยกเว้น code / business_type (แก้ไม่ได้) และ created_at
 func (r *CompanyRepository) Update(ctx context.Context, c *entities.Company) error {
 	m := gp.CompanyToModel(c)
 	res := database.Conn(ctx, r.db).Model(&m).
@@ -66,11 +66,12 @@ func (r *CompanyRepository) FindByID(ctx context.Context, id vo.CompanyID) (*ent
 func (r *CompanyRepository) Settings(ctx context.Context, id vo.CompanyID) (dto.CompanySettings, error) {
 	var rows []struct {
 		Status           string
+		BusinessType     string
 		AmountDecimals   int
 		QuantityDecimals int
 	}
 	err := database.Conn(ctx, r.db).Model(&models.CompanyModel{}).
-		Select("status, amount_decimals, quantity_decimals").
+		Select("status, business_type, amount_decimals, quantity_decimals").
 		Where("id = ?", uuid.UUID(id)).Limit(1).Scan(&rows).Error
 	if err != nil {
 		return dto.CompanySettings{}, err
@@ -80,7 +81,7 @@ func (r *CompanyRepository) Settings(ctx context.Context, id vo.CompanyID) (dto.
 	}
 	s := rows[0]
 	return dto.CompanySettings{
-		Active: s.Status == string(vo.StatusActive), AmountDecimals: s.AmountDecimals, QuantityDecimals: s.QuantityDecimals,
+		Active: s.Status == string(vo.StatusActive), BusinessType: s.BusinessType, AmountDecimals: s.AmountDecimals, QuantityDecimals: s.QuantityDecimals,
 	}, nil
 }
 
@@ -110,21 +111,22 @@ func (r *CompanyRepository) ListByIDs(ctx context.Context, ids []vo.CompanyID, f
 		return search(q, f.Search, "c.code", "c.name", "c.legal_name_th")
 	}
 	type row struct {
-		ID     uuid.UUID
-		Code   string
-		Name   string
-		TaxID  string
-		Status string
-		Total  int64
+		ID           uuid.UUID
+		Code         string
+		Name         string
+		TaxID        string
+		BusinessType string
+		Status       string
+		Total        int64
 	}
-	rows, total, err := database.FetchPage(base, "c.id, c.code, c.name, c.tax_id, c.status", order, f.Page,
+	rows, total, err := database.FetchPage(base, "c.id, c.code, c.name, c.tax_id, c.business_type, c.status", order, f.Page,
 		func(r row) int64 { return r.Total })
 	if err != nil {
 		return listing.Result[dto.CompanySummary]{}, err
 	}
 	items := make([]dto.CompanySummary, len(rows))
 	for i, row := range rows {
-		items[i] = dto.CompanySummary{ID: row.ID.String(), Code: row.Code, Name: row.Name, TaxID: row.TaxID, Status: row.Status}
+		items[i] = dto.CompanySummary{ID: row.ID.String(), Code: row.Code, Name: row.Name, TaxID: row.TaxID, BusinessType: row.BusinessType, Status: row.Status}
 	}
 	return listing.Result[dto.CompanySummary]{Items: items, Total: total, Page: f.Page}, nil
 }

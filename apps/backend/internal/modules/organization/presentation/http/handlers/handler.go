@@ -38,6 +38,7 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidCode, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidName, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidStatus, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidBusinessType, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidAddress, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidPostalCode, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidCountry, Status: http.StatusBadRequest},

@@ -47,6 +47,8 @@ type CompanySettings struct {
 type Organization interface {
 	// CompanySettings: สถานะ (inactive = อ่านอย่างเดียว) และจำนวนทศนิยมของเงินที่บริษัทกำหนด
 	CompanySettings(ctx context.Context, companyID vo.CompanyID) (CompanySettings, error)
+	// BusinessType: ประเภทธุรกิจของบริษัท (เลือกชุดบัญชีของผังมาตรฐาน) — ไม่พบบริษัท = domain.ErrCompanyInactive
+	BusinessType(ctx context.Context, companyID vo.CompanyID) (vo.BusinessType, error)
 	// PeriodAt คืน domain.ErrNoFiscalPeriod ถ้าไม่มีงวดครอบคลุมวันนั้น
 	// ภายใน transaction จะ lock แถวงวดจน commit — การปิดงวดพร้อมกันต้องรอรายการที่กำลังผ่าน
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)

@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"apexis/backend/internal/modules/ledger/domain/entities"
+	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	"apexis/backend/internal/modules/ledger/infrastructure/persistence/gorm/models"
 )
 
@@ -20,6 +21,11 @@ var addedStandardCodes = []string{
 }
 
 // TopUpDefaultChart เพิ่มบัญชีมาตรฐานใหม่ให้บริษัทที่ใช้ผังมาตรฐานอยู่แล้ว (มีบัญชี 1105000000)
+// เฉพาะบริษัทประเภทซื้อขาย / ผลิต และเฉพาะบัญชีที่อยู่ในผังของประเภทนั้น (entities.InChart)
+//
+// ข้อยกเว้นของการแยก module: migration นี้อ่าน organization_companies.business_type โดยตรง
+// เพราะทำงานตอนเริ่มโปรแกรม (ก่อนมี module / use case) และเป็นการปรับข้อมูลครั้งเดียว — อ่านอย่างเดียว ไม่แก้ตารางของ organization
+// ถ้ายังไม่มี column (organization ยังไม่ migrate) จะข้ามทั้งหมด (บริษัทบริการ / ก่อสร้างต้องไม่ได้บัญชีสินค้า)
 //
 // ทำเฉพาะบริษัทที่ยังไม่มีรหัสชุดใหม่เลยสักรหัส (นับรวมที่ลบแล้ว) — บริษัทที่ได้รับไปแล้ว / ลบทิ้งเอง / สร้างรหัสซ้ำเองจะไม่ถูกแตะ
 // บัญชีที่หา parent ไม่เจอ (ผู้ใช้ลบบัญชีคุมทิ้ง) จะข้าม; ทั้งหมดทำในทรานแซกชันเดียว
@@ -32,15 +38,25 @@ func TopUpDefaultChart(db *gorm.DB) error {
 		defs[d.Code] = d
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		var companies []uuid.UUID
-		if err := tx.Model(&models.AccountModel{}).
-			Where("code = ? AND deleted_at IS NULL", "1105000000").
-			Where("company_id NOT IN (?)", tx.Unscoped().Model(&models.AccountModel{}).Select("company_id").Where("code IN ?", addedStandardCodes)).
-			Distinct().Pluck("company_id", &companies).Error; err != nil {
+		if !tx.Migrator().HasColumn("organization_companies", "business_type") {
+			return nil
+		}
+		var companies []struct {
+			CompanyID    uuid.UUID
+			BusinessType string
+		}
+		if err := tx.Table("ledger_accounts AS a").
+			Select("DISTINCT a.company_id, c.business_type").
+			Joins("JOIN organization_companies c ON c.id = a.company_id").
+			Where("a.code = ? AND a.deleted_at IS NULL", "1105000000").
+			Where("c.business_type IN ?", []string{string(vo.BusinessTrading), string(vo.BusinessManufacturing)}).
+			Where("a.company_id NOT IN (?)", tx.Unscoped().Model(&models.AccountModel{}).Select("company_id").Where("code IN ?", addedStandardCodes)).
+			Scan(&companies).Error; err != nil {
 			return err
 		}
 		now := time.Now()
-		for _, companyID := range companies {
+		for _, co := range companies {
+			companyID, bt := co.CompanyID, vo.BusinessType(co.BusinessType)
 			var rows []models.AccountModel
 			if err := tx.Select("id", "code").Where("company_id = ? AND deleted_at IS NULL", companyID).Find(&rows).Error; err != nil {
 				return err
@@ -50,6 +66,9 @@ func TopUpDefaultChart(db *gorm.DB) error {
 				ids[r.Code] = r.ID
 			}
 			for _, code := range addedStandardCodes {
+				if !entities.InChart(code, bt) {
+					continue
+				}
 				d := defs[code]
 				parent, ok := ids[d.ParentCode]
 				if !ok {

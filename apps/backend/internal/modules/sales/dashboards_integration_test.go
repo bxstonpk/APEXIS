@@ -5,7 +5,7 @@ import "testing"
 // GET /dashboards/sales: ยอดขายช่วงนี้ / ก่อนหน้า, 12 เดือน, งานค้าง, ลูกหนี้ตามอายุ, ลูกค้า 5 อันดับ
 func TestSalesDashboard(t *testing.T) {
 	a, owner := setup(t)
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "dash", "name": "DASH"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "dash", "name": "DASH", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 	acc := map[string]string{}

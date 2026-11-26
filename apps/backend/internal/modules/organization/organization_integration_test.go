@@ -130,15 +130,15 @@ func TestOrganizationFlow(t *testing.T) {
 	outsider := a.user("outsider@example.com")
 
 	// ---------- company: สร้างแล้วผู้สร้างเป็น owner (identity อยู่ใน transaction เดียวกัน) ----------
-	ca := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "acme", "name": "ACME", "tax_id": "0105556000000"}), 201, "company A")
+	ca := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "acme", "name": "ACME", "business_type": "trading", "tax_id": "0105556000000"}), 201, "company A")
 	if d := ca.data(); d["code"] != "ACME" || d["status"] != "active" || d["base_currency"] != "THB" ||
 		d["fiscal_year_start_month"] != float64(1) || d["legal_name_th"] != "ACME" ||
 		d["amount_decimals"] != float64(2) || d["quantity_decimals"] != float64(2) {
 		t.Fatalf("company A defaults = %v", d)
 	}
 	compA := ca.id()
-	compB := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "beta", "name": "Beta"}), 201, "company B").id()
-	a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "ACME", "name": "dup"}), 409, "duplicate company code")
+	compB := a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "beta", "name": "Beta", "business_type": "trading"}), 201, "company B").id()
+	a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"code": "ACME", "name": "dup", "business_type": "trading"}), 409, "duplicate company code")
 	a.expect(a.do("POST", "/api/v1/companies", owner, map[string]any{"name": "no code"}), 400, "company without code")
 	a.expect(a.do("POST", "/api/v1/companies", "", map[string]any{"code": "X", "name": "x"}), 401, "create company without token")
 
@@ -147,7 +147,7 @@ func TestOrganizationFlow(t *testing.T) {
 	if err := a.db.Exec("UPDATE identity_users SET status = 'disabled' WHERE email = ?", "disabled@example.com").Error; err != nil {
 		t.Fatal(err)
 	}
-	a.expect(a.do("POST", "/api/v1/companies", disabled, map[string]any{"code": "GHOST", "name": "ghost"}), 403, "disabled user creates company")
+	a.expect(a.do("POST", "/api/v1/companies", disabled, map[string]any{"code": "GHOST", "name": "ghost", "business_type": "trading"}), 403, "disabled user creates company")
 	var ghosts int64
 	if err := a.db.Table("organization_companies").Where("code = ?", "GHOST").Count(&ghosts).Error; err != nil || ghosts != 0 {
 		t.Fatalf("company must be rolled back: count=%d err=%v", ghosts, err)

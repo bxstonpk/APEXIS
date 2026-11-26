@@ -219,12 +219,14 @@ type Company struct {
 	FiscalYearStartMonth int
 	AmountDecimals       int
 	QuantityDecimals     int
+	BusinessType         string
 	Status               string
 }
 
 // CompanySettings คือค่าตั้งของบริษัทที่ module อื่นต้องใช้ตอนเขียนข้อมูล (อ่านใน query เดียว)
 type CompanySettings struct {
 	Active           bool
+	BusinessType     string
 	AmountDecimals   int
 	QuantityDecimals int
 }
@@ -249,11 +251,12 @@ type Dimensions struct {
 
 // CompanySummary ใช้ในรายการ "บริษัทของฉัน" (เลือกเฉพาะ column ที่แสดง)
 type CompanySummary struct {
-	ID     string
-	Code   string
-	Name   string
-	TaxID  string
-	Status string
+	ID           string
+	Code         string
+	Name         string
+	TaxID        string
+	BusinessType string
+	Status       string
 }
 
 type Branch struct {

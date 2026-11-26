@@ -11,6 +11,7 @@ import (
 	"apexis/backend/internal/modules/ledger/application/ports"
 	domain "apexis/backend/internal/modules/ledger/domain/errors"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
+	"apexis/backend/internal/platform/integration"
 )
 
 // IdentityAccess คือ public API ของ identity ที่ ledger ใช้ (identity.Module implement)
@@ -43,6 +44,7 @@ type OrganizationAccess interface {
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
+	CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
@@ -54,6 +56,17 @@ func NewOrganization(org OrganizationAccess) *Organization { return &Organizatio
 func (o *Organization) CompanySettings(ctx context.Context, companyID vo.CompanyID) (ports.CompanySettings, error) {
 	active, amountDecimals, _, err := o.org.CompanySettings(ctx, uuid.UUID(companyID))
 	return ports.CompanySettings{Active: active, AmountDecimals: amountDecimals}, err
+}
+
+func (o *Organization) BusinessType(ctx context.Context, companyID vo.CompanyID) (vo.BusinessType, error) {
+	bt, err := o.org.CompanyBusinessType(ctx, uuid.UUID(companyID))
+	if err != nil {
+		return "", err
+	}
+	if bt == "" {
+		return "", domain.ErrCompanyInactive // ไม่พบบริษัท (เหมือน CompanySettings ที่ถือว่าไม่ active)
+	}
+	return vo.ParseBusinessType(string(bt))
 }
 
 func (o *Organization) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (ports.Period, error) {

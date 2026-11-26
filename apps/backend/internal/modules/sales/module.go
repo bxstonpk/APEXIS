@@ -140,6 +140,12 @@ func reject(err error) error {
 	return err
 }
 
+// ProvisionCompany ตั้งค่าเริ่มต้นของ module ให้บริษัทใหม่ตามประเภทธุรกิจ (บัญชี / สมุดรายวันจากผังบัญชีมาตรฐาน)
+// ลงทะเบียนเป็น hook ของ organization.Module.OnCompanyCreated หลัง ledger — ทำงานใน transaction ของการสร้างบริษัท
+func (m *Module) ProvisionCompany(ctx context.Context, c integration.NewCompany) error {
+	return m.UseCases.Settings.Provision(ctx, vo.CompanyID(c.ID), c.BusinessType)
+}
+
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)
 func (m *Module) Permissions() []string {
 	out := make([]string, len(vo.AllPermissions))

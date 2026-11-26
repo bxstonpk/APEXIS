@@ -12,7 +12,7 @@ import (
 // เลขผู้เสียภาษี 1 เลข = ลูกค้า 1 รหัส, สาขาเพิ่มเติม, เลือกสาขาในใบสั่งขาย, ผู้ซื้อ ณ วันออกใบกำกับภาษี, รวมรหัสซ้ำตอน migrate
 func TestCustomerBranches(t *testing.T) {
 	a, owner := setup(t)
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "br", "name": "BR"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "br", "name": "BR", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 	acc := map[string]string{}

@@ -90,6 +90,8 @@ type LedgerAccess interface {
 	ReverseEntry(ctx context.Context, companyID, userID, entryID uuid.UUID, date time.Time, description string) (integration.PostedEntry, error)
 	InvalidPostingAccounts(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID) ([]uuid.UUID, error)
 	JournalUsable(ctx context.Context, companyID, journalID uuid.UUID) (bool, error)
+	AccountIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error)
+	JournalIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error)
 }
 
 var _ ports.Ledger = (*Ledger)(nil)
@@ -109,6 +111,24 @@ func (l *Ledger) InvalidAccounts(ctx context.Context, companyID vo.CompanyID, id
 
 func (l *Ledger) JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error) {
 	return l.ledger.JournalUsable(ctx, uuid.UUID(companyID), uuid.UUID(id))
+}
+
+func (l *Ledger) AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error) {
+	found, err := l.ledger.AccountIDsByCode(ctx, uuid.UUID(companyID), codes)
+	out := make(map[string]vo.AccountID, len(found))
+	for code, id := range found {
+		out[code] = vo.AccountID(id)
+	}
+	return out, err
+}
+
+func (l *Ledger) JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error) {
+	found, err := l.ledger.JournalIDsByCode(ctx, uuid.UUID(companyID), codes)
+	out := make(map[string]vo.JournalID, len(found))
+	for code, id := range found {
+		out[code] = vo.JournalID(id)
+	}
+	return out, err
 }
 
 func (l *Ledger) Post(ctx context.Context, e ports.LedgerEntry) (vo.EntryID, string, error) {

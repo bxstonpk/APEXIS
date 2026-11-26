@@ -120,6 +120,12 @@ func run(logger *slog.Logger) error {
 	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing
 	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule)
 	financeModule.RegisterRoutes(mux)
+	// ตั้งค่าบริษัทใหม่ใน transaction เดียวกับการสร้างบริษัท: ผังบัญชีมาตรฐานตามประเภทธุรกิจก่อน แล้วค่าตั้งของแต่ละ module
+	organizationModule.OnCompanyCreated(ledgerModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(salesModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(purchasingModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(inventoryModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(financeModule.ProvisionCompany)
 	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
 	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 

@@ -51,6 +51,9 @@ type Ledger interface {
 	// InvalidAccounts คืนบัญชีที่ใช้ลงรายการไม่ได้ (ไม่พบ / บัญชีคุม / inactive)
 	InvalidAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) ([]vo.AccountID, error)
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
+	// AccountsByCode / JournalsByCode: id ตามรหัสในผังบัญชีมาตรฐาน (ตั้งค่าเริ่มต้นตอนสร้างบริษัท) — รหัสที่ไม่พบ / ลงรายการไม่ได้ไม่อยู่ในผล
+	AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error)
+	JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error)
 	// Balances: ยอด (เดบิต - เครดิต) สะสมถึง asOf
 	Balances(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID, asOf time.Time) (map[vo.AccountID]vo.Money, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)

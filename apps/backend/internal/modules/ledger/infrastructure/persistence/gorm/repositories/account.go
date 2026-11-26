@@ -65,6 +65,24 @@ func (r *AccountRepository) HasAny(ctx context.Context, companyID vo.CompanyID) 
 	return ok, err
 }
 
+func (r *AccountRepository) PostableIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error) {
+	out := map[string]vo.AccountID{}
+	if len(codes) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID   uuid.UUID
+		Code string
+	}
+	err := database.Conn(ctx, r.db).Model(&models.AccountModel{}).Select("id, code").
+		Where("company_id = ? AND code IN ? AND postable AND status = ?", uuidOf(companyID), codes, string(vo.StatusActive)).
+		Scan(&rows).Error
+	for _, row := range rows {
+		out[row.Code] = vo.AccountID(row.ID)
+	}
+	return out, err
+}
+
 func (r *AccountRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) error {
 	return softDelete[models.AccountModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrAccountNotFound)
 }

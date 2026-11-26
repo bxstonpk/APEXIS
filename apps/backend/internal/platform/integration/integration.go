@@ -8,6 +8,7 @@
 package integration
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -175,3 +176,25 @@ type VatTotals struct {
 	Tax       decimal.Decimal // ภาษีมูลค่าเพิ่ม
 	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
 }
+
+// ---------- ประเภทธุรกิจ / ตั้งค่าบริษัทใหม่ ----------
+
+// BusinessType คือประเภทธุรกิจของบริษัท (organization เป็นเจ้าของ) — กำหนดผังบัญชีมาตรฐานและค่าตั้งเริ่มต้น
+type BusinessType string
+
+const (
+	BusinessService       BusinessType = "service"       // ธุรกิจบริการทั่วไป
+	BusinessTrading       BusinessType = "trading"       // ธุรกิจซื้อขายสินค้า
+	BusinessManufacturing BusinessType = "manufacturing" // ธุรกิจผลิตสินค้า
+	BusinessConstruction  BusinessType = "construction"  // ธุรกิจก่อสร้าง
+)
+
+// NewCompany คือบริษัทที่เพิ่งสร้าง — ส่งให้ hook ของ module อื่น (organization.Module.OnCompanyCreated)
+type NewCompany struct {
+	ID           uuid.UUID
+	BusinessType BusinessType
+}
+
+// CompanyCreatedHook ตั้งค่าเริ่มต้นของ module ให้บริษัทใหม่ — ทำงานใน transaction เดียวกับการสร้างบริษัท (ctx)
+// คืน error = rollback การสร้างบริษัททั้งหมด
+type CompanyCreatedHook func(ctx context.Context, c NewCompany) error

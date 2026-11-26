@@ -23,6 +23,12 @@ type Membership interface {
 	CompanyIDsOf(ctx context.Context, userID vo.UserID) ([]vo.CompanyID, error)
 }
 
+// CompanyProvisioner ตั้งค่าเริ่มต้นของ module อื่นให้บริษัทที่เพิ่งสร้าง (ผังบัญชีมาตรฐาน, ค่าตั้งขาย / ซื้อ / คลัง / การเงิน)
+// ต้องเข้าร่วม transaction ใน ctx — error = rollback การสร้างบริษัททั้งหมด
+type CompanyProvisioner interface {
+	Provision(ctx context.Context, companyID vo.CompanyID, businessType vo.BusinessType) error
+}
+
 // Authorizer ตรวจสิทธิ์ของ user ในบริษัท (implementation เรียก identity module)
 // คืน domain.ErrForbidden เมื่อไม่มีสิทธิ์ — เข้าร่วม transaction ใน ctx ได้
 type Authorizer interface {

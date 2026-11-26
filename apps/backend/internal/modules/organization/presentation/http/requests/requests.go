@@ -109,10 +109,10 @@ func (a Address) toDomain() vo.Address {
 
 // POST /companies และ PUT /companies/{companyID}
 //
-// POST: ต้องมี code, name — ที่เหลือมีค่าเริ่มต้น (base_currency THB, fiscal_year_start_month 1,
+// POST: ต้องมี code, name, business_type (service / trading / manufacturing / construction) — ที่เหลือมีค่าเริ่มต้น (base_currency THB, fiscal_year_start_month 1,
 // status active, legal_name_th = name)
 // PUT: แทนที่ทั้งก้อน ต้องส่ง name, base_currency, fiscal_year_start_month, amount_decimals, quantity_decimals, status
-// — code แก้ไม่ได้ (ไม่ต้องส่ง)
+// — code / business_type แก้ไม่ได้ (ไม่ต้องส่ง; ส่งมาจะถูกละเว้น)
 type Company struct {
 	Code                 string  `json:"code"`
 	Name                 string  `json:"name"`
@@ -127,6 +127,7 @@ type Company struct {
 	FiscalYearStartMonth int     `json:"fiscal_year_start_month"`
 	AmountDecimals       *int    `json:"amount_decimals"`   // POST ไม่ส่ง = 2, PUT ต้องส่ง
 	QuantityDecimals     *int    `json:"quantity_decimals"` // POST ไม่ส่ง = 2, PUT ต้องส่ง
+	BusinessType         string  `json:"business_type"`     // POST เท่านั้น
 	Status               string  `json:"status"`
 }
 
@@ -145,6 +146,7 @@ func (r Company) ToData(isCreate bool) (entities.CompanyData, error) {
 	fields := map[string]string{"name": r.Name}
 	if isCreate {
 		fields["code"] = r.Code
+		fields["business_type"] = r.BusinessType
 		if r.BaseCurrency == "" {
 			r.BaseCurrency = "THB"
 		}
@@ -176,7 +178,8 @@ func (r Company) ToData(isCreate bool) (entities.CompanyData, error) {
 		Code: r.Code, Name: r.Name, TaxID: r.TaxID, LegalNameTH: r.LegalNameTH, LegalNameEN: r.LegalNameEN,
 		Address: r.Address.toDomain(), Phone: r.Phone, Email: r.Email, Website: r.Website,
 		BaseCurrency: r.BaseCurrency, FiscalYearStartMonth: r.FiscalYearStartMonth,
-		AmountDecimals: amountDecimals, QuantityDecimals: quantityDecimals, Status: st,
+		AmountDecimals: amountDecimals, QuantityDecimals: quantityDecimals,
+		BusinessType: vo.BusinessType(r.BusinessType), Status: st,
 	}, nil
 }
 
