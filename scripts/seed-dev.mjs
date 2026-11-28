@@ -99,6 +99,28 @@ async function purchase(b, supplier, date, lines, { pay = true, invNo } = {}) {
   return inv
 }
 
+// จ้างบริการ (ทุกประเภทธุรกิจ): ใบสั่งจ้าง → ตรวจรับงาน → ซื้อบริการ (ยังไม่ได้ใบกำกับ = ภาษีซื้อยังไม่ถึงกำหนด)
+// → จ่ายเงิน (การเงิน หัก ณ ที่จ่าย 3%) → บันทึกใบกำกับภาษีที่ได้รับ; + ซื้อบริการตรงที่ยังรอใบกำกับ 1 ใบ และที่ได้ใบกำกับพร้อมใบแจ้งหนี้ 1 ใบ
+async function servicePurchases(b) {
+  const clean = await b.item('PS-CLEAN', 'ค่าบริการทำความสะอาดสำนักงาน', 'service', 'JOB')
+  const air = await b.item('PS-AIR', 'ค่าบำรุงรักษาเครื่องปรับอากาศ', 'service', 'JOB')
+  const s = b.suppliers[0]
+  const wo = await req('POST', `${b.C}/work-orders`, { supplier_id: s.id, date: day(5), delivery_date: day(10), price_includes_vat: false, description: 'จ้างทำความสะอาดสำนักงานเดือนพฤศจิกายน', lines: [{ item_id: clean.id, quantity: '1', unit_price: '20000' }] })
+  await req('PATCH', `${b.C}/work-orders/${wo.id}`, { status: 'approved' })
+  await req('POST', `${b.C}/service-acceptances`, { order_id: wo.id, date: day(10), lines: [{ order_line_no: 1, quantity: '1' }] })
+  const si = await req('POST', `${b.C}/supplier-service-invoices`, { order_id: wo.id, supplier_invoice_no: 'SV-2611-001', invoice_date: day(10), date: day(10), lines: [{ order_line_no: 1, quantity: '1' }] })
+  const wht = (Number(si.totals.net) * 0.03).toFixed(2)
+  await req('POST', `${b.C}/payments`, {
+    kind: 'supplier', supplier_id: s.id, date: day(18), lines: [{ invoice_id: si.id, amount: si.totals.gross, wht_type_id: b.wht.id }],
+    methods: [{ cash_account_id: b.bank.id, amount: (Number(si.totals.gross) - Number(wht)).toFixed(2), reference: 'โอนผ่านธนาคาร' }],
+  })
+  await req('POST', `${b.C}/supplier-service-invoices/${si.id}/tax-invoices`, { tax_invoice_no: 'TX-2611-001', tax_invoice_date: day(18), date: day(18) })
+  // ซื้อบริการตรง ยังไม่ได้ใบกำกับ (ภาษีซื้อยังไม่ถึงกำหนด)
+  await req('POST', `${b.C}/supplier-service-invoices`, { supplier_id: s.id, supplier_invoice_no: 'SV-2611-002', invoice_date: day(24), date: day(24), price_includes_vat: false, lines: [{ item_id: air.id, quantity: '4', unit_price: '2000' }] })
+  // ซื้อบริการตรง ได้ใบกำกับพร้อมใบแจ้งหนี้ (ภาษีซื้อเกิดทันที)
+  await req('POST', `${b.C}/supplier-service-invoices`, { supplier_id: s.id, supplier_invoice_no: 'SV-2611-003', invoice_date: day(26), date: day(26), tax_invoice_no: 'TX-2611-003', tax_invoice_date: day(26), price_includes_vat: false, lines: [{ item_id: air.id, quantity: '2', unit_price: '2000' }] })
+}
+
 // รับเงิน (การเงิน) — amount รวม wht แล้ว
 const receive = (b, customer, date, lines, cashAccount = b.bank) => {
   const net = lines.reduce((s, l) => s + Number(l.amount) - Number(l.wht ?? 0), 0).toFixed(2)
@@ -134,6 +156,7 @@ async function trading() {
   await req('POST', `${b.C}/billing-notes`, { customer_id: c2.id, date: day(25), due_date: '2026-12-10', invoice_ids: [iv2.id, iv3.id], description: 'วางบิลประจำเดือนพฤศจิกายน' })
   await req('POST', `${b.C}/sales-credit-notes`, { invoice_id: iv2.id, date: day(24), kind: 'return', reason: 'เมาส์ชำรุด 1 ชิ้น', warehouse_id: b.wh.id, lines: [{ invoice_line_no: 2, quantity: '1' }] })
   await req('POST', `${b.C}/quotations`, { customer_id: c2.id, date: day(26), valid_until: '2026-12-26', price_includes_vat: false, lines: [{ item_id: mn.id, quantity: '10', unit_price: '7500' }] })
+  await servicePurchases(b)
   console.log('✓ DEMO-TRD ธุรกิจซื้อขายสินค้า')
 }
 
@@ -166,6 +189,7 @@ async function service() {
     lines: [{ account_id: exp.id, description: 'ค่าจ้างผู้รับเหมาช่วงงานติดตั้ง', amount: '10000', wht_type_id: b.wht.id }],
     methods: [{ cash_account_id: b.bank.id, amount: '9700', reference: '' }],
   })
+  await servicePurchases(b)
   console.log('✓ DEMO-SVC ธุรกิจบริการทั่วไป')
 }
 
@@ -212,6 +236,7 @@ async function manufacturing() {
   const iv = await req('POST', `${b.C}/sales-invoices`, { customer_id: c1.id, date: day(12), warehouse_id: b.wh.id, price_includes_vat: false, lines: [{ item_id: chair.id, quantity: '30', unit_price: '1890' }] })
   await receive(b, c1, day(26), [{ invoice_id: iv.id, amount: iv.totals.gross }])
   await req('POST', `${b.C}/sales-invoices`, { customer_id: c2.id, date: day(24), warehouse_id: b.wh.id, price_includes_vat: false, lines: [{ item_id: chair.id, quantity: '8', unit_price: '1950' }] })
+  await servicePurchases(b)
   console.log('✓ DEMO-MFG ธุรกิจผลิตสินค้า')
 }
 
@@ -236,6 +261,7 @@ async function construction() {
   // งวดงานที่ 2 + งานเพิ่ม: ยังไม่รับเงิน (ภาษียังไม่ถึงกำหนด)
   const sv2 = await req('POST', `${b.C}/service-invoices`, { customer_id: c1.id, date: day(28), price_includes_vat: false, description: 'เบิกงวดงานที่ 2 — งานโครงสร้างชั้น 2', lines: [{ item_id: prog.id, quantity: '1', unit_price: '750000' }, { item_id: extra.id, quantity: '1', unit_price: '45000' }], deposits: [{ deposit_id: dp.id, amount: '75000' }] })
   await req('POST', `${b.C}/billing-notes`, { customer_id: c1.id, date: day(29), due_date: '2026-12-29', invoice_ids: [sv2.id], description: 'วางบิลงวดงานที่ 2' })
+  await servicePurchases(b)
   console.log('✓ DEMO-CON ธุรกิจรับเหมาก่อสร้าง')
 }
 
