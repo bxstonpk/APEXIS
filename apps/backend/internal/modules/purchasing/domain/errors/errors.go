@@ -74,7 +74,22 @@ var (
 	ErrCreditBeforeInvoice  = errors.New("credit note date must be on or after the invoice posting date")
 	ErrOverCredit           = errors.New("credit exceeds what is left on the invoice") // detailed
 	ErrInvoiceHasCredits    = errors.New("invoice has credit notes (cancel the credit notes first)")
+	// ภาษีซื้อยังไม่ถึงกำหนด (ซื้อบริการ — รอใบกำกับภาษีจากผู้ขาย)
+	ErrNoUndueInputVat        = errors.New("supplier invoice has no input VAT waiting for a tax invoice")
+	ErrOverRecognition        = errors.New("tax invoice VAT exceeds the input VAT waiting for a tax invoice") // detailed
+	ErrInvoiceHasTaxInvoices  = errors.New("invoice has recorded tax invoices (cancel them first)")
+	// แยกสายเอกสาร: ใบสั่งซื้อ / ซื้อสินค้ารับเฉพาะสินค้า, ใบสั่งจ้าง / ซื้อบริการรับเฉพาะบริการ
+	ErrGoodsDocumentServiceLine = errors.New("goods document service line") // detailed
+	ErrServiceDocumentGoodsLine = errors.New("service document goods line") // detailed
+	ErrReturnOnServiceInvoice   = errors.New("service invoices can only be credited as an allowance")
+	ErrNoTaxInvoiceToRecord     = errors.New("only service invoices record received tax invoices")
+	ErrCreditExceedsUndueVat  = errors.New("credit note VAT exceeds the input VAT still waiting for a tax invoice") // detailed
+	ErrTaxInvoiceNotFound     = errors.New("supplier tax invoice not found")
+	ErrTaxInvoiceNoExists     = errors.New("supplier tax invoice number already recorded for this supplier")
 )
+
+// ภาษีซื้อของใบกำกับที่ได้รับไม่ถูกต้อง (400)
+var ErrInvalidTaxInvoiceVat = errors.New("tax invoice VAT must be positive with at most the company amount decimals")
 
 // สิทธิ์ (403)
 var ErrForbidden = errors.New("permission denied")
@@ -90,6 +105,9 @@ var all = []error{
 	ErrNoFiscalPeriod, ErrPeriodClosed, ErrSettingsMissing, ErrAccountInvalid, ErrJournalInvalid, ErrWarehouseRequired, ErrBranchNotFound,
 	ErrInvalidKind, ErrInvalidReason, ErrCreditNoteNotFound, ErrCreditNoteNoExists, ErrInvoiceNotCreditable, ErrCreditBeforeInvoice,
 	ErrOverCredit, ErrInvoiceHasCredits,
+	ErrNoUndueInputVat, ErrOverRecognition, ErrInvoiceHasTaxInvoices, ErrCreditExceedsUndueVat, ErrTaxInvoiceNotFound,
+	ErrTaxInvoiceNoExists, ErrInvalidTaxInvoiceVat,
+	ErrGoodsDocumentServiceLine, ErrServiceDocumentGoodsLine, ErrReturnOnServiceInvoice, ErrNoTaxInvoiceToRecord,
 	ErrForbidden,
 }
 

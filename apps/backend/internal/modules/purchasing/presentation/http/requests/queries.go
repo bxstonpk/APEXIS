@@ -127,6 +127,12 @@ func ParseAging(v url.Values) (dto.AgingFilter, error) {
 	return f, q.err
 }
 
+// ParseUndueInputVat: GET /reports?book=undue-input-vat&end_date=&supplier_id=&page=&page_size=
+func ParseUndueInputVat(v url.Values) (dto.UndueInputVatFilter, error) {
+	a, err := ParseAging(v)
+	return dto.UndueInputVatFilter{End: a.AsOf, SupplierID: a.SupplierID, Page: a.Page}, err
+}
+
 // ParseCreditNoteFilter: GET /supplier-credit-notes?q=&status=&supplier_id=&invoice_id=&start_date=&end_date=&sort=&page=&page_size=
 func ParseCreditNoteFilter(v url.Values) (dto.DocumentFilter, error) {
 	f, err := ParseDocumentFilter(v, false)

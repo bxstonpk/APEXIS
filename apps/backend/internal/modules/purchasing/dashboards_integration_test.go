@@ -19,7 +19,7 @@ func TestPurchasingDashboard(t *testing.T) {
 	a.expect(a.do("PUT", base+"/purchasing-settings", owner, obj{"vat_rate": "7", "journal_id": jv, "grir_account_id": grirAcc, "ap_account_id": apAcc,
 		"input_vat_account_id": vatAcc, "price_variance_account_id": varianceAcc}), 200, "settings")
 	uom := a.expect(a.do("POST", base+"/uoms", owner, obj{"code": "JOB", "name": "งาน"}), 201, "uom").id()
-	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าบริการ", "type": "service", "uom_id": uom, "purchase_account_id": purchaseAcc}), 201, "service").id()
+	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าบริการ", "type": "non_stock", "uom_id": uom, "purchase_account_id": purchaseAcc}), 201, "service").id()
 	sup := a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "S1", "name": "ผู้ขายหนึ่ง", "payment_term_days": 10, "vat_registered": true, "tax_type": "juristic"}), 201, "supplier").id()
 
 	po := func(date, price string, approve bool) string {

@@ -65,7 +65,8 @@ func (r *ReportRepository) Outstanding(ctx context.Context, companyID vo.Company
 			Joins("JOIN purchasing_suppliers AS s ON s.id = o.supplier_id").
 			Where("o.company_id = ?", uuidOf(companyID)).
 			Where(`(o.status = 'approved' AND (l.received_qty < l.quantity OR l.invoiced_qty < l.received_qty))
-				OR (o.status = 'closed' AND l.invoiced_qty < l.received_qty)`)
+				OR (o.status = 'closed' AND l.invoiced_qty < l.received_qty)`).
+			Where("o.kind = ?", string(vo.KindOrDefault(string(f.Kind))))
 		if f.SupplierID != nil {
 			q = q.Where("o.supplier_id = ?", uuidOf(*f.SupplierID))
 		}

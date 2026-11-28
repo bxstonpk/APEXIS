@@ -39,6 +39,8 @@ type CreditNoteState struct {
 	CreditNoteDate       time.Time // วันที่ในใบลดหนี้ของผู้ขาย
 	Date                 time.Time // วันที่ลงบัญชี
 	Kind                 vo.CreditNoteKind
+	// VatKind: "output" = ลดภาษีซื้อ (ใบเดิมได้รับใบกำกับแล้ว), "undue" = ลดภาษีซื้อยังไม่ถึงกำหนด (ใบเดิมยังรอใบกำกับ)
+	VatKind              string
 	Reason               string // เหตุผลที่ลดหนี้ (ม.86/10 ต้องระบุ)
 	Description          string
 	Vat                  services.VatTerms // ตามใบแจ้งหนี้เดิม
@@ -100,6 +102,19 @@ func (c *CreditNote) Journal(ap, inputVat vo.AccountID) []services.JournalLine {
 		j.Credit(l.AccountID, l.Amounts.Net)
 	}
 	return j.Lines()
+}
+
+// VatKind ของใบลดหนี้ผู้ขาย
+const (
+	VatKindOutput = "output" // ลดภาษีซื้อ (ใบเดิมได้รับใบกำกับแล้ว) — เข้ารายงานภาษีซื้อเป็นแถวติดลบ
+	VatKindUndue  = "undue"  // ลดภาษีซื้อยังไม่ถึงกำหนด (ใบเดิมยังรอใบกำกับ) — ไม่เข้ารายงานภาษีซื้อ
+)
+
+func (c *CreditNote) SetVatKind(undue bool) {
+	c.s.VatKind = VatKindOutput
+	if undue {
+		c.s.VatKind = VatKindUndue
+	}
 }
 
 func (c *CreditNote) SetEntry(id vo.EntryID, no string) {

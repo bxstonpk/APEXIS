@@ -70,10 +70,22 @@ type InvoiceRepository interface {
 	LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
 	// SavePaid เขียนยอดจ่ายแล้วของหลายใบ — statement เดียว
 	SavePaid(ctx context.Context, invoices []*entities.Invoice) error
+	// SaveVat เขียนภาษีซื้อยังไม่ถึงกำหนดที่ได้รับใบกำกับ / ลดหนี้แล้วของใบ — statement เดียว
+	SaveVat(ctx context.Context, i *entities.Invoice) error
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error)
 	// Open: ใบแจ้งหนี้ที่ยังค้างจ่ายของผู้ขาย เรียงวันครบกำหนด — query เดียว
 	Open(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID) ([]dto.OpenInvoice, error)
+}
+
+// TaxInvoiceRepository: ใบกำกับภาษีที่ได้รับจากผู้ขายภายหลังใบแจ้งหนี้ (ทำให้ภาษีซื้อยังไม่ถึงกำหนดถึงกำหนด)
+type TaxInvoiceRepository interface {
+	Create(ctx context.Context, t dto.TaxInvoiceRecord) error
+	// FindForUpdate: ใบกำกับของใบแจ้งหนี้นี้ พร้อม lock
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID, id uuid.UUID) (dto.TaxInvoiceRecord, error)
+	Cancel(ctx context.Context, companyID vo.CompanyID, id uuid.UUID, by vo.UserID, at time.Time) error
+	// NoUsed: เลขที่ใบกำกับของผู้ขายนี้ถูกบันทึกแล้ว (ยังไม่ยกเลิก)
+	NoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error)
 }
 
 type CreditNoteRepository interface {
@@ -108,4 +120,6 @@ type ReportRepository interface {
 	InputVat(ctx context.Context, companyID vo.CompanyID, f dto.InputVatFilter) (listing.Result[dto.InputVatRow], dto.InputVatRow, error)
 	// VatTotals: ยอดรวมภาษีซื้อของช่วงวันที่ (ใบแจ้งหนี้ - ใบลดหนี้) — query เดียว
 	VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error)
+	// UndueInputVat: ซื้อบริการที่ภาษีซื้อยังรอใบกำกับ ณ วันที่ — แบ่งหน้าใน DB พร้อมยอดรวม
+	UndueInputVat(ctx context.Context, companyID vo.CompanyID, f dto.UndueInputVatFilter) (listing.Result[dto.UndueInputVatRow], dto.UndueInputVatRow, error)
 }

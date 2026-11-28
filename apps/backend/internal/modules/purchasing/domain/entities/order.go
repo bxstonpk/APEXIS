@@ -23,6 +23,8 @@ type OrderLineData struct {
 }
 
 type OrderData struct {
+	// Kind: goods = ใบสั่งซื้อ (สินค้า), service = ใบสั่งจ้าง (บริการ) — กำหนดตอนสร้าง แก้ไม่ได้; use case ตรวจชนิดสินค้าทุกบรรทัด
+	Kind             vo.PurchaseKind
 	SupplierID       vo.SupplierID
 	SupplierBranchNo string // สาขาผู้ขาย (ว่าง = สาขาหลัก) — use case ตรวจกับทะเบียนผู้ขายแล้ว; ใบแจ้งหนี้ใช้สาขานี้
 	Date             time.Time
@@ -155,7 +157,22 @@ func (o *Order) Update(d OrderData, terms Terms, dec Decimals) error {
 	if o.s.Status != vo.OrderDraft {
 		return domain.ErrOrderNotDraft
 	}
+	d.Kind = o.s.Data.Kind
 	return o.set(d, terms, dec)
+}
+
+func (o *Order) Kind() vo.PurchaseKind { return o.s.Data.Kind }
+
+// CheckLineKind: สายสินค้ารับเฉพาะสินค้า (stock / ไม่นับสต็อก), สายบริการรับเฉพาะสินค้าชนิดบริการ
+// (จุดเกิดภาษีซื้อของสินค้ากับบริการต่างกัน จึงแยกเอกสารคนละใบ)
+func CheckLineKind(kind vo.PurchaseKind, service bool, code string) error {
+	switch {
+	case kind == vo.KindService && !service:
+		return fmt.Errorf("%w: %s is not a service item", domain.ErrServiceDocumentGoodsLine, code)
+	case kind != vo.KindService && service:
+		return fmt.Errorf("%w: %s is a service item", domain.ErrGoodsDocumentServiceLine, code)
+	}
+	return nil
 }
 
 func (o *Order) EnsureDraft() error {
@@ -264,9 +281,12 @@ func (o *Order) Invoice(lines []Delivery, quantityDecimals, amountDecimals int, 
 	cleared := make([]vo.Money, len(lines))
 	for i, d := range lines {
 		l, p := o.s.Data.Lines[d.LineNo-1], &o.s.Progress[d.LineNo-1]
-		if p.Invoiced.Add(d.Quantity).Equal(p.Received) {
+		switch {
+		case o.s.Data.Kind == vo.KindService:
+			cleared[i] = decimal.Zero // ใบตรวจรับงานไม่ลงบัญชี — ไม่มี GR/IR ให้ล้าง (ค่าใช้จ่ายรับรู้ที่ซื้อบริการ)
+		case p.Invoiced.Add(d.Quantity).Equal(p.Received):
 			cleared[i] = p.ReceivedValue.Sub(p.ClearedValue)
-		} else {
+		default:
 			cleared[i] = services.ReceiptValue(d.Quantity, l.UnitPrice, o.s.Terms.Vat, amountDecimals)
 		}
 		p.Invoiced, p.ClearedValue = p.Invoiced.Add(d.Quantity), p.ClearedValue.Add(cleared[i])
@@ -350,7 +370,7 @@ func normalizeOrder(d OrderData, quantityDecimals int) (OrderData, error) {
 	if !vo.IsDateOnly(d.Date) || (d.DeliveryDate != nil && (!vo.IsDateOnly(*d.DeliveryDate) || d.DeliveryDate.Before(d.Date))) {
 		return OrderData{}, domain.ErrInvalidDate
 	}
-	out := OrderData{SupplierID: d.SupplierID, SupplierBranchNo: d.SupplierBranchNo, Date: d.Date, PriceIncludesVat: d.PriceIncludesVat}
+	out := OrderData{Kind: vo.KindOrDefault(string(d.Kind)), SupplierID: d.SupplierID, SupplierBranchNo: d.SupplierBranchNo, Date: d.Date, PriceIncludesVat: d.PriceIncludesVat}
 	if d.DeliveryDate != nil {
 		dd := *d.DeliveryDate
 		out.DeliveryDate = &dd

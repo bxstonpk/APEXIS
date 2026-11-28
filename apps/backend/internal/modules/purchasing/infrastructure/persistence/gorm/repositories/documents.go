@@ -14,6 +14,7 @@ import (
 	ports "apexis/backend/internal/modules/purchasing/application/ports/repositories"
 	"apexis/backend/internal/modules/purchasing/domain/entities"
 	domain "apexis/backend/internal/modules/purchasing/domain/errors"
+	"apexis/backend/internal/modules/purchasing/domain/services"
 	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	gp "apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm"
 	"apexis/backend/internal/modules/purchasing/infrastructure/persistence/gorm/models"
@@ -42,10 +43,12 @@ type DocRow struct {
 	EntryID      *uuid.UUID
 	EntryNo      string
 	CancelledAt  *time.Time
+	DocKind      string // ใบรับ / ใบแจ้งหนี้: d.kind AS doc_kind (ใบลดหนี้ตั้งจากใบแจ้งหนี้เดิม)
 }
 
 func (r DocRow) summary() dto.DocumentSummary {
 	out := dto.DocumentSummary{
+		Kind: string(vo.KindOrDefault(r.DocKind)),
 		ID: r.ID.String(), DocumentNo: r.DocumentNo, Date: gp.DateUTC(r.DocDate), Order: dto.Ref{ID: r.OrderID.String()},
 		Supplier: dto.Ref{ID: r.SupplierID.String(), Code: r.SupplierCode, Name: r.SupplierName},
 		Status:   r.Status, EntryID: optString(r.EntryID), EntryNo: r.EntryNo, CancelledAt: r.CancelledAt,
@@ -73,6 +76,9 @@ func (t docTable) filtered(ctx context.Context, db *gorm.DB, companyID vo.Compan
 		q := t.base(ctx, db, companyID)
 		if len(f.Statuses) > 0 {
 			q = q.Where("d.status IN ?", f.Statuses)
+		}
+		if f.Kind != "" {
+			q = q.Where("d.kind = ?", string(f.Kind)) // ใบรับ / ใบแจ้งหนี้เท่านั้น (ใบลดหนี้ไม่ส่ง Kind)
 		}
 		if f.SupplierID != nil {
 			q = q.Where("d.supplier_id = ?", uuidOf(*f.SupplierID))
@@ -161,7 +167,7 @@ func (r receiptRow) summary() dto.ReceiptSummary {
 }
 
 var (
-	receiptSummaryColumns = receiptTable.columns("d.warehouse_id, d.stock_document_no, d.system, d.total_value")
+	receiptSummaryColumns = receiptTable.columns("d.kind AS doc_kind, d.warehouse_id, d.stock_document_no, d.system, d.total_value")
 	receiptColumns        = receiptSummaryColumns + ", d.reference, d.description, d.created_by"
 )
 
@@ -222,6 +228,13 @@ func (r *InvoiceRepository) Create(ctx context.Context, inv *entities.Invoice) e
 		}
 		return err
 	}
+	// gorm ข้ามค่า zero ของ field ที่มี default:true ตอน INSERT (และเติมค่า default กลับเข้า struct)
+	// — tax_invoice_received = false ต้องเขียนเองตามค่าของ entity (แถวเดียว)
+	if !inv.State().TaxInvoiceReceived {
+		if err := tx.Model(&models.InvoiceModel{}).Where("id = ?", m.ID).Update("tax_invoice_received", false).Error; err != nil {
+			return err
+		}
+	}
 	return tx.Create(&m.Lines).Error
 }
 
@@ -261,6 +274,15 @@ func (r *InvoiceRepository) SavePaid(ctx context.Context, invoices []*entities.I
 		WHERE i.id = v.id AND i.company_id = ?`, args...).Error
 }
 
+// SaveVat — statement เดียว: ยอดภาษีซื้อยังไม่ถึงกำหนดที่ได้รับใบกำกับ / ลดหนี้แล้ว
+func (r *InvoiceRepository) SaveVat(ctx context.Context, inv *entities.Invoice) error {
+	s := inv.State()
+	d := s.Deferral
+	return database.Conn(ctx, r.db).Model(&models.InvoiceModel{}).Where("company_id = ? AND id = ?", uuidOf(s.CompanyID), uuidOf(s.ID)).
+		Updates(map[string]any{"vat_recognized": d.VatRecognized, "base_recognized": d.BaseRecognized,
+			"vat_credited": d.VatCredited, "base_credited": d.BaseCredited, "updated_at": time.Now().UTC()}).Error
+}
+
 func (r *InvoiceRepository) SupplierInvoiceNoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error) {
 	return exists(ctx, r.db, []string{`SELECT 1 FROM purchasing_invoices
 		WHERE company_id = ? AND supplier_id = ? AND supplier_invoice_no = ? AND status = 'posted'`},
@@ -297,9 +319,16 @@ type invoiceRow struct {
 	TotalNet          decimal.Decimal
 	TotalVat          decimal.Decimal
 	TotalGross        decimal.Decimal
-	PaidAmount        decimal.Decimal
-	CreditedAmount    decimal.Decimal
-	Description       string
+	PaidAmount         decimal.Decimal
+	CreditedAmount     decimal.Decimal
+	TaxInvoiceReceived bool
+	VatRecognized      decimal.Decimal
+	BaseRecognized     decimal.Decimal
+	VatCredited        decimal.Decimal
+	BaseCredited       decimal.Decimal
+	TaxInvoiceNo       string
+	TaxInvoiceDate     *time.Time
+	Description        string
 	VatRate           decimal.Decimal
 	PriceIncludesVat  bool
 	CreatedBy         uuid.UUID
@@ -310,17 +339,37 @@ type invoiceRow struct {
 	Total             int64
 }
 
+func (r invoiceRow) entity() *entities.Invoice {
+	return entities.RehydrateInvoice(entities.InvoiceState{
+		Totals:             services.Amounts{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
+		TaxInvoiceReceived: r.TaxInvoiceReceived, Status: vo.DocStatus(r.Status),
+		Deferral: entities.VatDeferral{VatRecognized: r.VatRecognized, BaseRecognized: r.BaseRecognized, VatCredited: r.VatCredited, BaseCredited: r.BaseCredited},
+	})
+}
+
 func (r invoiceRow) summary() dto.InvoiceSummary {
+	inv := r.entity()
 	return dto.InvoiceSummary{
 		DocumentSummary: r.DocRow.summary(), SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: gp.DateUTC(r.InvoiceDate),
 		DueDate: gp.DateUTC(r.DueDate), Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
 		// paid_amount รวมยอดตัดจากใบลดหนี้ (ตัดยอดผ่าน purchasing_invoice_settlements เหมือนใบจ่าย) — แยกให้เห็นเป็นยอดจ่าย / ลดหนี้
 		Paid: r.PaidAmount.Sub(r.CreditedAmount), Credited: r.CreditedAmount, Outstanding: r.TotalGross.Sub(r.PaidAmount),
+		TaxInvoiceReceived: r.TaxInvoiceReceived, VatStatus: inv.VatStatus(), VatRecognized: r.VatRecognized, VatUndue: inv.RemainingUndueVat(),
+		TaxInvoiceNo: r.TaxInvoiceNo, TaxInvoiceDate: optDateUTC(r.TaxInvoiceDate),
 	}
 }
 
+func optDateUTC(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	d := gp.DateUTC(*t)
+	return &d
+}
+
 var (
-	invoiceSummaryColumns = invoiceTable.columns(`d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount,
+	invoiceSummaryColumns = invoiceTable.columns(`d.kind AS doc_kind, d.supplier_invoice_no, d.invoice_date, d.due_date, d.total_net, d.total_vat, d.total_gross, d.paid_amount,
+		d.tax_invoice_received, d.vat_recognized, d.base_recognized, d.vat_credited, d.base_credited, d.tax_invoice_no, d.tax_invoice_date,
 		COALESCE((SELECT SUM(c.total_gross) FROM purchasing_credit_notes AS c WHERE c.invoice_id = d.id AND c.status = 'posted'), 0) AS credited_amount`)
 	invoiceColumns = invoiceSummaryColumns + ", d.description, d.vat_rate, d.price_includes_vat, d.created_by, d.bill_from_name, d.bill_from_tax_id, d.bill_from_branch_no, d.bill_from_address"
 )
@@ -360,7 +409,78 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 		}
 		out.Lines[i] = line
 	}
+	var taxInvoices []models.TaxInvoiceModel
+	if err := database.Conn(ctx, r.db).Where("company_id = ? AND invoice_id = ?", uuidOf(companyID), h.ID).
+		Order("posting_date, created_at").Find(&taxInvoices).Error; err != nil {
+		return dto.Invoice{}, err
+	}
+	out.TaxInvoices = make([]dto.TaxInvoiceRecord, len(taxInvoices))
+	for i, t := range taxInvoices {
+		out.TaxInvoices[i] = taxInvoiceDTO(t)
+	}
 	return out, nil
+}
+
+func taxInvoiceDTO(t models.TaxInvoiceModel) dto.TaxInvoiceRecord {
+	return dto.TaxInvoiceRecord{
+		ID: t.ID, CompanyID: vo.CompanyID(t.CompanyID), InvoiceID: vo.InvoiceID(t.InvoiceID), SupplierID: vo.SupplierID(t.SupplierID),
+		TaxInvoiceNo: t.TaxInvoiceNo, TaxInvoiceDate: gp.DateUTC(t.TaxInvoiceDate), Date: gp.DateUTC(t.PostingDate),
+		Base: t.Base, Vat: t.Vat, EntryID: gp.OptID[vo.EntryID](t.EntryID), EntryNo: t.EntryNo, Status: vo.DocStatus(t.Status),
+		CreatedBy: vo.UserID(t.CreatedBy), CreatedAt: t.CreatedAt, CancelledAt: t.CancelledAt,
+	}
+}
+
+// ---------- ใบกำกับภาษีที่ได้รับภายหลัง ----------
+
+var _ ports.TaxInvoiceRepository = (*TaxInvoiceRepository)(nil)
+
+type TaxInvoiceRepository struct{ db *gorm.DB }
+
+func NewTaxInvoiceRepository(db *gorm.DB) *TaxInvoiceRepository { return &TaxInvoiceRepository{db: db} }
+
+func (r *TaxInvoiceRepository) Create(ctx context.Context, t dto.TaxInvoiceRecord) error {
+	tx, err := database.TxConn(ctx)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	m := models.TaxInvoiceModel{
+		ID: t.ID, CompanyID: uuidOf(t.CompanyID), InvoiceID: uuidOf(t.InvoiceID), SupplierID: uuidOf(t.SupplierID),
+		TaxInvoiceNo: t.TaxInvoiceNo, TaxInvoiceDate: t.TaxInvoiceDate, PostingDate: t.Date, Base: t.Base, Vat: t.Vat,
+		EntryID: gp.OptUUID(t.EntryID), EntryNo: t.EntryNo, Status: string(vo.DocPosted), CreatedBy: uuidOf(t.CreatedBy),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := tx.Omit(clause.Associations).Create(&m).Error; err != nil {
+		if database.IsUniqueViolation(err) {
+			return domain.ErrTaxInvoiceNoExists
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *TaxInvoiceRepository) FindForUpdate(ctx context.Context, companyID vo.CompanyID, invoiceID vo.InvoiceID, id uuid.UUID) (dto.TaxInvoiceRecord, error) {
+	var m models.TaxInvoiceModel
+	err := database.Conn(ctx, r.db).Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("company_id = ? AND invoice_id = ? AND id = ?", uuidOf(companyID), uuidOf(invoiceID), id).Take(&m).Error
+	if database.IsNotFound(err) {
+		return dto.TaxInvoiceRecord{}, domain.ErrTaxInvoiceNotFound
+	}
+	if err != nil {
+		return dto.TaxInvoiceRecord{}, err
+	}
+	return taxInvoiceDTO(m), nil
+}
+
+func (r *TaxInvoiceRepository) Cancel(ctx context.Context, companyID vo.CompanyID, id uuid.UUID, by vo.UserID, at time.Time) error {
+	b := uuidOf(by)
+	return updateStatus(ctx, r.db, &models.TaxInvoiceModel{}, uuidOf(companyID), id, string(vo.DocCancelled), &b, &at, domain.ErrTaxInvoiceNotFound)
+}
+
+func (r *TaxInvoiceRepository) NoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error) {
+	return exists(ctx, r.db, []string{`SELECT 1 FROM purchasing_tax_invoices
+		WHERE company_id = ? AND supplier_id = ? AND tax_invoice_no = ? AND status = 'posted'`},
+		uuidOf(companyID), uuidOf(supplierID), no)
 }
 
 func (r *InvoiceRepository) List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error) {

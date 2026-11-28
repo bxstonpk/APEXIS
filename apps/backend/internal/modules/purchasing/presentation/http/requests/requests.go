@@ -7,6 +7,7 @@ package requests
 import (
 	"apexis/backend/internal/platform/thaiaddress"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -141,6 +142,8 @@ type Settings struct {
 	InputVatAccountID        *string  `json:"input_vat_account_id"`
 	PriceVarianceAccountID   *string  `json:"price_variance_account_id"`
 	PurchaseReturnsAccountID *string  `json:"purchase_returns_account_id"`
+	UndueInputVatAccountID   *string  `json:"undue_input_vat_account_id"`
+	ServiceExpenseAccountID  *string  `json:"service_expense_account_id"`
 }
 
 func (r Settings) ToSettings() (entities.Settings, error) {
@@ -162,6 +165,8 @@ func (r Settings) ToSettings() (entities.Settings, error) {
 		{"input_vat_account_id", r.InputVatAccountID, &out.InputVatAccountID},
 		{"price_variance_account_id", r.PriceVarianceAccountID, &out.PriceVarianceAccountID},
 		{"purchase_returns_account_id", r.PurchaseReturnsAccountID, &out.PurchaseReturnsAccountID},
+		{"undue_input_vat_account_id", r.UndueInputVatAccountID, &out.UndueInputVatAccountID},
+		{"service_expense_account_id", r.ServiceExpenseAccountID, &out.ServiceExpenseAccountID},
 	} {
 		if *f.dst, err = optionalID[vo.AccountID](f.name, f.raw); err != nil {
 			return entities.Settings{}, err
@@ -291,6 +296,7 @@ type LineQty struct {
 	OrderLineNo int      `json:"order_line_no"`
 	Quantity    *Decimal `json:"quantity"`
 	UnitPrice   *Decimal `json:"unit_price"` // เฉพาะใบแจ้งหนี้: ไม่ส่ง = ราคาตามใบสั่งซื้อ
+	AccountID   *string  `json:"account_id"` // เฉพาะซื้อบริการ: บัญชีค่าใช้จ่ายของบรรทัด (ไม่ส่ง = ค่าตั้ง)
 }
 
 func lineQty(lines []LineQty, allowPrice bool) ([]dto.LineQty, error) {
@@ -311,7 +317,14 @@ func lineQty(lines []LineQty, allowPrice bool) ([]dto.LineQty, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[i] = dto.LineQty{OrderLineNo: l.OrderLineNo, Quantity: qty, UnitPrice: price}
+		if !allowPrice && l.AccountID != nil {
+			return nil, invalid("lines[%d].account_id is not allowed on a receipt", n)
+		}
+		acc, err := optionalID[vo.AccountID](fmt.Sprintf("lines[%d].account_id", n), l.AccountID)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = dto.LineQty{OrderLineNo: l.OrderLineNo, Quantity: qty, UnitPrice: price, AccountID: acc}
 	}
 	return out, nil
 }
@@ -349,14 +362,52 @@ func (r Receipt) ToInput() (dto.ReceiptInput, error) {
 	return dto.ReceiptInput{OrderID: order, Date: d, WarehouseID: wh, Reference: r.Reference, Description: r.Description, Lines: lines}, nil
 }
 
-// Invoice: POST /supplier-invoices — invoice_date (วันที่ในใบกำกับภาษี) ไม่ส่ง = วันที่ลงบัญชี
+// Invoice: POST /supplier-invoices (ซื้อสินค้า) | /supplier-service-invoices (ซื้อบริการ)
+//
+//	ตามใบสั่ง: order_id + lines[{order_line_no, quantity, unit_price?, account_id?}]
+//	ซื้อตรง (ไม่ส่ง order_id): supplier_id + lines[{item_id, description?, quantity, unit_price, account_id?}] (+ warehouse_id เมื่อมีสินค้า stock)
+//	invoice_date (วันที่ในใบแจ้งหนี้ / ใบกำกับของผู้ขาย) ไม่ส่ง = วันที่ลงบัญชี
+//	ซื้อบริการ: tax_invoice_no (+ tax_invoice_date ไม่ส่ง = invoice_date) = ผู้ขายออกใบกำกับมาพร้อมใบแจ้งหนี้ (ใช้สิทธิภาษีซื้อทันที)
 type Invoice struct {
-	OrderID           string    `json:"order_id"`
-	SupplierInvoiceNo string    `json:"supplier_invoice_no"`
-	InvoiceDate       string    `json:"invoice_date"`
-	Date              string    `json:"date"`
-	Description       string    `json:"description"`
-	Lines             []LineQty `json:"lines"`
+	OrderID           string          `json:"order_id"`
+	SupplierInvoiceNo string          `json:"supplier_invoice_no"`
+	InvoiceDate       string          `json:"invoice_date"`
+	Date              string          `json:"date"`
+	Description       string          `json:"description"`
+	Lines             json.RawMessage `json:"lines"`
+	TaxInvoiceNo      string          `json:"tax_invoice_no"`
+	TaxInvoiceDate    string          `json:"tax_invoice_date"`
+	// ซื้อตรง
+	SupplierID       string  `json:"supplier_id"`
+	SupplierBranchNo string  `json:"supplier_branch_no"`
+	WarehouseID      *string `json:"warehouse_id"`
+	PriceIncludesVat bool    `json:"price_includes_vat"`
+	Reference        string  `json:"reference"`
+}
+
+// Direct: ไม่ส่ง order_id = ซื้อตรง
+func (r Invoice) Direct() bool { return r.OrderID == "" }
+
+func (r Invoice) dates() (time.Time, time.Time, *time.Time, error) {
+	d, err := date("date", r.Date)
+	if err != nil {
+		return time.Time{}, time.Time{}, nil, err
+	}
+	invDate := d
+	if r.InvoiceDate != "" {
+		if invDate, err = date("invoice_date", r.InvoiceDate); err != nil {
+			return time.Time{}, time.Time{}, nil, err
+		}
+	}
+	var taxDate *time.Time
+	if r.TaxInvoiceDate != "" {
+		t, err := date("tax_invoice_date", r.TaxInvoiceDate)
+		if err != nil {
+			return time.Time{}, time.Time{}, nil, err
+		}
+		taxDate = &t
+	}
+	return d, invDate, taxDate, nil
 }
 
 func (r Invoice) ToInput() (dto.InvoiceInput, error) {
@@ -367,24 +418,117 @@ func (r Invoice) ToInput() (dto.InvoiceInput, error) {
 	if err != nil {
 		return dto.InvoiceInput{}, err
 	}
-	d, err := date("date", r.Date)
+	d, invDate, taxDate, err := r.dates()
 	if err != nil {
 		return dto.InvoiceInput{}, err
 	}
-	invDate := d
-	if r.InvoiceDate != "" {
-		if invDate, err = date("invoice_date", r.InvoiceDate); err != nil {
-			return dto.InvoiceInput{}, err
+	var raw []LineQty
+	if len(r.Lines) > 0 {
+		if err := json.Unmarshal(r.Lines, &raw); err != nil {
+			return dto.InvoiceInput{}, invalid("lines must be an array of {order_line_no, quantity, unit_price?, account_id?}")
 		}
 	}
-	lines, err := lineQty(r.Lines, true)
+	lines, err := lineQty(raw, true)
 	if err != nil {
 		return dto.InvoiceInput{}, err
 	}
 	return dto.InvoiceInput{
 		OrderID: order, SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: invDate, Date: d,
-		Description: r.Description, Lines: lines,
+		Description: r.Description, Lines: lines, TaxInvoiceNo: r.TaxInvoiceNo, TaxInvoiceDate: taxDate,
 	}, nil
+}
+
+// DirectLine: บรรทัดของซื้อตรง
+type DirectLine struct {
+	ItemID      string   `json:"item_id"`
+	Description string   `json:"description"`
+	Quantity    *Decimal `json:"quantity"`
+	UnitPrice   *Decimal `json:"unit_price"`
+	AccountID   *string  `json:"account_id"`
+}
+
+func (r Invoice) ToDirect() (dto.DirectInvoiceInput, error) {
+	if err := required(map[string]string{"supplier_id": r.SupplierID, "date": r.Date, "supplier_invoice_no": r.SupplierInvoiceNo}); err != nil {
+		return dto.DirectInvoiceInput{}, err
+	}
+	supplier, err := id[vo.SupplierID]("supplier_id", r.SupplierID)
+	if err != nil {
+		return dto.DirectInvoiceInput{}, err
+	}
+	d, invDate, taxDate, err := r.dates()
+	if err != nil {
+		return dto.DirectInvoiceInput{}, err
+	}
+	wh, err := optionalID[vo.WarehouseID]("warehouse_id", r.WarehouseID)
+	if err != nil {
+		return dto.DirectInvoiceInput{}, err
+	}
+	var raw []DirectLine
+	if len(r.Lines) > 0 {
+		if err := json.Unmarshal(r.Lines, &raw); err != nil {
+			return dto.DirectInvoiceInput{}, invalid("lines must be an array of {item_id, quantity, unit_price, description?, account_id?}")
+		}
+	}
+	out := dto.DirectInvoiceInput{
+		SupplierID: supplier, SupplierBranchNo: r.SupplierBranchNo, SupplierInvoiceNo: r.SupplierInvoiceNo, InvoiceDate: invDate, Date: d,
+		WarehouseID: wh, PriceIncludesVat: r.PriceIncludesVat, Reference: r.Reference, Description: r.Description,
+		Lines: make([]dto.DirectLine, len(raw)), TaxInvoiceNo: r.TaxInvoiceNo, TaxInvoiceDate: taxDate,
+	}
+	for i, l := range raw {
+		n := i + 1
+		if l.ItemID == "" {
+			return dto.DirectInvoiceInput{}, invalid("lines[%d].item_id is required", n)
+		}
+		item, err := id[vo.ItemID](fmt.Sprintf("lines[%d].item_id", n), l.ItemID)
+		if err != nil {
+			return dto.DirectInvoiceInput{}, err
+		}
+		qty, err := l.Quantity.required(fmt.Sprintf("lines[%d].quantity", n))
+		if err != nil {
+			return dto.DirectInvoiceInput{}, err
+		}
+		price, err := l.UnitPrice.required(fmt.Sprintf("lines[%d].unit_price", n))
+		if err != nil {
+			return dto.DirectInvoiceInput{}, err
+		}
+		acc, err := optionalID[vo.AccountID](fmt.Sprintf("lines[%d].account_id", n), l.AccountID)
+		if err != nil {
+			return dto.DirectInvoiceInput{}, err
+		}
+		out.Lines[i] = dto.DirectLine{ItemID: item, Description: l.Description, Quantity: qty, UnitPrice: price, AccountID: acc}
+	}
+	return out, nil
+}
+
+// TaxInvoice: POST /supplier-service-invoices/{id}/tax-invoices — ใบกำกับภาษีที่ได้รับจากผู้ขาย
+// vat ไม่ส่ง = ตามสัดส่วนที่จ่ายแล้ว (ยังไม่จ่าย = ที่รอทั้งหมด); date (วันที่ลงบัญชี) ไม่ส่ง = tax_invoice_date
+type TaxInvoice struct {
+	TaxInvoiceNo   string   `json:"tax_invoice_no"`
+	TaxInvoiceDate string   `json:"tax_invoice_date"`
+	Date           string   `json:"date"`
+	Vat            *Decimal `json:"vat"`
+}
+
+func (r TaxInvoice) ToInput(invoiceID vo.InvoiceID) (dto.TaxInvoiceInput, error) {
+	if err := required(map[string]string{"tax_invoice_no": r.TaxInvoiceNo, "tax_invoice_date": r.TaxInvoiceDate}); err != nil {
+		return dto.TaxInvoiceInput{}, err
+	}
+	td, err := date("tax_invoice_date", r.TaxInvoiceDate)
+	if err != nil {
+		return dto.TaxInvoiceInput{}, err
+	}
+	out := dto.TaxInvoiceInput{InvoiceID: invoiceID, TaxInvoiceNo: r.TaxInvoiceNo, TaxInvoiceDate: td}
+	if r.Date != "" {
+		d, err := date("date", r.Date)
+		if err != nil {
+			return dto.TaxInvoiceInput{}, err
+		}
+		out.Date = &d
+	}
+	if out.Vat, err = r.Vat.parse("vat"); err != nil {
+		return dto.TaxInvoiceInput{}, err
+	}
+	return out, nil
 }
 
 // ---------- ใบลดหนี้ผู้ขาย ----------

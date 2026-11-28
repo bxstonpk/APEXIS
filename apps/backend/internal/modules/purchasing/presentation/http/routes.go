@@ -3,6 +3,7 @@ package http
 import (
 	nethttp "net/http"
 
+	vo "apexis/backend/internal/modules/purchasing/domain/value_objects"
 	"apexis/backend/internal/modules/purchasing/presentation/http/handlers"
 	"apexis/backend/internal/platform/reports"
 )
@@ -42,6 +43,28 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("GET "+base+"/supplier-invoices/{invoiceID}", h.GetInvoice)
 	handle("PATCH "+base+"/supplier-invoices/{invoiceID}", h.CancelInvoice)
 
+	// สายจ้างบริการ: ใบสั่งจ้าง -> ใบตรวจรับงาน (ไม่ลงบัญชี) -> ซื้อบริการ (ภาษีซื้อยังไม่ถึงกำหนด) -> บันทึกใบกำกับภาษีที่ได้รับ
+	// handler เดียวกับสายสินค้า (ส่งสายผ่าน context) — เอกสารต่างสาย = 404
+	svc := func(fn nethttp.HandlerFunc) nethttp.HandlerFunc { return handlers.WithKind(vo.KindService, fn) }
+	handle("GET "+base+"/work-orders", svc(h.ListOrders))
+	handle("POST "+base+"/work-orders", svc(h.CreateOrder))
+	handle("GET "+base+"/work-orders/{orderID}", svc(h.GetOrder))
+	handle("PUT "+base+"/work-orders/{orderID}", svc(h.UpdateOrder))
+	handle("PATCH "+base+"/work-orders/{orderID}", svc(h.UpdateOrderStatus))
+	handle("DELETE "+base+"/work-orders/{orderID}", svc(h.DeleteOrder))
+
+	handle("GET "+base+"/service-acceptances", svc(h.ListReceipts))
+	handle("POST "+base+"/service-acceptances", svc(h.CreateReceipt))
+	handle("GET "+base+"/service-acceptances/{receiptID}", svc(h.GetReceipt))
+	handle("PATCH "+base+"/service-acceptances/{receiptID}", svc(h.CancelReceipt))
+
+	handle("GET "+base+"/supplier-service-invoices", svc(h.ListInvoices))
+	handle("POST "+base+"/supplier-service-invoices", svc(h.CreateInvoice))
+	handle("GET "+base+"/supplier-service-invoices/{invoiceID}", svc(h.GetInvoice))
+	handle("PATCH "+base+"/supplier-service-invoices/{invoiceID}", svc(h.CancelInvoice))
+	handle("POST "+base+"/supplier-service-invoices/{invoiceID}/tax-invoices", h.RecordTaxInvoice)
+	handle("PATCH "+base+"/supplier-service-invoices/{invoiceID}/tax-invoices/{taxInvoiceID}", h.CancelTaxInvoice)
+
 	// ใบลดหนี้ผู้ขาย (ส่งคืนสินค้า / ลดราคา) อ้างใบแจ้งหนี้เดิม: สร้าง = ลงบัญชี + ตัดยอดเจ้าหนี้ทันที -> PATCH status=cancelled
 	handle("GET "+base+"/supplier-credit-notes", h.ListCreditNotes)
 	handle("POST "+base+"/supplier-credit-notes", h.CreateCreditNote)
@@ -56,4 +79,6 @@ func RegisterReports(reg *reports.Registry, h *handlers.Handler) {
 	reg.Register(handlers.BookOutstandingOrders, nethttp.HandlerFunc(h.OutstandingOrders))
 	reg.Register(handlers.BookAPAging, nethttp.HandlerFunc(h.APAging))
 	reg.Register(handlers.BookInputVat, nethttp.HandlerFunc(h.InputVat))
+	reg.Register(handlers.BookOutstandingWorkOrders, nethttp.HandlerFunc(h.OutstandingWorkOrders))
+	reg.Register(handlers.BookUndueInputVat, nethttp.HandlerFunc(h.UndueInputVat))
 }

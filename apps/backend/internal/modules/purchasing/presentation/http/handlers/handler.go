@@ -98,12 +98,24 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrCreditBeforeInvoice, Status: rejected},
 	{Err: domain.ErrOverCredit, Status: rejected},
 	{Err: domain.ErrInvoiceHasCredits, Status: rejected},
+	{Err: domain.ErrInvalidTaxInvoiceVat, Status: badRequest},
+	{Err: domain.ErrTaxInvoiceNotFound, Status: notFound},
+	{Err: domain.ErrTaxInvoiceNoExists, Status: conflict},
+	{Err: domain.ErrNoUndueInputVat, Status: rejected},
+	{Err: domain.ErrOverRecognition, Status: rejected},
+	{Err: domain.ErrInvoiceHasTaxInvoices, Status: rejected},
+	{Err: domain.ErrCreditExceedsUndueVat, Status: rejected},
+	{Err: domain.ErrGoodsDocumentServiceLine, Status: rejected},
+	{Err: domain.ErrServiceDocumentGoodsLine, Status: rejected},
+	{Err: domain.ErrReturnOnServiceInvoice, Status: rejected},
+	{Err: domain.ErrNoTaxInvoiceToRecord, Status: rejected},
 	// กฎของ inventory / ledger (สต็อก, งวด, บัญชี) — ข้อความมาจาก domain error ของ module นั้น
 	{Err: integration.ErrRejected, Status: rejected},
 }, requests.ErrValidation, thaiaddress.ErrInvalidAddress, domain.ErrDuplicateBranch, domain.ErrTaxIDExists, domain.ErrBranchNotFound, domain.ErrInvalidLine, domain.ErrItemNotFound, domain.ErrItemInactive, domain.ErrOverReceipt,
 	domain.ErrOverInvoice, domain.ErrReceiptInvoiced, domain.ErrSettingsMissing, domain.ErrAccountInvalid, integration.ErrRejected,
 	domain.ErrOverPayment,
-	domain.ErrInvoiceNotPayable, domain.ErrInactiveRef, domain.ErrOverCredit)
+	domain.ErrInvoiceNotPayable, domain.ErrInactiveRef, domain.ErrOverCredit, domain.ErrOverRecognition, domain.ErrCreditExceedsUndueVat,
+	domain.ErrGoodsDocumentServiceLine, domain.ErrServiceDocumentGoodsLine)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response (fn คืน body ที่ห่อ envelope แล้ว หรือ nil สำหรับ 204)
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {

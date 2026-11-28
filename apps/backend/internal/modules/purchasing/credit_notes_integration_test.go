@@ -30,7 +30,7 @@ func TestSupplierCreditNotes(t *testing.T) {
 	pcs := a.expect(a.do("POST", base+"/uoms", owner, obj{"code": "PCS", "name": "ชิ้น"}), 201, "uom").id()
 	raw := a.expect(a.do("POST", base+"/item-categories", owner, obj{"code": "RAW", "name": "วัตถุดิบ", "inventory_account_id": invAcc, "purchase_account_id": purchaseAcc}), 201, "category").id()
 	itemA := a.expect(a.do("POST", base+"/items", owner, obj{"code": "A", "name": "สินค้า A", "uom_id": pcs, "category_id": raw}), 201, "item A").id()
-	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าบริการ", "type": "service", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
+	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าบริการ", "type": "non_stock", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
 	wh := a.expect(a.do("POST", base+"/warehouses", owner, obj{"code": "WH", "name": "คลัง"}), 201, "warehouse").id()
 	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "perpetual"}), 200, "perpetual 2026")
 	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2027", owner, obj{"system": "periodic"}), 200, "periodic 2027")
