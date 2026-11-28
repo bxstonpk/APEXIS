@@ -124,6 +124,11 @@
     - รายการปรับปรุง 5 แบบ + กลับรายการอัตโนมัติวันแรกงวดถัดไป (ค้างเป็น draft จนมีงวด → organization เพิ่ม hook `OnFiscalYearCreated` ให้ ledger ผ่านรายการค้างใน transaction สร้างปี)
     - organization เพิ่ม public API `FiscalYears` (สถานะงวดต่อปี คิวรีเดียว); ตาราง `ledger_settings`, `ledger_year_end_closings` (ไม่มี FK ข้าม module ตามแบบตาราง ledger อื่นที่ถูก drop ในเทสต์); permission `ledger.year_end:close`
     - หน้าเว็บ: เมนู "รายการปรับปรุง", "ปิดบัญชีสิ้นปี" (เงื่อนไข / กำหนด / ปิด / เปิดปี / ค่าตั้ง), รายงาน 2 เล่มตามแบบ (เปรียบเทียบปีก่อน, พิมพ์, CSV)
+34. **แม่แบบเอกสารพิมพ์ HTML (รอบ 1)** (2026-11-28, branch `feat/print-templates`) — ดู 01-requirements ORG-11
+    - backend: ตาราง `organization_document_templates` (ค่าเริ่มต้น 1 ใบต่อชนิดด้วย partial unique index) + `organization_document_assets` (bytea); ตรวจเนื้อหาที่ไม่อนุญาตตอนบันทึก
+    - frontend: หน้าพิมพ์ทุกชนิดเอกสาร render ผ่าน Handlebars (escape เสมอ) → DOMPurify → iframe sandbox (ไม่มี allow-scripts); แม่แบบมาตรฐานหน้าตาเท่าเดิม; หน้า "แม่แบบเอกสาร" ในแอปองค์กร: สร้าง / คัดลอกแม่แบบมาตรฐาน / นำเข้า / ส่งออก / ตั้งค่าเริ่มต้น / ลบ, ตัวแก้ HTML + ตัวอย่างสด + รายการตัวแปร, รูปของแม่แบบ
+    - เพิ่มหน้าพิมพ์ใบสั่งจ้าง (`/purchasing/work-orders/{id}/print`)
+    - ยังไม่ทำ: ตัวออกแบบแบบไม่ต้องเขียนโค้ด (รอบถัดไป), ตัวอย่างในตัวแก้ด้วยเอกสารจริง (ตอนนี้ใช้ข้อมูลตัวอย่าง)
 
 ## 7.3 ข้อเบี่ยงเบนจากสเปก / การตัดสินใจที่ควรรู้
 
