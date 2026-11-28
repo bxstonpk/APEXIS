@@ -51,7 +51,11 @@ export function WhtCertificate({ letterhead, payment }: { letterhead: Letterhead
 
           <section className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded border border-neutral-500 px-3 py-2">
             <span>
-              {c.sequence} <span className="inline-block w-16 border-b border-dotted border-neutral-500" /> {c.inForm}
+              {c.sequence}{' '}
+              <span className="inline-block w-16 border-b border-dotted border-neutral-500 text-center font-semibold tabular-nums">
+                {payment.wht_form_seq ? payment.wht_form_seq : ''}
+              </span>{' '}
+              {c.inForm}
             </span>
             {FORMS.map((f) => (
               <Check key={f} on={formOf(payment) === f} label={c.forms[f]!} />

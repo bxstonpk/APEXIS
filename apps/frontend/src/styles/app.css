@@ -180,3 +180,42 @@
     padding: 0;
   }
 }
+
+/* แผ่นเอกสาร A4 แนวนอน (ใบแนบ ภ.ง.ด. / รายงานภาษีขาย-ซื้อ) — 1 แผ่น = 1 หน้า, ขอบ 10mm */
+@page a4land {
+  size: A4 landscape;
+  margin: 10mm;
+}
+.a4-landscape {
+  page: a4land;
+  box-sizing: border-box;
+  width: 297mm;
+  min-height: 210mm;
+  padding: 10mm;
+}
+@media screen and (max-width: 1199px) {
+  .a4-landscape {
+    zoom: 0.8;
+  }
+}
+@media screen and (max-width: 899px) {
+  .a4-landscape {
+    zoom: 0.6;
+  }
+}
+@media screen and (max-width: 599px) {
+  .a4-landscape {
+    zoom: 0.4;
+  }
+}
+@media print {
+  .a4-landscape {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    break-after: page;
+  }
+  .a4-landscape:last-of-type {
+    break-after: auto;
+  }
+}
