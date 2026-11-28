@@ -82,4 +82,24 @@ type ReportRepository interface {
 	MonthlyFlows(ctx context.Context, companyID vo.CompanyID, from, to time.Time) ([]dto.MonthlyFlow, error)
 	// RecentDocuments: เอกสารรับ / จ่าย / โอนที่ยังไม่ยกเลิกล่าสุด — query เดียว (UNION ALL)
 	RecentDocuments(ctx context.Context, companyID vo.CompanyID, limit int) ([]dto.RecentDocument, error)
+
+	// WhtFormLines: บรรทัดใบจ่ายที่หักภาษีของแบบ ภ.ง.ด. (ประเภทผู้มีเงินได้ taxType) ในเดือน เรียงวันที่ / เลขที่ / บรรทัด
+	// พร้อมลำดับที่ในใบแนบ (DENSE_RANK ต่อใบจ่าย) — query เดียว ไม่แบ่งหน้า (แบบยื่น 1 เดือนต้องครบทุกบรรทัด)
+	WhtFormLines(ctx context.Context, companyID vo.CompanyID, taxType vo.TaxType, start, end time.Time) ([]dto.WhtFormLine, error)
+	// WhtMonthly: ยอดภาษีหัก ณ ที่จ่ายต่อเดือน / แบบ ของ [start, end] — query เดียว (GROUP BY เดือน, ประเภทผู้มีเงินได้)
+	WhtMonthly(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]dto.WhtMonthTotal, error)
+	// WhtSequence: ลำดับที่ของใบจ่ายในใบแนบ ภ.ง.ด. ของเดือน (0 = ไม่มีภาษีหัก / ยกเลิกแล้ว) — query เดียว
+	WhtSequence(ctx context.Context, companyID vo.CompanyID, id vo.PaymentID) (int, error)
+}
+
+// TaxFilingRepository: ทะเบียนการยื่นแบบภาษี — 1 แบบ / 1 เดือน ยังไม่ยกเลิกได้ 1 รายการ (unique partial index)
+type TaxFilingRepository interface {
+	// Create คืน domain.ErrTaxFilingExists เมื่อชน unique index
+	Create(ctx context.Context, f *entities.TaxFiling) error
+	UpdateStatus(ctx context.Context, f *entities.TaxFiling) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.TaxFilingID) (*entities.TaxFiling, error)
+	// List เรียงเดือน / แบบ — ข้อมูลน้อย (ไม่เกิน 36 รายการต่อปี) จึงไม่แบ่งหน้า
+	List(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilingFilter) ([]*entities.TaxFiling, error)
+	// Active: บันทึกที่ยังไม่ยกเลิกของแบบ / เดือน (nil = ยังไม่ยื่น)
+	Active(ctx context.Context, companyID vo.CompanyID, form vo.TaxForm, month vo.TaxMonth) (*entities.TaxFiling, error)
 }

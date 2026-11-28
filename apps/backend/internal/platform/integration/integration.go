@@ -202,6 +202,18 @@ type VatTotals struct {
 	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
 }
 
+// VatRow คือ 1 แถวของรายงานภาษีขาย / ภาษีซื้อตามแบบกรมสรรพากร (ภาษีที่เกิดแล้วในช่วงวันที่ — ใบลดหนี้เป็นยอดติดลบ)
+// sales.Module.OutputVatRows / purchasing.Module.InputVatRows / pettycash.Module.InputVatRows คืนค่านี้ให้ finance พิมพ์รายงานประกอบ ภ.พ.30
+type VatRow struct {
+	Date       time.Time       // วันที่ใบกำกับภาษี
+	DocumentNo string          // เลขที่ใบกำกับภาษี (ภาษีซื้อ = เลขที่ของผู้ขาย)
+	PartyName  string          // ผู้ซื้อ / ผู้ขาย / ผู้รับเงิน
+	TaxID      string          // เลขประจำตัวผู้เสียภาษี
+	BranchNo   string          // สาขา (00000 = สำนักงานใหญ่)
+	Base       decimal.Decimal // มูลค่าก่อน VAT
+	Tax        decimal.Decimal // ภาษีมูลค่าเพิ่ม
+}
+
 // ---------- เงินสดย่อย (finance -> pettycash) ----------
 
 // PettyCashRequest คือคำขอเงินสดย่อยที่รอการเงินจ่าย (Kind: establish = ตั้งวงเงิน, increase = เพิ่มวงเงิน, replenish = เบิกชดเชย)

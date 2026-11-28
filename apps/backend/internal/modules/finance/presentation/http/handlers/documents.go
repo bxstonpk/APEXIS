@@ -253,6 +253,9 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 
 	// ภาพรวมแอปการเงิน (ต้องมี finance.report:read)
 	handle("GET "+base+"/dashboards/finance", h.Dashboard)
+
+	// แบบยื่นภาษีรายเดือน (ภ.ง.ด.3 / 53 / ภ.พ.30) + ทะเบียนการยื่น
+	registerTaxRoutes(handle, base, h)
 }
 
 // Dashboard: GET /api/v1/companies/{companyID}/dashboards/finance?start_date=&end_date=

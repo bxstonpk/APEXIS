@@ -201,6 +201,7 @@ type PaymentUseCases struct {
 	payables  ports.Settlements
 	pettyCash ports.PettyCash
 	whtTypes  repositories.WhtTypeRepository
+	reports   repositories.ReportRepository // ลำดับที่ในใบแนบ ภ.ง.ด. (พิมพ์ใน 50 ทวิ)
 }
 
 // PettyCashRequests: คำขอเงินสดย่อยที่รอการเงินจ่าย (เลือกในหน้าจ่ายเงินชนิด petty_cash)
@@ -236,8 +237,16 @@ func (uc *PaymentUseCases) pettyCashLines(ctx context.Context, a dto.Actor, in d
 	return entities.Party{Code: res.FundCode, Name: res.FundName}, lines, nil
 }
 
+// Get: ใบจ่ายที่มีภาษีหัก ณ ที่จ่ายได้ลำดับที่ในใบแนบ ภ.ง.ด. ของเดือนด้วย (คำนวณ — query เพิ่ม 1 เฉพาะใบที่มีภาษีหัก)
 func (uc *PaymentUseCases) Get(ctx context.Context, in dto.ByDoc[vo.PaymentID]) (dto.Payment, error) {
-	return read(ctx, uc.base, in.Actor, vo.PermPaymentRead, func() (dto.Payment, error) { return uc.payments.Get(ctx, in.CompanyID, in.ID) })
+	return read(ctx, uc.base, in.Actor, vo.PermPaymentRead, func() (dto.Payment, error) {
+		p, err := uc.payments.Get(ctx, in.CompanyID, in.ID)
+		if err != nil || !p.Wht.IsPositive() || p.Status != string(vo.DocPosted) || uc.reports == nil {
+			return p, err
+		}
+		p.WhtFormSeq, err = uc.reports.WhtSequence(ctx, in.CompanyID, in.ID)
+		return p, err
+	})
 }
 
 func (uc *PaymentUseCases) List(ctx context.Context, a dto.Actor, f dto.DocumentFilter) (listing.Result[dto.DocumentSummary], error) {

@@ -168,10 +168,13 @@ type Payment struct {
 	CreatedBy string        `json:"created_by"`
 	Lines     []PaymentLine `json:"lines"`
 	Methods   []Method      `json:"methods"`
+	// WhtFormSeq: ลำดับที่ในใบแนบ ภ.ง.ด.3 / 53 ของเดือน (0 = ไม่มีภาษีหัก) — พิมพ์ใน 50 ทวิ ช่อง "ลำดับที่ในแบบ"
+	WhtFormSeq int `json:"wht_form_seq"`
 }
 
 func FromPayment(p dto.Payment) Payment {
-	out := Payment{PaymentSummary: FromPaymentSummary(p.DocumentSummary), CreatedBy: p.CreatedBy, Lines: make([]PaymentLine, len(p.Lines)), Methods: methods(p.Methods)}
+	out := Payment{PaymentSummary: FromPaymentSummary(p.DocumentSummary), CreatedBy: p.CreatedBy, Lines: make([]PaymentLine, len(p.Lines)),
+		Methods: methods(p.Methods), WhtFormSeq: p.WhtFormSeq}
 	for i, l := range p.Lines {
 		out.Lines[i] = PaymentLine{Invoice: optRef(l.Invoice), AccountID: l.AccountID, Description: l.Description, Amount: str(l.Amount),
 			WhtType: optWhtType(l.WhtType), WhtRate: str(l.WhtRate), WhtBase: str(l.WhtBase), Wht: str(l.Wht)}

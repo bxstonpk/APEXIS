@@ -197,3 +197,17 @@ func (m *Module) OutputVat(ctx context.Context, companyID uuid.UUID, start, end 
 	}
 	return integration.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }
+
+// OutputVatRows: แถวภาษีขายที่เกิดแล้วของช่วงวันที่ — finance พิมพ์รายงานภาษีขายตามแบบกรมสรรพากรประกอบ ภ.พ.30
+func (m *Module) OutputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error) {
+	rows, err := m.UseCases.Reports.VatRows(ctx, vo.CompanyID(companyID), start, end)
+	if err != nil {
+		return nil, reject(err)
+	}
+	out := make([]integration.VatRow, len(rows))
+	for i, r := range rows {
+		out[i] = integration.VatRow{Date: r.Date, DocumentNo: r.DocumentNo, PartyName: r.Customer.Name, TaxID: r.TaxID, BranchNo: r.BranchNo,
+			Base: r.Base, Tax: r.Tax}
+	}
+	return out, nil
+}

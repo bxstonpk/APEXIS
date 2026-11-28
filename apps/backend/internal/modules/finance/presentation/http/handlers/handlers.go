@@ -69,11 +69,16 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrNoFiscalPeriod, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodClosed, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPayeeTaxIDRequired, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrInvalidTaxForm, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidMonth, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidTaxFiling, Status: http.StatusBadRequest},
+	{Err: domain.ErrTaxFilingNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrTaxFilingExists, Status: http.StatusConflict},
 	// กฎของ sales / purchasing / ledger (ยอดค้าง, ค่าตั้งบัญชีคุม, งวด) — ข้อความมาจาก module นั้น
 	{Err: integration.ErrRejected, Status: http.StatusUnprocessableEntity},
 }, requests.ErrValidation, listing.ErrInvalidQuery, integration.ErrRejected, domain.ErrInvalidReceipt, domain.ErrInvalidPayment,
 	domain.ErrInvalidTransfer, domain.ErrCashAccountNotFound, domain.ErrWhtTypeNotFound, domain.ErrAccountInvalid, domain.ErrSettingsMissing,
-	domain.ErrInactiveRef)
+	domain.ErrInactiveRef, domain.ErrInvalidTaxFiling)
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {
 	userID, ok := h.currentUser(r.Context())

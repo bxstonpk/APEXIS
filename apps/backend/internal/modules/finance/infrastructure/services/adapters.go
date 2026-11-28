@@ -4,6 +4,7 @@ package services
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -163,6 +164,7 @@ type ReceivablesAccess interface {
 	UnsettleReceivables(ctx context.Context, companyID, documentID uuid.UUID) error
 	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error)
 	OutputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+	OutputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error)
 }
 
 // PayablesAccess คือ public API ของ purchasing ที่ finance ใช้ (*purchasing.Module)
@@ -171,6 +173,7 @@ type PayablesAccess interface {
 	UnsettlePayables(ctx context.Context, companyID, documentID uuid.UUID) error
 	OpenPayables(ctx context.Context, companyID, supplierID uuid.UUID) ([]integration.OpenInvoice, error)
 	InputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+	InputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error)
 }
 
 type settleFunc func(ctx context.Context, companyID, partyID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
@@ -236,35 +239,77 @@ func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID 
 
 // ---------- ภาษีมูลค่าเพิ่ม (ภ.พ.30) ----------
 
-type vatFunc func(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+type (
+	vatFunc     func(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+	vatRowsFunc func(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error)
+)
+
+// VatSource คือแหล่งภาษีซื้อเพิ่มเติม (ยอดรวม + แถวรายงาน) เช่น ใบสำคัญจ่ายเงินสดย่อยที่มีใบกำกับภาษี
+type VatSource struct {
+	Totals vatFunc
+	Rows   vatRowsFunc
+}
 
 // Vat แปลงยอดภาษีขายของ sales / ภาษีซื้อของ purchasing (+ เงินสดย่อย) เป็น ports.Vat
 type Vat struct {
-	output vatFunc
-	inputs []vatFunc
+	output VatSource
+	inputs []VatSource
 }
 
 var _ ports.Vat = (*Vat)(nil)
 
-// NewVat: ภาษีซื้อ = จัดซื้อ + แหล่งอื่น (เช่น ใบสำคัญจ่ายเงินสดย่อยที่มีใบกำกับภาษี)
-func NewVat(r ReceivablesAccess, p PayablesAccess, more ...vatFunc) *Vat {
-	return &Vat{output: r.OutputVat, inputs: append([]vatFunc{p.InputVat}, more...)}
+// NewVat: ภาษีซื้อ = จัดซื้อ + แหล่งอื่น (เช่น เงินสดย่อย)
+func NewVat(r ReceivablesAccess, p PayablesAccess, more ...VatSource) *Vat {
+	return &Vat{output: VatSource{Totals: r.OutputVat, Rows: r.OutputVatRows},
+		inputs: append([]VatSource{{Totals: p.InputVat, Rows: p.InputVatRows}}, more...)}
 }
 
 func (v *Vat) OutputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
-	return vatTotals(v.output(ctx, uuid.UUID(companyID), start, end))
+	return vatTotals(v.output.Totals(ctx, uuid.UUID(companyID), start, end))
 }
 
 func (v *Vat) InputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
 	var sum ports.VatTotals
 	for _, in := range v.inputs {
-		t, err := vatTotals(in(ctx, uuid.UUID(companyID), start, end))
+		t, err := vatTotals(in.Totals(ctx, uuid.UUID(companyID), start, end))
 		if err != nil {
 			return ports.VatTotals{}, err
 		}
 		sum.Base, sum.Tax, sum.Documents = sum.Base.Add(t.Base), sum.Tax.Add(t.Tax), sum.Documents+t.Documents
 	}
 	return sum, nil
+}
+
+func (v *Vat) OutputRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]ports.VatRow, error) {
+	return vatRows(ctx, companyID, start, end, []VatSource{v.output})
+}
+
+// InputRows: แถวของทุกแหล่ง (จัดซื้อ + เงินสดย่อย) เรียงรวมตามวันที่ / เลขที่
+func (v *Vat) InputRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]ports.VatRow, error) {
+	return vatRows(ctx, companyID, start, end, v.inputs)
+}
+
+func vatRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time, sources []VatSource) ([]ports.VatRow, error) {
+	var out []ports.VatRow
+	for _, s := range sources {
+		rows, err := s.Rows(ctx, uuid.UUID(companyID), start, end)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out = append(out, ports.VatRow{Date: r.Date, DocumentNo: r.DocumentNo, PartyName: r.PartyName, TaxID: r.TaxID, BranchNo: r.BranchNo,
+				Base: r.Base, Tax: r.Tax})
+		}
+	}
+	if len(sources) > 1 {
+		sort.SliceStable(out, func(i, j int) bool {
+			if !out[i].Date.Equal(out[j].Date) {
+				return out[i].Date.Before(out[j].Date)
+			}
+			return out[i].DocumentNo < out[j].DocumentNo
+		})
+	}
+	return out, nil
 }
 
 // ---------- เงินสดย่อย ----------
@@ -275,6 +320,7 @@ type PettyCashAccess interface {
 	PayRequest(ctx context.Context, companyID, requestID uuid.UUID, doc integration.SettlementDoc) (integration.PettyCashPayment, error)
 	UnpayRequest(ctx context.Context, companyID, documentID uuid.UUID) error
 	InputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+	InputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error)
 }
 
 var _ ports.PettyCash = (*PettyCash)(nil)

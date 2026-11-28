@@ -203,6 +203,8 @@ type Payment struct {
 	CreatedBy string
 	Lines     []PaymentLine
 	Methods   []Method
+	// WhtFormSeq: ลำดับที่ในใบแนบ ภ.ง.ด.3 / 53 ของเดือน (คำนวณ, 0 = ไม่มีภาษีหัก / ยกเลิกแล้ว) — พิมพ์ใน 50 ทวิ
+	WhtFormSeq int
 }
 
 type Transfer struct {
