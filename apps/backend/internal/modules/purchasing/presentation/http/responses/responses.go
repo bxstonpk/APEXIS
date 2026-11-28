@@ -267,6 +267,43 @@ type InvoiceSummary struct {
 	TaxInvoiceDate     *string `json:"tax_invoice_date"` // ซื้อบริการ: วันที่ในใบกำกับที่มาพร้อมใบแจ้งหนี้
 }
 
+// PurchaseDocument คือแถวของ GET /purchase-documents
+//
+//	type: order | receipt | invoice | work_order | service_acceptance | service_invoice
+//	total: ยอดรวม (null = ใบรับสินค้า / ใบตรวจรับงาน), outstanding: ค้างจ่าย (เฉพาะใบแจ้งหนี้), vat_status: เฉพาะใบแจ้งหนี้
+type PurchaseDocument struct {
+	Type        string  `json:"type"`
+	ID          string  `json:"id"`
+	DocumentNo  string  `json:"document_no"`
+	Date        string  `json:"date"`
+	Supplier    Ref     `json:"supplier"`
+	Status      string  `json:"status"`
+	Reference   string  `json:"reference"`
+	Total       *string `json:"total"`
+	Outstanding *string `json:"outstanding"`
+	VatStatus   *string `json:"vat_status"`
+}
+
+func FromPurchaseDocument(d dto.PurchaseDocument) PurchaseDocument {
+	out := PurchaseDocument{
+		Type: string(d.Type), ID: d.ID, DocumentNo: d.DocumentNo, Date: date(d.Date), Supplier: ref(d.Supplier),
+		Status: d.Status, Reference: d.Reference,
+	}
+	if d.Total != nil {
+		s := str(*d.Total)
+		out.Total = &s
+	}
+	if d.Outstanding != nil {
+		s := str(*d.Outstanding)
+		out.Outstanding = &s
+	}
+	if d.VatStatus != "" {
+		s := d.VatStatus
+		out.VatStatus = &s
+	}
+	return out
+}
+
 func FromInvoiceSummary(i dto.InvoiceSummary) InvoiceSummary {
 	claimed := i.VatRecognized
 	if i.TaxInvoiceReceived {

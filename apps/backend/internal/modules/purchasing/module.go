@@ -76,6 +76,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, invent
 		Settlements: gormrepo.NewSettlementRepository(db),
 		CreditNotes: gormrepo.NewCreditNoteRepository(db),
 		TaxInvoices: gormrepo.NewTaxInvoiceRepository(db),
+		Documents:   gormrepo.NewPurchaseDocumentRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }

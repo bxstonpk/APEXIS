@@ -39,6 +39,7 @@ type Deps struct {
 	Settlements repositories.SettlementRepository
 	CreditNotes repositories.CreditNoteRepository
 	TaxInvoices repositories.TaxInvoiceRepository
+	Documents   repositories.PurchaseDocumentRepository
 	Clock       func() time.Time // optional
 }
 
@@ -51,6 +52,7 @@ type UseCases struct {
 	Reports     *ReportUseCases
 	Settlements *SettlementUseCases
 	CreditNotes *CreditNoteUseCases
+	Documents   *PurchaseDocumentUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -70,6 +72,7 @@ func New(d Deps) *UseCases {
 		Reports:     &ReportUseCases{base: b, reports: d.Reports},
 		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, suppliers: d.Suppliers, settlements: d.Settlements},
 		CreditNotes: &CreditNoteUseCases{base: b, notes: d.CreditNotes, invoices: d.Invoices, settlements: d.Settlements},
+		Documents:   &PurchaseDocumentUseCases{base: b, docs: d.Documents},
 	}
 }
 
