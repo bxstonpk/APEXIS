@@ -81,7 +81,6 @@ export default async function ReportsPage({ params, searchParams }: Props) {
         {book === 'general-ledger' && <RefFilter label={t.fields.account} name="account_id" source={ledgerApi.accounts(companyId)} value={account} />}
         <Button type="submit">{t.run}</Button>      </Form>
 
-      {needsAccount && <Alert>{t.pickAccount}</Alert>}
       {res && 'error' in res && <Alert tone="error">{res.error}</Alert>}
       {report?.book === 'trial-balance' && <TrialBalanceTable r={report} ledgerHref={(id) => withQuery(path, { book: 'general-ledger', start_date: start, end_date: end, account_id: id })} />}
       {report?.book === 'balance-sheet' && <BalanceSheetTable r={report} />}

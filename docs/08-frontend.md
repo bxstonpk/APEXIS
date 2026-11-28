@@ -9,6 +9,7 @@
 | **ทุกอย่างเป็น component** | หน้า (page) ประกอบจาก component; feature component (เช่น `LoginForm`) ไม่ผูกกับ router / layout จึง embed ที่อื่นได้ |
 | **server / client แยกชัด** | หน้า (`page.tsx`) เป็น server component เป็นค่าเริ่มต้น; component ที่มี state / event ใส่ `'use client'`; โค้ดที่แตะ cookie / token อยู่ใน `src/lib/server/` เท่านั้น |
 | **ข้อความทั้งหมดอยู่ใน config** | ปุ่ม, label, placeholder, คำอธิบาย, ข้อความ error, ชื่อแท็บ — อยู่ที่ `src/config/locales/th.ts` ที่เดียว ห้ามเขียนข้อความที่ผู้ใช้เห็นลงใน component |
+| **ไม่มีข้อความอธิบายบนหน้าจอ** | หน้าจอมีเฉพาะชื่อช่อง หัวตาราง สถานะ ตัวเลข error / คำเตือนจริง และคำถามยืนยัน — ไม่มีกล่องอธิบาย คำแนะนำใต้ช่อง คำอธิบายหัวข้อ / หน้า หรือย่อหน้าในหน้าว่าง (คำอธิบายอยู่ในเอกสาร `docs/`); เนื้อหาบนเอกสารพิมพ์ A4 ไม่นับ (ตัดสินใจ 2026-11-26) |
 | **CSS ใช้ Tailwind เท่านั้น** | component ใช้ utility class; ไม่มีไฟล์ CSS ของ component |
 | **สี / ฟอนต์ / เงา เป็น token** | อยู่ใน `@theme` ของ `src/styles/app.css` ที่เดียว — Tailwind สร้าง class ให้ เช่น `bg-primary`, `text-ink-muted`, `shadow-card` |
 | **แนวทางหน้าตา** | สีจากโลโก้ (กรมท่า `primary` + ส้ม `accent`), พื้นเรียบ เส้นบาง เงาน้อย, ขนาดกระชับแบบโปรแกรมทำงาน (ช่องกรอก / ปุ่มสูง 40px, แถวตาราง 48px), มุมโค้ง `--radius-control` 6px / `--radius-panel` 10px; แท็บของแอปใช้แถบบนสีเข้ม `nav` |
