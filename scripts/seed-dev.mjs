@@ -305,6 +305,39 @@ async function pettyCash(code) {
   console.log(`✓ ${code} เงินสดย่อย`)
 }
 
+// ---------- ยื่นภาษี ต.ค. 2569 (ทุกบริษัทตัวอย่าง — ข้ามถ้าบันทึกการยื่นของ ต.ค. มีอยู่แล้ว) ----------
+// จ่ายค่าบริการ ต.ค. ที่หัก ณ ที่จ่าย (ภ.ง.ด.53 นิติบุคคล / ภ.ง.ด.3 บุคคลธรรมดา) → บันทึกการยื่น ภ.ง.ด.3 / 53 / ภ.พ.30 ของ ต.ค.
+// (ยอดจากแบบยื่นของระบบ; ภ.พ.30 ชำระเกิน = ยกไปเดือน พ.ย.) — ของ พ.ย. ยังไม่ยื่น ให้ทดลองบันทึกเอง
+async function taxFilings(code) {
+  const co = list(await req('GET', `/me/companies?q=${code}&page_size=50`)).find((c) => c.code === code)
+  if (!co) return
+  const C = `/companies/${co.id}`
+  if (list(await req('GET', `${C}/tax-filings?year=2026&status=filed`)).some((f) => f.month === '2026-10')) {
+    console.log(`- ${code} ยื่นภาษี ต.ค. มีอยู่แล้ว ข้าม`)
+    return
+  }
+  const gl = async (c) => list(await req('GET', `${C}/accounts?q=${c}&page_size=5`)).find((a) => a.code === c)
+  const bank = list(await req('GET', `${C}/cash-accounts?q=KBANK&page_size=5`)).find((a) => a.code === 'KBANK')
+  const wht = list(await req('GET', `${C}/withholding-tax-types?q=SVC3&page_size=5`)).find((w) => w.code === 'SVC3')
+  const [security, bookkeeping] = [await gl('5313000000'), await gl('5310020000')]
+  const pay = (date, payee, account, description, amount, tax) =>
+    req('POST', `${C}/payments`, {
+      kind: 'other', date, payee, lines: [{ account_id: account.id, description, amount, wht_type_id: wht.id }],
+      methods: [{ cash_account_id: bank.id, amount: (Number(amount) - Number(tax)).toFixed(2), reference: 'โอนผ่านธนาคาร' }],
+    })
+  await pay('2026-10-05', { name: 'บริษัท รักษาความปลอดภัยไทย จำกัด', tax_id: '0105557000777', tax_type: 'juristic', address: '12 ถนนรัชดาภิเษก ดินแดง กรุงเทพฯ 10400' },
+    security, 'ค่าบริการรักษาความปลอดภัย ต.ค.', '15000', '450')
+  await pay('2026-10-25', { name: 'นางสาวสุดา ทำบัญชี', tax_id: '3101200000123', tax_type: 'individual', address: '45 ซอยลาดพร้าว 10 จตุจักร กรุงเทพฯ 10900' },
+    bookkeeping, 'ค่าทำบัญชี ต.ค.', '8000', '240')
+  for (const form of ['pnd53', 'pnd3']) {
+    const f = await req('GET', `${C}/tax-forms/withholding?form=${form}&month=2026-10`)
+    await req('POST', `${C}/tax-filings`, { form, month: '2026-10', filed_date: '2026-11-07', amount: f.summary.wht, reference: `RD-${form.toUpperCase()}-6910` })
+  }
+  const pp30 = await req('GET', `${C}/tax-forms/pp30?month=2026-10`)
+  await req('POST', `${C}/tax-filings`, { form: 'pp30', month: '2026-10', filed_date: '2026-11-15', amount: pp30.payable, carry_forward: pp30.overpaid, reference: 'RD-PP30-6910' })
+  console.log(`✓ ${code} ยื่นภาษี ต.ค.`)
+}
+
 for (const fn of [trading, service, manufacturing, construction]) {
   try {
     await fn()
@@ -319,6 +352,12 @@ for (const code of ['DEMO-TRD', 'DEMO-SVC', 'DEMO-MFG', 'DEMO-CON']) {
     await pettyCash(code)
   } catch (e) {
     console.error(`✗ pettyCash ${code}: ${e.message}`)
+    process.exitCode = 1
+  }
+  try {
+    await taxFilings(code)
+  } catch (e) {
+    console.error(`✗ taxFilings ${code}: ${e.message}`)
     process.exitCode = 1
   }
 }

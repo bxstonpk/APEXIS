@@ -488,6 +488,25 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `withholding-tax-received` | `start_date, end_date` (บังคับ), `party_id, sort, page, page_size` | ใบรับที่ลูกค้าหัก ณ ที่จ่าย: ฐาน (ยอดตัดหนี้), ภาษีถูกหัก + ยอดรวม |
 | `vat-summary` | `start_date, end_date` (บังคับ) | สรุป ภ.พ.30: `output` / `input` = `{base, tax, documents}` (ใบกำกับหักใบลดหนี้ — ขอผ่าน `sales.OutputVat` / `purchasing.InputVat`), `net_tax`, `payable`, `refundable` |
 
+### ยื่นภาษีรายเดือน (ภ.ง.ด.3 / 53 / ภ.พ.30) และทะเบียนการยื่น
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET | `/tax-forms/overview?year=` | `finance.report:read` | 12 เดือน x `pnd3` / `pnd53` / `pp30`: `{amount, payees, computed, filing}`; `pp30.amount` ติดลบ = ชำระเกิน; `computed=false` = เดือนในอนาคต; `can_see_filings` (มี `finance.tax_filing:read`) |
+| GET | `/tax-forms/withholding?form=pnd3\|pnd53&month=YYYY-MM` | `finance.report:read` | `{form, month, summary {payees, lines, base, wht}, lines[], filing}` — บรรทัด: `seq, payment_id, document_no, certificate_no, date, tax_id, branch_no, name, address, income_type, wht_type_name, rate, base, wht, condition` |
+| GET | `/tax-forms/withholding/export?form=&month=` | `finance.report:read` | `text/plain; charset=utf-8` ไฟล์ใบแนบ (ดูด้านล่าง) |
+| GET | `/tax-forms/pp30?month=` | `finance.report:read` | `{month, sales, zero_rated, exempt, purchases, carry_in, net, payable, overpaid, prev_filed, filing}` — `sales` / `purchases` = `{base, tax, documents}` |
+| GET | `/tax-forms/vat-report?kind=output\|input&month=` | `finance.report:read` | `{kind, month, rows[{seq, date, document_no, party_name, tax_id, branch_no, base, tax}], base, tax}` — ภาษีซื้อ = จัดซื้อ + เงินสดย่อย (เลขที่ = ใบกำกับของผู้ขาย) เรียงวันที่ / เลขที่ |
+| GET | `/tax-filings?year=&form=&status=` | `finance.tax_filing:read` | เรียงเดือน / แบบ (ไม่แบ่งหน้า — ไม่เกิน 36 รายการ / ปี) |
+| POST | `/tax-filings` | `finance.tax_filing:manage` | `{form, month, filed_date, amount, surcharge?, penalty?, carry_forward?, reference?, note?, payment_id?}` — ซ้ำเดือน / แบบ = 409; `carry_forward` เฉพาะ `pp30` และใช้คู่กับ `amount` = 0; วันที่ยื่นต้องไม่ก่อนเดือนภาษี |
+| PATCH | `/tax-filings/{id}` `{"status":"cancelled"}` | `finance.tax_filing:manage` | ยกเลิกบันทึก (ยื่นใหม่ของเดือนเดิมได้) |
+
+- บันทึกการยื่นไม่ลงบัญชี / ไม่จ่ายเงิน — จ่ายภาษีด้วยใบจ่ายเงินอื่น (`payment_id` อ้างอิงได้)
+- query: ใบแนบ 1 query (`DENSE_RANK` ต่อใบจ่าย = ลำดับที่); ภาพรวม = ภาษีหัก ณ ที่จ่ายทั้งปี 1 query (GROUP BY เดือน) + ทะเบียนการยื่น 2 + ภ.พ.30 เดือนละ 3 query (ยอดอยู่คนละ module: sales / purchasing / เงินสดย่อย — ไม่อ่านตารางข้าม module; เฉพาะเดือนที่ถึงแล้ว)
+- ใบจ่าย (`GET /payments/{id}`) มี `wht_form_seq` = ลำดับที่ในใบแนบของเดือน (0 = ไม่มีภาษีหัก / ยกเลิก) — 50 ทวิ พิมพ์ในช่อง "ลำดับที่ในแบบ"
+- **ไฟล์ส่งออกใบแนบ** — 1 บรรทัด / 1 บรรทัดใบจ่าย, ไม่มีหัวคอลัมน์, ขึ้นบรรทัด CRLF, จำนวนเงินทศนิยม 2 ตำแหน่ง:
+  `ลำดับที่|เลขประจำตัวผู้เสียภาษี|สาขา|ชื่อ|ที่อยู่|วันที่จ่าย (วว/ดด/ปปปป พ.ศ.)|ประเภทเงินได้ (40_1 … 3_tres / other)|อัตรา|จำนวนเงินที่จ่าย|ภาษีที่หัก|เงื่อนไข (1 = หัก ณ ที่จ่าย)`
+
 ### สิทธิ์เดิม
 
 ตอนเริ่มโปรแกรม `identity.RenamePermissions` แปลงสิทธิ์ของบทบาทเดิม (ทำซ้ำได้): `cashbank.account:*` → `finance.cash_account:*`, `sales.receipt:*` → `finance.receipt:*`,
