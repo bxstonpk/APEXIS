@@ -202,6 +202,35 @@ type VatTotals struct {
 	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
 }
 
+// ---------- เงินสดย่อย (finance -> pettycash) ----------
+
+// PettyCashRequest คือคำขอเงินสดย่อยที่รอการเงินจ่าย (Kind: establish = ตั้งวงเงิน, increase = เพิ่มวงเงิน, replenish = เบิกชดเชย)
+type PettyCashRequest struct {
+	ID         uuid.UUID
+	DocumentNo string
+	FundCode   string
+	FundName   string
+	Kind       string
+	Date       time.Time
+	Amount     decimal.Decimal
+}
+
+// PettyCashDebit คือบรรทัดเดบิตที่การเงินลงบัญชีเมื่อจ่ายคำขอ (เครดิต = ช่องทางจ่ายเงินของการเงิน)
+type PettyCashDebit struct {
+	AccountID   uuid.UUID
+	Description string
+	Amount      decimal.Decimal
+}
+
+// PettyCashPayment คือผลของการจ่ายคำขอ: ยอดรวมของ Debits = Amount
+type PettyCashPayment struct {
+	DocumentNo string
+	FundCode   string
+	FundName   string
+	Amount     decimal.Decimal
+	Debits     []PettyCashDebit
+}
+
 // ---------- ประเภทธุรกิจ / ตั้งค่าบริษัทใหม่ ----------
 
 // BusinessType คือประเภทธุรกิจของบริษัท (organization เป็นเจ้าของ) — กำหนดผังบัญชีมาตรฐานและค่าตั้งเริ่มต้น

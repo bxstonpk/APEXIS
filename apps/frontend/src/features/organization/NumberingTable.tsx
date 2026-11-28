@@ -10,7 +10,7 @@ import { DEFAULT_TEMPLATE, previewNumber } from '@/lib/numbering'
 import type { DocumentNumbering } from './resources'
 
 /** ลำดับกลุ่มตาม module (ส่วนหน้าของ doc_type เช่น "sales.invoice") — module ที่ไม่อยู่ในรายการต่อท้ายตามชื่อ */
-const MODULE_ORDER = ['sales', 'purchasing', 'inventory', 'manufacturing', 'finance', 'ledger', 'organization']
+const MODULE_ORDER = ['sales', 'purchasing', 'inventory', 'manufacturing', 'finance', 'petty_cash', 'ledger', 'organization']
 
 const moduleOf = (docType: string) => docType.split('.')[0] ?? ''
 const rank = (m: string) => {

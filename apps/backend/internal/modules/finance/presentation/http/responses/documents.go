@@ -237,6 +237,26 @@ type OpenInvoice struct {
 	TaxInvoice  bool   `json:"tax_invoice"` // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }
 
+// PettyCashRequest คือคำขอเงินสดย่อยที่รอการเงินจ่าย (kind: establish | increase | replenish)
+type PettyCashRequest struct {
+	ID         string `json:"id"`
+	DocumentNo string `json:"document_no"`
+	FundCode   string `json:"fund_code"`
+	FundName   string `json:"fund_name"`
+	Kind       string `json:"kind"`
+	Date       string `json:"date"`
+	Amount     string `json:"amount"`
+}
+
+func FromPettyCashRequests(rows []dto.PettyCashRequest) []PettyCashRequest {
+	out := make([]PettyCashRequest, len(rows))
+	for i, r := range rows {
+		out[i] = PettyCashRequest{ID: r.ID, DocumentNo: r.DocumentNo, FundCode: r.FundCode, FundName: r.FundName, Kind: r.Kind,
+			Date: date(r.Date), Amount: str(r.Amount)}
+	}
+	return out
+}
+
 func FromOpenInvoices(rows []dto.OpenInvoice) []OpenInvoice {
 	out := make([]OpenInvoice, len(rows))
 	for i, r := range rows {

@@ -524,6 +524,33 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `material-usage` | เหมือน `production-cost` | ใบสั่งผลิต × วัตถุดิบ: `standard_quantity` (ปริมาณที่ต้องใช้ × จำนวนที่ผลิตได้ / จำนวนสั่ง), `actual_quantity` (เบิกสุทธิ), `variance_quantity`, `actual_cost`, `variance_value` (ผลต่าง × ต้นทุนเฉลี่ยที่เบิก) |
 | `wip` | `end_date` (บังคับ), `page, page_size` | ใบที่ปล่อยผลิตแล้วแต่ยังไม่ปิดงาน ณ วันที่: `order, date, item, quantity, materials` (เบิก − คืนถึงวันที่) + `total` |
 
+## 4.12 Endpoint — petty cash (เงินสดย่อย, ระบบ imprest)
+
+เงินสดย่อยบันทึกเอกสารเท่านั้น — เงินออกจากบริษัทจริงเมื่อ **การเงิน** จ่ายคำขอ (`POST /payments` kind `petty_cash`) และการเงินเป็นผู้ลงบัญชี
+
+| Method | Path | สิทธิ์ | หมายเหตุ |
+|---|---|---|---|
+| GET / PUT | `/petty-cash-settings` | `petty_cash.fund:read` / `manage` | `input_vat_account_id` (ตั้งให้อัตโนมัติ = 1107090000 ตอนสร้างบริษัท) |
+| GET / POST | `/petty-cash-funds` | `petty_cash.fund:read` / `manage` | `?q=&status=&sort=code\|name`; body `code, name, custodian_user_id` (ต้องเป็นสมาชิกบริษัท), `gl_account_id` (ไม่ส่ง = 1101010200), `imprest_amount, status` |
+| GET / PUT | `/petty-cash-funds/{fundID}` | เหมือนบน | response มี `funded, cash_on_hand, pending_replenishment, requested`; แก้วงเงินได้จนกว่าจะตั้งวงเงิน (หลังจากนั้นใช้คำขอ `increase`) |
+| GET / POST | `/petty-cash-vouchers` | `petty_cash.voucher:read` / `manage` | ใบสำคัญจ่าย (PCV) `?q=&fund_id=&status=&from=&to=&unrequested=true`; body `fund_id, date, payee{name,tax_id,branch_no}, description, lines[{account_id,description,amount}], vat_rate, price_includes_vat, tax_invoice{no,date}` — มี VAT ต้องมีใบกำกับภาษี |
+| GET / PUT | `/petty-cash-vouchers/{voucherID}` | เหมือนบน | แก้ได้เฉพาะร่าง |
+| POST | `/petty-cash-vouchers/{voucherID}/approve` | `petty_cash.voucher:approve` | กองทุนต้องตั้งวงเงินแล้วและเงินคงเหลือพอ |
+| POST | `/petty-cash-vouchers/{voucherID}/cancel` | `petty_cash.voucher:manage` | ร่าง หรืออนุมัติแล้วที่ยังไม่อยู่ในคำขอ |
+| GET / POST | `/petty-cash-replenishments` | `petty_cash.replenishment:read` / `post` | คำขอ (PCR) `kind`: `establish` (ยอด = วงเงิน), `increase` (+`amount`), `replenish` (+`voucher_ids`, ยอด = ผลรวมใบสำคัญจ่าย) |
+| GET | `/petty-cash-replenishments/{requestID}` | `read` | มี `vouchers[]` และ `payment{document_id,document_no,date}` เมื่อการเงินจ่ายแล้ว |
+| POST | `/petty-cash-replenishments/{requestID}/cancel` | `post` | เฉพาะที่ยังไม่จ่าย — ปลดใบสำคัญจ่ายกลับเป็นอนุมัติแล้ว |
+| GET | `/payments/petty-cash-requests` | `finance.payment:manage` | (finance) คำขอที่รอจ่าย สำหรับฟอร์มจ่ายเงิน |
+| POST | `/payments` kind `petty_cash` | `finance.payment:manage` | body `petty_cash_request_id, date, methods[]` — บรรทัดบัญชีมาจากคำขอในทรานแซกชันเดียวกัน: ตั้ง / เพิ่มวงเงิน = Dr บัญชีเงินสดย่อย; เบิกชดเชย = Dr ค่าใช้จ่ายรวมตามบัญชี (ก่อน VAT) + Dr ภาษีซื้อ; วันที่จ่ายต้องไม่ก่อนวันที่คำขอ; ยกเลิกใบจ่าย = คำขอกลับเป็นรอจ่าย |
+
+### รายงาน (`petty_cash.report:read`) — ผ่าน `GET /reports?book=`
+
+| `book` | parameter | ผลลัพธ์ |
+|---|---|---|
+| `petty-cash-voucher-register` | `start_date, end_date` (บังคับ), `fund_id, status, page, page_size` | `rows` = แถวใบสำคัญจ่าย + `totals{net,vat,gross}` |
+| `petty-cash-fund-balance` | `end_date` (ไม่ส่ง = วันนี้) | ต่อกองทุน: `fund, custodian, imprest_amount, funded, cash_on_hand, pending_replenishment, requested` |
+| `petty-cash-input-vat` | `start_date, end_date` (บังคับ), `page, page_size` | ภาษีซื้อจากใบสำคัญจ่ายที่ชดเชยแล้ว (ตามวันที่การเงินจ่าย) — ยอดนี้รวมใน `vat-summary` (ภ.พ.30) ด้วย |
+
 ## Dashboard (ภาพรวมของแต่ละแอป)
 
 `GET /companies/{companyID}/dashboards/{app}?start_date=&end_date=` — ต้องส่งทั้งสองวัน (ผิด = 400 `invalid_query_parameter`), อ่านอย่างเดียวไม่ใช้ transaction, แต่ละ module ใช้ aggregate query ไม่เกิน ~5 ครั้ง

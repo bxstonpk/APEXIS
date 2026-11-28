@@ -197,9 +197,43 @@ func (uc *ReceiptUseCases) Cancel(ctx context.Context, in dto.ByDoc[vo.ReceiptID
 
 type PaymentUseCases struct {
 	base
-	payments repositories.PaymentRepository
-	payables ports.Settlements
-	whtTypes repositories.WhtTypeRepository
+	payments  repositories.PaymentRepository
+	payables  ports.Settlements
+	pettyCash ports.PettyCash
+	whtTypes  repositories.WhtTypeRepository
+}
+
+// PettyCashRequests: คำขอเงินสดย่อยที่รอการเงินจ่าย (เลือกในหน้าจ่ายเงินชนิด petty_cash)
+func (uc *PaymentUseCases) PettyCashRequests(ctx context.Context, a dto.Actor) ([]dto.PettyCashRequest, error) {
+	return read(ctx, uc.base, a, vo.PermPaymentRead, func() ([]dto.PettyCashRequest, error) {
+		if uc.pettyCash == nil {
+			return []dto.PettyCashRequest{}, nil
+		}
+		rows, err := uc.pettyCash.Open(ctx, a.CompanyID)
+		out := make([]dto.PettyCashRequest, len(rows))
+		for i, r := range rows {
+			out[i] = dto.PettyCashRequest{ID: r.ID.String(), DocumentNo: r.DocumentNo, FundCode: r.FundCode, FundName: r.FundName,
+				Kind: r.Kind, Date: r.Date, Amount: r.Amount}
+		}
+		return out, err
+	})
+}
+
+// pettyCashLines: จ่ายคำขอเงินสดย่อย -> ผู้รับ = กองทุน, บรรทัด = เดบิตที่เงินสดย่อยกำหนด (ไม่มีภาษีหัก ณ ที่จ่าย)
+func (uc *PaymentUseCases) pettyCashLines(ctx context.Context, a dto.Actor, in dto.PaymentInput, doc ports.SettlementDoc) (entities.Party, []dto.PaymentLineInput, error) {
+	if uc.pettyCash == nil || in.PettyCashRequestID == nil {
+		return entities.Party{}, nil, wrapf(domain.ErrInvalidPayment, "petty_cash_request_id is required for a petty cash payment")
+	}
+	res, err := uc.pettyCash.Pay(ctx, a.CompanyID, *in.PettyCashRequestID, doc)
+	if err != nil {
+		return entities.Party{}, nil, err
+	}
+	lines := make([]dto.PaymentLineInput, len(res.Debits))
+	for i, d := range res.Debits {
+		acc := d.AccountID
+		lines[i] = dto.PaymentLineInput{AccountID: &acc, Description: d.Description, Amount: d.Amount}
+	}
+	return entities.Party{Code: res.FundCode, Name: res.FundName}, lines, nil
 }
 
 func (uc *PaymentUseCases) Get(ctx context.Context, in dto.ByDoc[vo.PaymentID]) (dto.Payment, error) {
@@ -261,6 +295,20 @@ func (uc *PaymentUseCases) Create(ctx context.Context, a dto.Actor, in dto.Payme
 		}
 		docID := vo.NewID[vo.PaymentID]()
 		party := partyInput(in.Payee)
+		if in.Kind == vo.PaymentPettyCash {
+			var lines []dto.PaymentLineInput
+			if party, lines, err = uc.pettyCashLines(ctx, a, in, ports.SettlementDoc{ID: uuid.UUID(docID), No: posting.DocumentNo, Date: in.Date}); err != nil {
+				return err
+			}
+			in.Lines = lines
+			ids := make([]vo.GLAccountID, len(lines))
+			for i, l := range lines {
+				ids[i] = *l.AccountID
+			}
+			if err := uc.checkAccounts(ctx, a.CompanyID, ids); err != nil {
+				return err
+			}
+		}
 		ap := vo.GLAccountID{}
 		var settled []ports.SettledInvoice
 		if in.Kind == vo.PaymentSupplier {
@@ -354,8 +402,11 @@ func (uc *PaymentUseCases) rates(ctx context.Context, companyID vo.CompanyID, id
 }
 
 func paymentDescription(s entities.PaymentState) string {
-	if s.Kind == vo.PaymentSupplier {
+	switch s.Kind {
+	case vo.PaymentSupplier:
 		return "Supplier payment " + s.Posting.DocumentNo + " / " + s.Party.Code
+	case vo.PaymentPettyCash:
+		return "Petty cash payment " + s.Posting.DocumentNo + " / " + s.Party.Code
 	}
 	return "Payment " + s.Posting.DocumentNo + " / " + s.Party.Name
 }
@@ -376,6 +427,11 @@ func (uc *PaymentUseCases) Cancel(ctx context.Context, in dto.ByDoc[vo.PaymentID
 		}
 		if s.Kind == vo.PaymentSupplier {
 			if err := uc.payables.Unsettle(ctx, in.CompanyID, uuid.UUID(s.ID)); err != nil {
+				return err
+			}
+		}
+		if s.Kind == vo.PaymentPettyCash && uc.pettyCash != nil { // คำขอเงินสดย่อยกลับเป็นรอการเงินจ่าย
+			if err := uc.pettyCash.Unpay(ctx, in.CompanyID, uuid.UUID(s.ID)); err != nil {
 				return err
 			}
 		}

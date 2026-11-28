@@ -17,6 +17,7 @@ import (
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/manufacturing"
 	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/pettycash"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/modules/taxregistry"
@@ -66,6 +67,9 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if err := manufacturing.Migrate(db); err != nil {
+		return err
+	}
+	if err := pettycash.Migrate(db); err != nil {
 		return err
 	}
 	// ผู้ขายรหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ถูกรวม — ใบจ่ายเงินของ finance ต้องชี้รหัสที่เก็บไว้
@@ -124,8 +128,11 @@ func run(logger *slog.Logger) error {
 	purchasingModule.RegisterRoutes(mux)
 	salesModule := sales.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
 	salesModule.RegisterRoutes(mux)
-	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing
-	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule)
+	// เงินสดย่อย: บันทึกเอกสาร (กองทุน / ใบสำคัญจ่าย / คำขอเบิกชดเชย) — การเงินเป็นคนจ่ายคำขอ
+	pettyCashModule := pettycash.New(db, identityModule, organizationModule, ledgerModule)
+	pettyCashModule.RegisterRoutes(mux)
+	// การเงินเป็นเจ้าของเงินเข้า-ออกทั้งหมด — ตัดยอดใบแจ้งหนี้ผ่าน public API ของ sales / purchasing, จ่ายคำขอเงินสดย่อย
+	financeModule := finance.New(db, identityModule, organizationModule, ledgerModule, salesModule, purchasingModule, pettyCashModule)
 	financeModule.RegisterRoutes(mux)
 	// การผลิต (เฉพาะบริษัทประเภทผลิต): สูตร / ใบสั่งผลิต — สต็อกผ่าน inventory, ลงบัญชีผ่าน ledger (ระบบต่อเนื่อง)
 	manufacturingModule := manufacturing.New(db, identityModule, organizationModule, ledgerModule, inventoryModule)
@@ -137,6 +144,7 @@ func run(logger *slog.Logger) error {
 	organizationModule.OnCompanyCreated(inventoryModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(financeModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(manufacturingModule.ProvisionCompany)
+	organizationModule.OnCompanyCreated(pettyCashModule.ProvisionCompany)
 	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
 	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 
@@ -148,12 +156,13 @@ func run(logger *slog.Logger) error {
 	salesModule.RegisterReports(reportBooks)
 	financeModule.RegisterReports(reportBooks)
 	manufacturingModule.RegisterReports(reportBooks)
+	pettyCashModule.RegisterReports(reportBooks)
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", identityModule.Authenticate(reportBooks))
 
 	// รายการสิทธิ์ทั้งหมด (หน้ากำหนดบทบาทของ frontend) — แต่ละ module ลงทะเบียนของตัวเอง
 	permissionCatalog := permissions.NewCatalog()
 	for _, m := range []interface{ Permissions() []string }{
-		salesModule, purchasingModule, inventoryModule, manufacturingModule, ledgerModule, financeModule, organizationModule, identityModule,
+		salesModule, purchasingModule, inventoryModule, manufacturingModule, ledgerModule, financeModule, pettyCashModule, organizationModule, identityModule,
 	} {
 		permissionCatalog.Register(m.Permissions()...)
 	}

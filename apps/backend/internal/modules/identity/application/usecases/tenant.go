@@ -41,6 +41,11 @@ func (uc *TenantUseCases) ProvisionOwner(ctx context.Context, in dto.ProvisionOw
 	})
 }
 
+// MemberNames คืนชื่อของผู้ใช้ที่เป็นสมาชิก active ของบริษัท — module อื่นใช้ตรวจ / แสดงผู้รับผิดชอบ (เช่น ผู้ถือเงินสดย่อย)
+func (uc *TenantUseCases) MemberNames(ctx context.Context, companyID vo.CompanyID, userIDs []vo.UserID) (map[vo.UserID]string, error) {
+	return uc.deps.Memberships.MemberNames(ctx, companyID, userIDs)
+}
+
 // CompanyIDsOf คืน id ของบริษัทที่ user เป็นสมาชิก (active) — organization ใช้แสดง "บริษัทของฉัน"
 func (uc *TenantUseCases) CompanyIDsOf(ctx context.Context, userID vo.UserID) ([]vo.CompanyID, error) {
 	return uc.deps.Memberships.CompanyIDsOf(ctx, userID)

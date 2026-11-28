@@ -144,7 +144,7 @@ type PaymentModel struct {
 	DocumentNo string    `gorm:"size:30;not null;uniqueIndex:uq_fin_payments_no,priority:2"`
 	DocDate    time.Time `gorm:"type:date;not null;index:idx_fin_payments_date,priority:2"`
 	DocumentModel
-	Kind string `gorm:"size:20;not null;check:chk_fin_payments_kind,kind IN ('supplier','other')"`
+	Kind string `gorm:"size:20;not null;check:chk_fin_payments_kind,kind IN ('supplier','other','petty_cash')"`
 	PartyModel
 	TotalAmount decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_amount,total_amount > 0"`
 	TotalWht    decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_payments_wht,total_wht >= 0 AND total_wht <= total_amount"`
@@ -214,6 +214,12 @@ func (SequenceModel) TableName() string { return "finance_number_sequences" }
 func AutoMigrate(db *gorm.DB) error {
 	if m := db.Migrator(); m.HasTable("cashbank_accounts") && !m.HasTable("finance_cash_accounts") {
 		if err := m.RenameTable("cashbank_accounts", "finance_cash_accounts"); err != nil {
+			return err
+		}
+	}
+	// CHECK ชนิดใบจ่ายเพิ่ม 'petty_cash' — AutoMigrate ไม่แก้ constraint ที่มีชื่อเดิมอยู่แล้ว จึงลบให้สร้างใหม่
+	if m := db.Migrator(); m.HasTable(&PaymentModel{}) && m.HasConstraint(&PaymentModel{}, "chk_fin_payments_kind") {
+		if err := m.DropConstraint(&PaymentModel{}, "chk_fin_payments_kind"); err != nil {
 			return err
 		}
 	}

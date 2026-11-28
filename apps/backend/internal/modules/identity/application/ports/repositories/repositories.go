@@ -46,6 +46,8 @@ type MembershipRepository interface {
 	Get(ctx context.Context, companyID vo.CompanyID, userID vo.UserID) (dto.Member, error)
 	// CompanyIDsOf คืน id ของบริษัทที่ user มี membership ที่ active
 	CompanyIDsOf(ctx context.Context, userID vo.UserID) ([]vo.CompanyID, error)
+	// MemberNames คืนชื่อผู้ใช้ที่เป็นสมาชิก active ของบริษัท (id ที่ไม่ใช่สมาชิก / พักใช้งานไม่อยู่ในผล)
+	MemberNames(ctx context.Context, companyID vo.CompanyID, userIDs []vo.UserID) (map[vo.UserID]string, error)
 }
 
 // AccessRepository โหลดข้อมูลสำหรับตัดสินสิทธิ์ใน query เดียว

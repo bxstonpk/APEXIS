@@ -17,6 +17,7 @@ import (
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/pettycash"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/database"
@@ -100,7 +101,8 @@ func setupApp(t *testing.T, provision bool) (api, string) {
 	for _, migrate := range []func() error{
 		func() error { return identity.Migrate(db) }, func() error { return organization.Migrate(db) },
 		func() error { return ledger.Migrate(db) }, func() error { return inventory.Migrate(db) },
-		func() error { return finance.Migrate(db) }, func() error { _, err := purchasing.Migrate(db); return err }, func() error { _, err := sales.Migrate(db); return err },
+		func() error { return finance.Migrate(db) }, func() error { return pettycash.Migrate(db) },
+		func() error { _, err := purchasing.Migrate(db); return err }, func() error { _, err := sales.Migrate(db); return err },
 	} {
 		if err := migrate(); err != nil {
 			t.Fatal(err)
@@ -123,7 +125,7 @@ func setupApp(t *testing.T, provision bool) (api, string) {
 	lastSales = sal
 	sal.RegisterRoutes(mux)
 	// ใบเสร็จรับเงินอยู่ที่ finance — ตัดยอดใบแจ้งหนี้ขายผ่าน sales.SettleReceivables
-	fin := finance.New(db, idm, org, led, sal, pur)
+	fin := finance.New(db, idm, org, led, sal, pur, pettycash.New(db, idm, org, led))
 	fin.RegisterRoutes(mux)
 	if provision {
 		for _, hook := range []integration.CompanyCreatedHook{led.ProvisionCompany, sal.ProvisionCompany, pur.ProvisionCompany, inv.ProvisionCompany, fin.ProvisionCompany} {

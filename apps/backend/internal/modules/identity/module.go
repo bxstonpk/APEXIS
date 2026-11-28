@@ -129,6 +129,23 @@ func (m *Module) MemberCompanyIDs(ctx context.Context, userID uuid.UUID) ([]uuid
 	return out, nil
 }
 
+// MemberNames คืนชื่อผู้ใช้ที่เป็นสมาชิก active ของบริษัท (id ที่ไม่ใช่สมาชิกไม่อยู่ในผล)
+func (m *Module) MemberNames(ctx context.Context, companyID uuid.UUID, userIDs []uuid.UUID) (map[uuid.UUID]string, error) {
+	ids := make([]vo.UserID, len(userIDs))
+	for i, id := range userIDs {
+		ids[i] = vo.UserID(id)
+	}
+	found, err := m.UseCases.Tenants.MemberNames(ctx, vo.CompanyID(companyID), ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]string, len(found))
+	for id, n := range found {
+		out[uuid.UUID(id)] = n
+	}
+	return out, nil
+}
+
 // SeedUser สร้างผู้ใช้เริ่มต้น (เช่นผู้ดูแลระบบจาก INITIAL_ADMIN_*) ถ้ายังไม่มีอีเมลนี้
 // คืน true เมื่อสร้างใหม่, false เมื่อมีอยู่แล้ว (ไม่แก้ไขผู้ใช้เดิม / ไม่รีเซ็ตรหัสผ่าน)
 func (m *Module) SeedUser(ctx context.Context, email, name, password string) (bool, error) {
