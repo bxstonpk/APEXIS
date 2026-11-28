@@ -194,12 +194,7 @@ export const th = {
       name: 'จัดซื้อ',
       menu: {
         dashboard: 'ภาพรวม',
-        orders: 'ใบสั่งซื้อ',
-        receipts: 'ใบรับสินค้า',
-        invoices: 'ซื้อสินค้า',
-        'work-orders': 'ใบสั่งจ้าง',
-        'service-acceptances': 'ตรวจรับงาน',
-        'service-invoices': 'ซื้อบริการ',
+        documents: 'เอกสารซื้อ',
         'credit-notes': 'ใบลดหนี้ผู้ขาย',
         suppliers: 'ผู้ขาย',
         reports: 'รายงาน',
@@ -1505,6 +1500,35 @@ export const th = {
   },
 
   purchasing: {
+    /** รายการรวม "เอกสารซื้อ" (6 ชนิด กรองด้วย ?type=) */
+    documents: {
+      pageTitle: 'เอกสารซื้อ',
+      heading: 'เอกสารซื้อ',
+      type: 'ชนิดเอกสาร',
+      reference: 'อ้างอิง',
+      vat: 'ภาษีซื้อ',
+      create: 'สร้าง',
+      types: {
+        order: 'ใบสั่งซื้อ',
+        receipt: 'ใบรับสินค้า',
+        invoice: 'ซื้อสินค้า',
+        work_order: 'ใบสั่งจ้าง',
+        service_acceptance: 'ตรวจรับงาน',
+        service_invoice: 'ซื้อบริการ',
+      } as Record<string, string>,
+      /** ตัวเลือกชนิดในตัวกรอง: ทั้งสาย + ทีละชนิด */
+      typeGroups: { goods: 'สินค้าทั้งหมด', service: 'บริการทั้งหมด' },
+      groups: { goods: 'สินค้า', service: 'บริการ' },
+      /** เมนูสร้าง: รับสินค้า / ตรวจรับงาน เปิดรายการใบสั่งที่อนุมัติแล้วเพื่อเลือกใบที่จะรับ */
+      createItems: {
+        order: 'ใบสั่งซื้อ',
+        receipt: 'รับสินค้า',
+        invoice: 'ซื้อสินค้า',
+        work_order: 'ใบสั่งจ้าง',
+        service_acceptance: 'ตรวจรับงาน',
+        service_invoice: 'ซื้อบริการ',
+      } as Record<string, string>,
+    },
     statuses: {
       order: { draft: 'ร่าง', approved: 'อนุมัติแล้ว', closed: 'ปิดแล้ว', cancelled: 'ยกเลิก' } as Record<string, string>,
       posted: { posted: 'บันทึกแล้ว', cancelled: 'ยกเลิกแล้ว' } as Record<string, string>,

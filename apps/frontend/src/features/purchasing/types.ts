@@ -233,6 +233,57 @@ export type PurchaseFlow = {
   perms: { orderRead: string; orderManage: string; orderApprove: string; receiptRead: string; receiptPost: string; invoiceRead: string; invoicePost: string }
   /** ชนิดสินค้าที่เลือกได้ (query type=) */
   itemTypes: string
+  /** ชนิดเอกสารของแต่ละขั้นในรายการรวม "เอกสารซื้อ" (?type=) */
+  docTypes: { orders: PurchaseDocType; receipts: PurchaseDocType; invoices: PurchaseDocType }
+}
+
+// ---------- รายการรวม "เอกสารซื้อ" (GET /purchase-documents) ----------
+
+export type PurchaseDocType = 'order' | 'receipt' | 'invoice' | 'work_order' | 'service_acceptance' | 'service_invoice'
+
+export const PURCHASE_DOC_TYPES: readonly PurchaseDocType[] = ['order', 'receipt', 'invoice', 'work_order', 'service_acceptance', 'service_invoice']
+
+/** total = null สำหรับใบรับ / ตรวจรับงาน; outstanding / vat_status เฉพาะใบแจ้งหนี้ */
+export type PurchaseDocumentRow = {
+  type: PurchaseDocType
+  id: string
+  document_no: string
+  date: string
+  supplier: Ref
+  status: string
+  reference: string
+  total: string | null
+  outstanding: string | null
+  vat_status: string | null
+}
+
+export const PURCHASE_DOCUMENTS_QUERY_KEYS = ['type', ...PURCHASE_DOC_QUERY_KEYS] as const
+
+/** หน้าเอกสาร (path ต่อจาก /purchasing/) ของแต่ละชนิด */
+export const docTypeMenu: Record<PurchaseDocType, string> = {
+  order: 'orders',
+  receipt: 'receipts',
+  invoice: 'invoices',
+  work_order: 'work-orders',
+  service_acceptance: 'service-acceptances',
+  service_invoice: 'service-invoices',
+}
+
+/** สถานะแบบใบสั่ง (ร่าง / อนุมัติ / ปิด) หรือแบบเอกสารที่บันทึกแล้ว */
+export const isOrderType = (t: PurchaseDocType) => t === 'order' || t === 'work_order'
+
+/**
+ * ลิงก์กลับรายการ "เอกสารซื้อ" จากหน้าเอกสาร — คงตัวกรองเดิมจาก ?back= (รวม type);
+ * ไม่มี type เดิม = กรองชนิดของเอกสารนี้
+ */
+export function documentsHref(companyId: string, type: PurchaseDocType, back = ''): string {
+  const from = new URLSearchParams(back)
+  const q = new URLSearchParams({ type: from.get('type') || type })
+  for (const k of PURCHASE_DOC_QUERY_KEYS) {
+    const v = from.get(k)
+    if (v) q.set(k, v)
+  }
+  return `${purchasingPage(companyId, 'documents')}?${q}`
 }
 
 export const flows: Record<PurchaseKind, PurchaseFlow> = {
@@ -254,6 +305,7 @@ export const flows: Record<PurchaseKind, PurchaseFlow> = {
       invoicePost: 'purchasing.invoice:post',
     },
     itemTypes: 'stock,non_stock',
+    docTypes: { orders: 'order', receipts: 'receipt', invoices: 'invoice' },
   },
   service: {
     kind: 'service',
@@ -273,6 +325,7 @@ export const flows: Record<PurchaseKind, PurchaseFlow> = {
       invoicePost: 'purchasing.service_invoice:post',
     },
     itemTypes: 'service',
+    docTypes: { orders: 'work_order', receipts: 'service_acceptance', invoices: 'service_invoice' },
   },
 }
 
@@ -290,6 +343,7 @@ export const docPerms = {
 } as const
 
 export const purchasingDocsApi = {
+  documents: (c: string) => `/companies/${c}/purchase-documents`,
   orders: (c: string) => `/companies/${c}/purchase-orders`,
   receipts: (c: string) => `/companies/${c}/goods-receipts`,
   invoices: (c: string) => `/companies/${c}/supplier-invoices`,
