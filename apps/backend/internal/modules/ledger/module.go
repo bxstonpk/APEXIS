@@ -45,6 +45,7 @@ type Organization interface {
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 	CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error)
+	FiscalYears(ctx context.Context, companyID uuid.UUID) ([]integration.FiscalYearStatus, error)
 }
 
 type Module struct {
@@ -62,6 +63,8 @@ func New(db *gorm.DB, identity Identity, org Organization) *Module {
 		Journals: gormrepo.NewJournalRepository(db),
 		Entries:  gormrepo.NewEntryRepository(db),
 		Reports:  gormrepo.NewReportRepository(db),
+		YearEnds: gormrepo.NewYearEndRepository(db),
+		Settings: gormrepo.NewSettingsRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -162,6 +165,13 @@ func (m *Module) ProvisionCompany(ctx context.Context, c integration.NewCompany)
 		return err
 	}
 	_, err = m.UseCases.Accounts.Provision(ctx, vo.CompanyID(c.ID), bt)
+	return err
+}
+
+// FiscalYearCreated: hook ของ organization หลังสร้างปีบัญชี — ผ่านรายการกลับอัตโนมัติที่รอ (งวดต้องเปิด)
+// ทำงานใน transaction ของการสร้างปีบัญชี
+func (m *Module) FiscalYearCreated(ctx context.Context, companyID uuid.UUID, _ int) error {
+	_, err := m.UseCases.Entries.PostPendingReversals(ctx, vo.CompanyID(companyID))
 	return err
 }
 

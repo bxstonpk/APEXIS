@@ -84,16 +84,39 @@ type EntrySummary struct {
 	TotalDebit  string     `json:"total_debit"`
 	TotalCredit string     `json:"total_credit"`
 	PostedAt    *time.Time `json:"posted_at"`
+	// adjusting_period: งวดปรับปรุง (งวดที่ 13); is_closing: รายการปิดบัญชีสิ้นปี
+	AdjustingPeriod bool   `json:"adjusting_period"`
+	IsClosing       bool   `json:"is_closing"`
+	Template        string `json:"template"` // รายการปรับปรุงสิ้นงวด ("" = ทั่วไป)
+	AutoReverse     bool   `json:"auto_reverse"`
+	IsAutoReversal  bool   `json:"is_auto_reversal"`
+	// auto_reversal: รายการกลับอัตโนมัติ (status draft + entry_no null = รอผ่านเมื่อมีงวดถัดไป)
+	AutoReversal *EntryLink `json:"auto_reversal"`
+}
+
+type EntryLink struct {
+	ID      string  `json:"id"`
+	EntryNo *string `json:"entry_no"`
+	Date    string  `json:"date"`
+	Status  string  `json:"status"`
 }
 
 func FromEntrySummary(e dto.EntrySummary) EntrySummary {
 	out := EntrySummary{
 		ID: e.ID, Date: date(e.Date), Journal: ref(e.Journal), Description: e.Description, Reference: e.Reference,
 		Status: e.Status, TotalDebit: e.TotalDebit.String(), TotalCredit: e.TotalCredit.String(), PostedAt: e.PostedAt,
+		AdjustingPeriod: e.AdjustingPeriod, IsClosing: e.Closing, Template: e.Template, AutoReverse: e.AutoReverse, IsAutoReversal: e.AutoReversal,
 	}
 	if e.EntryNo != "" {
 		no := e.EntryNo
 		out.EntryNo = &no
+	}
+	if r := e.Reversal; r != nil {
+		out.AutoReversal = &EntryLink{ID: r.ID, Date: date(r.Date), Status: r.Status}
+		if r.EntryNo != "" {
+			no := r.EntryNo
+			out.AutoReversal.EntryNo = &no
+		}
 	}
 	return out
 }

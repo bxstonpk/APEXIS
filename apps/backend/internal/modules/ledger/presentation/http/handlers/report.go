@@ -35,6 +35,12 @@ func (h *Handler) Report(w http.ResponseWriter, r *http.Request) {
 			out := responses.FromIncomeStatement(is)
 			out.Book = book
 			return one(out, err)
+		case requests.BookDBDBalanceSheet:
+			s, err := h.uc.Reports.DBDBalanceSheet(r.Context(), dto.AsOf{Actor: a, Date: q.End})
+			return one(responses.FromDBD(book, s), err)
+		case requests.BookDBDIncomeStatement:
+			s, err := h.uc.Reports.DBDIncomeStatement(r.Context(), dto.AsOf{Actor: a, Date: q.End})
+			return one(responses.FromDBD(book, s), err)
 		default: // requests.BookGeneralLedger (ParseReport ตรวจค่า book แล้ว)
 			gl, err := h.uc.Reports.AccountLedger(r.Context(), dto.AccountLedgerInput{
 				Actor: a, AccountID: q.AccountID, Start: q.Start, End: q.End, Page: q.Page,

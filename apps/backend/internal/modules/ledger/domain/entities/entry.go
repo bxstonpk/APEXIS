@@ -33,7 +33,52 @@ type EntryData struct {
 	Description string
 	Reference   string // เลขที่เอกสารอ้างอิงภายนอก
 	Lines       []LineData
+	// AdjustingPeriod: ลงในงวดปรับปรุง (งวดที่ 13) ของปีบัญชี — วันที่ต้องเป็นวันสุดท้ายของปี,
+	// ลงได้แม้งวด 1–12 ปิดแล้ว จนกว่าจะปิดบัญชีสิ้นปี
+	AdjustingPeriod bool
+	// Template: รายการปรับปรุงสิ้นงวด (accrued_revenue / accrued_expense / deferred_revenue / prepaid_expense / other)
+	// ว่าง = รายการทั่วไป
+	Template AdjustmentTemplate
+	// AutoReverse: รายการปรับปรุงที่กลับรายการอัตโนมัติ ณ วันแรกของงวดถัดไป
+	AutoReverse bool
 }
+
+// AdjustmentTemplate คือแบบของรายการปรับปรุงสิ้นงวด
+type AdjustmentTemplate string
+
+const (
+	TemplateAccruedRevenue  AdjustmentTemplate = "accrued_revenue"  // รายได้ค้างรับ
+	TemplateAccruedExpense  AdjustmentTemplate = "accrued_expense"  // ค่าใช้จ่ายค้างจ่าย
+	TemplateDeferredRevenue AdjustmentTemplate = "deferred_revenue" // รายได้รับล่วงหน้า
+	TemplatePrepaidExpense  AdjustmentTemplate = "prepaid_expense"  // ค่าใช้จ่ายจ่ายล่วงหน้า
+	TemplateOther           AdjustmentTemplate = "other"            // อื่น ๆ
+)
+
+var AdjustmentTemplates = []AdjustmentTemplate{TemplateAccruedRevenue, TemplateAccruedExpense, TemplateDeferredRevenue, TemplatePrepaidExpense, TemplateOther}
+
+func ParseTemplate(s string) (AdjustmentTemplate, error) {
+	for _, t := range AdjustmentTemplates {
+		if string(t) == s {
+			return t, nil
+		}
+	}
+	return "", domain.ErrInvalidTemplate
+}
+
+// TemplateAccounts: รหัสบัญชีตั้งต้นของแต่ละแบบในผังมาตรฐาน — [บัญชีงบแสดงฐานะ, บัญชีกำไรขาดทุน]
+// และด้านของบัญชีงบแสดงฐานะ (true = เดบิต) — ผู้ใช้เปลี่ยนบัญชี / บรรทัดได้
+var TemplateAccounts = map[AdjustmentTemplate]struct {
+	BalanceCode, ResultCode string
+	BalanceDebit            bool
+}{
+	TemplateAccruedRevenue:  {"1103020400", "4101000000", true},  // Dr รายได้ค้างรับ / Cr รายได้ค่าบริการ
+	TemplateAccruedExpense:  {"2102020100", "5313000000", false}, // Dr ค่าใช้จ่าย / Cr ค่าใช้จ่ายค้างจ่าย
+	TemplateDeferredRevenue: {"2102020200", "4101000000", false}, // Dr รายได้ / Cr รายได้รับล่วงหน้า
+	TemplatePrepaidExpense:  {"1103020600", "5313000000", true},  // Dr ค่าใช้จ่ายจ่ายล่วงหน้า / Cr ค่าใช้จ่าย
+}
+
+// IsAdjustment: เป็นรายการปรับปรุงสิ้นงวด
+func (d EntryData) IsAdjustment() bool { return d.Template != "" }
 
 // Posting คือข้อมูลที่ได้ตอนผ่านรายการ
 type Posting struct {
@@ -53,6 +98,11 @@ type EntryState struct {
 	ReversalOf *vo.EntryID // รายการนี้กลับรายการของ id นี้
 	ReversedBy *vo.EntryID // รายการนี้ถูกกลับโดย id นี้
 	CreatedBy  vo.UserID
+	Closing    bool // รายการปิดบัญชีสิ้นปี (และรายการกลับของมัน)
+	// AutoReversalID: รายการกลับอัตโนมัติของรายการปรับปรุงนี้ (draft = รอผ่านเมื่อมีงวดถัดไป)
+	AutoReversalID *vo.EntryID
+	// AutoReversal: รายการนี้คือรายการกลับอัตโนมัติ (ReversalOf = รายการปรับปรุงต้นฉบับ)
+	AutoReversal bool
 }
 
 // Entry คือรายการบัญชี (ใบสำคัญ)
@@ -166,14 +216,50 @@ func (e *Entry) Reversal(date time.Time, description string, by vo.UserID) (*Ent
 	r, err := NewEntry(e.s.CompanyID, by, EntryData{
 		JournalID: e.s.Data.JournalID, Date: date, Description: description,
 		Reference: e.s.Posting.EntryNo, Lines: lines,
+		// กลับรายการงวดปรับปรุง ณ วันเดียวกัน = อยู่ในงวดปรับปรุงด้วย
+		AdjustingPeriod: e.s.Data.AdjustingPeriod && date.Equal(e.s.Data.Date),
 	}, numeric.MaxScale)
 	if err != nil {
 		return nil, err
 	}
 	id := e.s.ID
 	r.s.ReversalOf = &id
+	r.s.Closing = e.s.Closing
 	return r, nil
 }
+
+// NewAutoReversal สร้างรายการกลับอัตโนมัติ (draft) ของรายการปรับปรุงที่ผ่านแล้ว ณ วันแรกของงวดถัดไป
+// ต้นฉบับยังเป็น posted (ไม่ใช่ "ถูกกลับรายการ") — ผูกกันสองทางด้วย ReversalOf / AutoReversalID
+func (e *Entry) NewAutoReversal(date time.Time, by vo.UserID) (*Entry, error) {
+	if e.s.Status != vo.EntryPosted || e.s.Posting == nil || !e.s.Data.AutoReverse {
+		return nil, domain.ErrEntryNotPosted
+	}
+	lines := make([]LineData, len(e.s.Data.Lines))
+	for i, l := range e.s.Data.Lines {
+		l.Debit, l.Credit = l.Credit, l.Debit
+		lines[i] = l
+	}
+	r, err := NewEntry(e.s.CompanyID, by, EntryData{
+		JournalID: e.s.Data.JournalID, Date: date, Description: "Auto reversal of " + e.s.Posting.EntryNo,
+		Reference: e.s.Posting.EntryNo, Lines: lines,
+	}, numeric.MaxScale)
+	if err != nil {
+		return nil, err
+	}
+	id := e.s.ID
+	r.s.ReversalOf, r.s.AutoReversal = &id, true
+	rid := r.s.ID
+	e.s.AutoReversalID = &rid
+	return r, nil
+}
+
+// AutoReversalOf คืน id รายการกลับอัตโนมัติ (nil = ไม่มี)
+func (e *Entry) AutoReversalOf() *vo.EntryID { return e.s.AutoReversalID }
+
+// MarkClosing: รายการปิดบัญชีสิ้นปี (ระบบสร้าง) — งบกำไรขาดทุนไม่นับรายการนี้ และลงในงวดที่ปิดแล้วได้
+func (e *Entry) MarkClosing() { e.s.Closing = true }
+
+func (e *Entry) IsClosing() bool { return e.s.Closing }
 
 func (e *Entry) MarkReversed(by vo.EntryID) error {
 	if e.s.Status != vo.EntryPosted {
@@ -189,7 +275,10 @@ func normalizeEntry(d EntryData, amountDecimals int) (EntryData, error) {
 	if !vo.IsDateOnly(d.Date) {
 		return EntryData{}, domain.ErrInvalidDate
 	}
-	out := EntryData{JournalID: d.JournalID, Date: d.Date}
+	out := EntryData{JournalID: d.JournalID, Date: d.Date, AdjustingPeriod: d.AdjustingPeriod, Template: d.Template, AutoReverse: d.AutoReverse}
+	if d.Template == "" && d.AutoReverse {
+		return EntryData{}, domain.ErrInvalidTemplate // กลับรายการอัตโนมัติใช้กับรายการปรับปรุงเท่านั้น
+	}
 	if out.Description, err = vo.OptionalText(d.Description, 500); err != nil {
 		return EntryData{}, err
 	}

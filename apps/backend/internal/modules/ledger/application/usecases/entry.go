@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 
 	"apexis/backend/internal/platform/numbering"
 	"fmt"
@@ -23,6 +24,7 @@ type EntryUseCases struct {
 	entries  repositories.EntryRepository
 	accounts repositories.AccountRepository
 	journals repositories.JournalRepository
+	yearEnds repositories.YearEndRepository
 }
 
 func (uc *EntryUseCases) Get(ctx context.Context, in dto.ByID[vo.EntryID]) (dto.Entry, error) {
@@ -57,7 +59,10 @@ func (uc *EntryUseCases) Create(ctx context.Context, in dto.CreateEntry[entities
 				return err
 			}
 		}
-		return uc.entries.Create(ctx, e)
+		if err := uc.entries.Create(ctx, e); err != nil {
+			return err
+		}
+		return uc.afterPost(ctx, in.Actor, e)
 	})
 	if err != nil {
 		return dto.Entry{}, err
@@ -117,7 +122,10 @@ func (uc *EntryUseCases) Post(ctx context.Context, in dto.ByID[vo.EntryID]) (dto
 		if err := uc.post(ctx, in.Actor, e, journal); err != nil {
 			return err
 		}
-		return uc.entries.UpdateStatus(ctx, e)
+		if err := uc.entries.UpdateStatus(ctx, e); err != nil {
+			return err
+		}
+		return uc.afterPost(ctx, in.Actor, e)
 	})
 	if err != nil {
 		return dto.Entry{}, err
@@ -132,7 +140,13 @@ func (uc *EntryUseCases) Post(ctx context.Context, in dto.ByID[vo.EntryID]) (dto
 func (uc *EntryUseCases) Reverse(ctx context.Context, in dto.ReverseEntry) (dto.Entry, error) {
 	var reversal *entities.Entry
 	err := uc.write(ctx, in.Actor, vo.PermEntryPost, func(ctx context.Context) error {
-		var err error
+		e, err := uc.entries.FindForUpdate(ctx, in.CompanyID, in.ID)
+		if err != nil {
+			return err
+		}
+		if e.IsClosing() {
+			return domain.ErrYearClosed // รายการปิดบัญชีกลับได้ด้วยการเปิดปี (year-end reopen) เท่านั้น
+		}
 		reversal, err = uc.reverse(ctx, in.Actor, in.ID, in.Date, in.Description)
 		return err
 	})
@@ -161,7 +175,102 @@ func (uc *EntryUseCases) reverse(ctx context.Context, a dto.Actor, id vo.EntryID
 	if err := original.MarkReversed(reversal.ID()); err != nil {
 		return nil, err
 	}
-	return reversal, uc.entries.UpdateStatus(ctx, original)
+	if err := uc.entries.UpdateStatus(ctx, original); err != nil {
+		return nil, err
+	}
+	// รายการปรับปรุงที่มีรายการกลับอัตโนมัติ: ยกเลิกไปด้วยใน transaction เดียว
+	// รอผ่าน (draft) = ลบ; ผ่านแล้ว = กลับรายการ ณ วันที่ของมัน (งวดต้องเปิด มิฉะนั้น 422 ทั้งหมด)
+	if revID := original.AutoReversalOf(); revID != nil {
+		rev, err := uc.entries.FindForUpdate(ctx, a.CompanyID, *revID)
+		if err != nil {
+			return nil, err
+		}
+		switch rev.Status() {
+		case vo.EntryDraft:
+			if err := uc.entries.Delete(ctx, a.CompanyID, *revID); err != nil {
+				return nil, err
+			}
+		case vo.EntryPosted:
+			if _, err := uc.reverse(ctx, a, *revID, rev.Data().Date, ""); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return reversal, nil
+}
+
+// afterPost: รายการปรับปรุงที่กลับรายการอัตโนมัติ -> สร้างรายการกลับ ณ วันแรกของงวดถัดไป
+// ผ่านทันทีถ้างวดนั้นมีและเปิดอยู่ มิฉะนั้นเก็บเป็น draft (รอผ่าน) — ผ่านภายหลังด้วย PostPendingReversals
+// (เรียกอัตโนมัติตอนสร้างปีบัญชีใหม่ผ่าน hook ของ organization)
+func (uc *EntryUseCases) afterPost(ctx context.Context, a dto.Actor, e *entities.Entry) error {
+	d := e.Data()
+	if e.Status() != vo.EntryPosted || !d.AutoReverse || e.AutoReversalOf() != nil {
+		return nil
+	}
+	r, err := e.NewAutoReversal(d.Date.AddDate(0, 0, 1), a.UserID)
+	if err != nil {
+		return err
+	}
+	if _, err := uc.tryPost(ctx, a, r); err != nil {
+		return err
+	}
+	if err := uc.entries.Create(ctx, r); err != nil {
+		return err
+	}
+	return uc.entries.UpdateStatus(ctx, e)
+}
+
+// tryPost ผ่านรายการถ้างวดของวันที่มีอยู่และเปิด และปีบัญชียังไม่ปิด — ไม่ได้ = คงเป็น draft (ไม่ใช่ error)
+func (uc *EntryUseCases) tryPost(ctx context.Context, a dto.Actor, e *entities.Entry) (bool, error) {
+	period, err := uc.org.PeriodAt(ctx, a.CompanyID, e.Data().Date)
+	if errors.Is(err, domain.ErrNoFiscalPeriod) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !period.Open {
+		return false, nil
+	}
+	closed, err := uc.yearEnds.IsClosed(ctx, a.CompanyID, period.FiscalYear)
+	if err != nil || closed {
+		return false, err
+	}
+	return true, uc.post(ctx, a, e, nil)
+}
+
+// PostPendingReversals ผ่านรายการกลับอัตโนมัติที่รออยู่ของบริษัท (งวดของวันที่ต้องมีและเปิดแล้ว)
+// ไม่ตรวจสิทธิ์ (ระบบเรียกจาก hook สร้างปีบัญชี ภายใน transaction ของผู้เรียก) — คืนจำนวนที่ผ่าน
+func (uc *EntryUseCases) PostPendingReversals(ctx context.Context, companyID vo.CompanyID) (int, error) {
+	pending, err := uc.entries.PendingAutoReversals(ctx, companyID)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, r := range pending {
+		ok, err := uc.tryPost(ctx, dto.Actor{UserID: r.State().CreatedBy, CompanyID: companyID}, r)
+		if err != nil {
+			return n, err
+		}
+		if ok {
+			if err := uc.entries.UpdateStatus(ctx, r); err != nil {
+				return n, err
+			}
+			n++
+		}
+	}
+	return n, nil
+}
+
+// PostPending: POST /adjusting-entries/pending-reversals — สั่งผ่านรายการกลับที่รออยู่เอง (ต้องมีสิทธิ์ผ่านรายการ)
+func (uc *EntryUseCases) PostPending(ctx context.Context, a dto.Actor) (int, error) {
+	var n int
+	err := uc.write(ctx, a, vo.PermEntryPost, func(ctx context.Context) error {
+		var err error
+		n, err = uc.PostPendingReversals(ctx, a.CompanyID)
+		return err
+	})
+	return n, err
 }
 
 // post: กฎที่ต้องใช้ข้อมูลภายนอก entity — งวดบัญชีต้องมีและเปิด, ออกเลขที่เรียงไม่ขาดตอน
@@ -181,8 +290,8 @@ func (uc *EntryUseCases) post(ctx context.Context, a dto.Actor, e *entities.Entr
 	if err != nil {
 		return err
 	}
-	if !period.Open {
-		return domain.ErrPeriodClosed
+	if err := uc.checkPeriod(ctx, a.CompanyID, d, period); err != nil {
+		return err
 	}
 	format := journal.NumberFormat()
 	nc := numbering.Context{Date: d.Date, FiscalYear: period.FiscalYear}
@@ -194,6 +303,46 @@ func (uc *EntryUseCases) post(ctx context.Context, a dto.Actor, e *entities.Entr
 		EntryNo:  format.Render(nc, n),
 		PeriodID: period.ID, By: a.UserID, At: uc.now(),
 	})
+}
+
+// checkPeriod: ลงรายการได้เมื่อ
+//
+//	ปีบัญชีของวันที่ยังไม่ปิดบัญชีสิ้นปี (ปิดแล้ว = ล็อกทั้งปีรวมงวดปรับปรุง)
+//	รายการงวดปรับปรุง (งวดที่ 13): วันที่ = วันสุดท้ายของปีบัญชี — ลงได้แม้งวด 12 ปิดแล้ว
+//	รายการปกติ: งวด (1–12) ต้องเปิด; รายการปรับปรุงสิ้นงวด (template) ต้องลงวันสุดท้ายของงวด
+//
+// ไม่มีเงื่อนไขเรื่องปีก่อน: ปีใหม่ลงรายการได้ตามปกติแม้ปีก่อนยังไม่ปิดบัญชี
+func (uc *EntryUseCases) checkPeriod(ctx context.Context, companyID vo.CompanyID, d entities.EntryData, p ports.Period) error {
+	closed, err := uc.yearEnds.IsClosed(ctx, companyID, p.FiscalYear)
+	if err != nil {
+		return err
+	}
+	if closed {
+		return domain.ErrYearClosed
+	}
+	if d.AdjustingPeriod {
+		years, err := uc.org.FiscalYears(ctx, companyID)
+		if err != nil {
+			return err
+		}
+		if y := ports.FindYear(years, p.FiscalYear); y == nil || !d.Date.Equal(y.End) {
+			return domain.ErrAdjustingDate
+		}
+		return nil
+	}
+	if !p.Open {
+		return domain.ErrPeriodClosed
+	}
+	if d.IsAdjustment() {
+		r, err := uc.org.PeriodRange(ctx, companyID, d.Date)
+		if err != nil {
+			return err
+		}
+		if r == nil || !d.Date.Equal(r.End) {
+			return domain.ErrAdjustmentDate
+		}
+	}
+	return nil
 }
 
 // checkRefs ตรวจ record ที่รายการอ้างถึง (query ละ 1 ครั้ง ไม่ว่าจะมีกี่บรรทัด):

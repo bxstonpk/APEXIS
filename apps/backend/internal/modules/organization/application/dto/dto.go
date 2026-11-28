@@ -310,6 +310,15 @@ type ProjectSite struct {
 	Status     string
 }
 
+// FiscalYearStatus: ปีบัญชีพร้อมจำนวนงวดทั้งหมด / งวดที่ยังเปิด (ใช้กับการปิดบัญชีสิ้นปีของ ledger)
+type FiscalYearStatus struct {
+	Year        int
+	StartDate   time.Time
+	EndDate     time.Time
+	Periods     int
+	OpenPeriods int
+}
+
 type FiscalYear struct {
 	ID        string
 	Year      int

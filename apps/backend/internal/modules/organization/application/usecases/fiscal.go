@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"apexis/backend/internal/modules/organization/application/dto"
+	"apexis/backend/internal/modules/organization/application/ports"
 	"apexis/backend/internal/modules/organization/application/ports/repositories"
 	"apexis/backend/internal/modules/organization/domain/entities"
 	domain "apexis/backend/internal/modules/organization/domain/errors"
@@ -15,6 +16,7 @@ import (
 type FiscalUseCases struct {
 	base
 	fiscal repositories.FiscalRepository
+	hooks  ports.FiscalYearListener
 }
 
 // CreateYear สร้างปีบัญชี + 12 งวดใน transaction เดียว
@@ -34,7 +36,13 @@ func (uc *FiscalUseCases) CreateYear(ctx context.Context, in dto.CreateFiscalYea
 		if overlaps {
 			return domain.ErrFiscalYearOverlaps
 		}
-		return uc.fiscal.CreateYear(ctx, fy)
+		if err := uc.fiscal.CreateYear(ctx, fy); err != nil {
+			return err
+		}
+		if uc.hooks == nil {
+			return nil
+		}
+		return uc.hooks.FiscalYearCreated(ctx, in.CompanyID, in.Year)
 	})
 	if err != nil {
 		return dto.FiscalYear{}, err

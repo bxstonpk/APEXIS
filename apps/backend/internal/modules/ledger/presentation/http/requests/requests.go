@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -195,6 +196,11 @@ type Entry struct {
 	Reference   string `json:"reference"`
 	Status      string `json:"status"`
 	Lines       []Line `json:"lines"`
+	// adjusting_period: ลงในงวดปรับปรุง (งวดที่ 13 — วันที่ = วันสุดท้ายของปีบัญชี)
+	AdjustingPeriod bool `json:"adjusting_period"`
+	// template / auto_reverse: รายการปรับปรุงสิ้นงวด (POST /adjusting-entries) — template ว่าง = รายการทั่วไป
+	Template    string `json:"template"`
+	AutoReverse *bool  `json:"auto_reverse"`
 }
 
 // PostOnCreate: POST ที่ส่ง status = "posted"
@@ -230,7 +236,72 @@ func (r Entry) ToData() (entities.EntryData, error) {
 			return entities.EntryData{}, err
 		}
 	}
-	return entities.EntryData{JournalID: journal, Date: d, Description: r.Description, Reference: r.Reference, Lines: lines}, nil
+	out := entities.EntryData{JournalID: journal, Date: d, Description: r.Description, Reference: r.Reference, Lines: lines,
+		AdjustingPeriod: r.AdjustingPeriod}
+	if r.Template != "" {
+		if out.Template, err = entities.ParseTemplate(r.Template); err != nil {
+			return entities.EntryData{}, invalid("template must be one of accrued_revenue, accrued_expense, deferred_revenue, prepaid_expense, other")
+		}
+		// ค่าเริ่มต้น: แบบค้างรับ / ค้างจ่าย / รับ-จ่ายล่วงหน้า กลับรายการอัตโนมัติ, "อื่น ๆ" ไม่กลับ
+		out.AutoReverse = out.Template != entities.TemplateOther
+	}
+	if r.AutoReverse != nil {
+		out.AutoReverse = *r.AutoReverse
+	}
+	if out.Template == "" && out.AutoReverse {
+		return entities.EntryData{}, invalid("auto_reverse requires a template")
+	}
+	return out, nil
+}
+
+// AdjustingEntry: POST /adjusting-entries — เหมือน Entry แต่ต้องมี template และผ่านรายการทันที
+func (r Entry) ToAdjustingData() (entities.EntryData, error) {
+	if r.Template == "" {
+		return entities.EntryData{}, invalid("template is required")
+	}
+	return r.ToData()
+}
+
+// YearEndFilter: GET /year-end-closings/{fiscalYear}
+func FiscalYearParam(raw string) (int, error) {
+	y, err := strconv.Atoi(raw)
+	if err != nil || y < 1900 || y > 9999 {
+		return 0, invalid("fiscal year must be a 4-digit year")
+	}
+	return y, nil
+}
+
+// LedgerSettings: PUT /ledger-settings (ไม่ส่ง / null = ไม่ตั้ง)
+type LedgerSettings struct {
+	RetainedEarningsAccountID *string `json:"retained_earnings_account_id"`
+	IncomeSummaryAccountID    *string `json:"income_summary_account_id"`
+	ClosingJournalID          *string `json:"closing_journal_id"`
+}
+
+func (r LedgerSettings) ToEntity() (entities.Settings, error) {
+	var out entities.Settings
+	opt := func(name string, raw *string) (*vo.AccountID, error) {
+		if raw == nil || *raw == "" {
+			return nil, nil
+		}
+		v, err := id[vo.AccountID](name, *raw)
+		return &v, err
+	}
+	var err error
+	if out.RetainedEarningsAccountID, err = opt("retained_earnings_account_id", r.RetainedEarningsAccountID); err != nil {
+		return out, err
+	}
+	if out.IncomeSummaryAccountID, err = opt("income_summary_account_id", r.IncomeSummaryAccountID); err != nil {
+		return out, err
+	}
+	if r.ClosingJournalID != nil && *r.ClosingJournalID != "" {
+		j, err := id[vo.JournalID]("closing_journal_id", *r.ClosingJournalID)
+		if err != nil {
+			return out, err
+		}
+		out.ClosingJournalID = &j
+	}
+	return out, nil
 }
 
 func (l Line) toData(n int) (entities.LineData, error) {

@@ -56,6 +56,27 @@ type Organization interface {
 	MissingDimensions(ctx context.Context, companyID vo.CompanyID, d Dimensions) ([]string, error)
 	// PeriodRange: งวดที่ครอบคลุมวันนั้นพร้อมวันแรก / วันสุดท้าย — ไม่มีงวด = nil (ไม่ใช่ error)
 	PeriodRange(ctx context.Context, companyID vo.CompanyID, date time.Time) (*PeriodRange, error)
+	// FiscalYears: ปีบัญชีทั้งหมด (เรียงตามปี) พร้อมจำนวนงวด / งวดที่ยังเปิด — ใช้กับปิดบัญชีสิ้นปี / งวดปรับปรุง
+	FiscalYears(ctx context.Context, companyID vo.CompanyID) ([]FiscalYear, error)
+}
+
+// FiscalYear คือปีบัญชีของ organization (งวด 1–12) — งวดปรับปรุง (งวดที่ 13) เป็นของ ledger
+type FiscalYear struct {
+	Year        int
+	Start       time.Time
+	End         time.Time
+	Periods     int
+	OpenPeriods int
+}
+
+// FindYear คืนปีบัญชีที่ต้องการ (nil = ไม่พบ)
+func FindYear(ys []FiscalYear, year int) *FiscalYear {
+	for i := range ys {
+		if ys[i].Year == year {
+			return &ys[i]
+		}
+	}
+	return nil
 }
 
 // PeriodRange คืองวดบัญชี (ใช้แสดงสถานะงวดใน dashboard)

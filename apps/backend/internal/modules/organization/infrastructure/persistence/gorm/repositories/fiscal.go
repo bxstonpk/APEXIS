@@ -25,6 +25,27 @@ type FiscalRepository struct{ db *gorm.DB }
 
 func NewFiscalRepository(db *gorm.DB) *FiscalRepository { return &FiscalRepository{db: db} }
 
+// YearStatuses — 1 query: ปีบัญชีทั้งหมดของบริษัท พร้อมจำนวนงวดและงวดที่ยังเปิด (GROUP BY ปี)
+func (r *FiscalRepository) YearStatuses(ctx context.Context, companyID vo.CompanyID) ([]dto.FiscalYearStatus, error) {
+	var rows []struct {
+		Year        int
+		StartDate   time.Time
+		EndDate     time.Time
+		Periods     int
+		OpenPeriods int
+	}
+	err := database.Conn(ctx, r.db).Table("organization_fiscal_years AS y").
+		Select("y.year, y.start_date, y.end_date, COUNT(p.id) AS periods, COUNT(p.id) FILTER (WHERE p.status = ?) AS open_periods", string(vo.PeriodOpen)).
+		Joins("LEFT JOIN organization_fiscal_periods AS p ON p.fiscal_year_id = y.id").
+		Where("y.company_id = ?", uuidOf(companyID)).
+		Group("y.id, y.year, y.start_date, y.end_date").Order("y.year").Scan(&rows).Error
+	out := make([]dto.FiscalYearStatus, len(rows))
+	for i, x := range rows {
+		out[i] = dto.FiscalYearStatus{Year: x.Year, StartDate: dateUTC(x.StartDate), EndDate: dateUTC(x.EndDate), Periods: x.Periods, OpenPeriods: x.OpenPeriods}
+	}
+	return out, err
+}
+
 // CreateYear เขียนปีบัญชี + งวด (2 ตาราง) — ต้องอยู่ใน transaction ของ use case
 func (r *FiscalRepository) CreateYear(ctx context.Context, fy *entities.FiscalYear) error {
 	tx, err := database.TxConn(ctx)

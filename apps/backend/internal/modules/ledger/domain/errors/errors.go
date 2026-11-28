@@ -54,6 +54,18 @@ var (
 	ErrNoFiscalPeriod     = errors.New("no fiscal period covers the date")
 	ErrRangeCrossesYear   = errors.New("start and end dates must be in the same fiscal year")
 	ErrPeriodClosed       = errors.New("fiscal period is closed")
+	// ปิดบัญชีสิ้นปี
+	ErrFiscalYearNotFound    = errors.New("fiscal year not found")
+	ErrYearHasOpenPeriods    = errors.New("all periods of the fiscal year must be closed")           // detailed
+	ErrSuspenseNotZero       = errors.New("suspense accounts must have a zero balance at year end") // detailed
+	ErrYearAlreadyClosed     = errors.New("fiscal year is already closed")
+	ErrYearNotClosed         = errors.New("fiscal year is not closed")
+	ErrNextYearClosed        = errors.New("the next fiscal year is closed (reopen it first)")
+	ErrYearClosed            = errors.New("fiscal year is closed (reopen the year-end closing first)")
+	ErrLedgerSettingsMissing = errors.New("ledger settings are incomplete (retained earnings account / closing journal)")
+	ErrAdjustingDate         = errors.New("adjusting-period entries must be dated the last day of the fiscal year")
+	ErrAdjustmentDate        = errors.New("adjusting entries must be dated the last day of a period")
+	ErrInvalidTemplate       = errors.New("invalid adjusting entry template")
 )
 
 // สิทธิ์ (403)
@@ -93,6 +105,17 @@ var all = []error{
 	ErrNoFiscalPeriod,
 	ErrRangeCrossesYear,
 	ErrPeriodClosed,
+	ErrFiscalYearNotFound,
+	ErrYearHasOpenPeriods,
+	ErrSuspenseNotZero,
+	ErrYearAlreadyClosed,
+	ErrYearNotClosed,
+	ErrNextYearClosed,
+	ErrYearClosed,
+	ErrLedgerSettingsMissing,
+	ErrAdjustingDate,
+	ErrAdjustmentDate,
+	ErrInvalidTemplate,
 	ErrForbidden,
 }
 

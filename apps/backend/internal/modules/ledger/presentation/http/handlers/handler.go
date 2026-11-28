@@ -72,8 +72,20 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrNoFiscalPeriod, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrRangeCrossesYear, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodClosed, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrFiscalYearNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrYearHasOpenPeriods, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrSuspenseNotZero, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrYearAlreadyClosed, Status: http.StatusConflict},
+	{Err: domain.ErrYearNotClosed, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrNextYearClosed, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrYearClosed, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrLedgerSettingsMissing, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrAdjustingDate, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrAdjustmentDate, Status: http.StatusUnprocessableEntity},
+	{Err: domain.ErrInvalidTemplate, Status: http.StatusBadRequest},
 }, requests.ErrValidation, domain.ErrInvalidNumbering, domain.ErrInvalidAmount, domain.ErrInvalidLine,
-	domain.ErrAccountNotFound, domain.ErrDimensionNotFound, domain.ErrAccountNotPostable)
+	domain.ErrAccountNotFound, domain.ErrDimensionNotFound, domain.ErrAccountNotPostable,
+	domain.ErrYearHasOpenPeriods, domain.ErrSuspenseNotZero)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response
 // fn คืน body ที่ห่อ envelope แล้ว (one / httpx.ToList) หรือ nil สำหรับ 204
