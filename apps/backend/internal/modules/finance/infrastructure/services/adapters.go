@@ -238,16 +238,17 @@ func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID 
 
 type vatFunc func(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
 
-// Vat แปลงยอดภาษีขายของ sales / ภาษีซื้อของ purchasing เป็น ports.Vat
+// Vat แปลงยอดภาษีขายของ sales / ภาษีซื้อของ purchasing (+ เงินสดย่อย) เป็น ports.Vat
 type Vat struct {
 	output vatFunc
-	input  vatFunc
+	inputs []vatFunc
 }
 
 var _ ports.Vat = (*Vat)(nil)
 
-func NewVat(r ReceivablesAccess, p PayablesAccess) *Vat {
-	return &Vat{output: r.OutputVat, input: p.InputVat}
+// NewVat: ภาษีซื้อ = จัดซื้อ + แหล่งอื่น (เช่น ใบสำคัญจ่ายเงินสดย่อยที่มีใบกำกับภาษี)
+func NewVat(r ReceivablesAccess, p PayablesAccess, more ...vatFunc) *Vat {
+	return &Vat{output: r.OutputVat, inputs: append([]vatFunc{p.InputVat}, more...)}
 }
 
 func (v *Vat) OutputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
@@ -255,7 +256,58 @@ func (v *Vat) OutputVat(ctx context.Context, companyID vo.CompanyID, start, end 
 }
 
 func (v *Vat) InputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (ports.VatTotals, error) {
-	return vatTotals(v.input(ctx, uuid.UUID(companyID), start, end))
+	var sum ports.VatTotals
+	for _, in := range v.inputs {
+		t, err := vatTotals(in(ctx, uuid.UUID(companyID), start, end))
+		if err != nil {
+			return ports.VatTotals{}, err
+		}
+		sum.Base, sum.Tax, sum.Documents = sum.Base.Add(t.Base), sum.Tax.Add(t.Tax), sum.Documents+t.Documents
+	}
+	return sum, nil
+}
+
+// ---------- เงินสดย่อย ----------
+
+// PettyCashAccess คือ public API ของ pettycash ที่ finance ใช้ (*pettycash.Module)
+type PettyCashAccess interface {
+	OpenRequests(ctx context.Context, companyID uuid.UUID) ([]integration.PettyCashRequest, error)
+	PayRequest(ctx context.Context, companyID, requestID uuid.UUID, doc integration.SettlementDoc) (integration.PettyCashPayment, error)
+	UnpayRequest(ctx context.Context, companyID, documentID uuid.UUID) error
+	InputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
+}
+
+var _ ports.PettyCash = (*PettyCash)(nil)
+
+type PettyCash struct{ pc PettyCashAccess }
+
+func NewPettyCash(pc PettyCashAccess) *PettyCash { return &PettyCash{pc: pc} }
+
+func (p *PettyCash) Open(ctx context.Context, companyID vo.CompanyID) ([]ports.PettyCashRequest, error) {
+	rows, err := p.pc.OpenRequests(ctx, uuid.UUID(companyID))
+	out := make([]ports.PettyCashRequest, len(rows))
+	for i, r := range rows {
+		out[i] = ports.PettyCashRequest{ID: r.ID, DocumentNo: r.DocumentNo, FundCode: r.FundCode, FundName: r.FundName, Kind: r.Kind,
+			Date: r.Date, Amount: r.Amount}
+	}
+	return out, err
+}
+
+func (p *PettyCash) Pay(ctx context.Context, companyID vo.CompanyID, requestID uuid.UUID, doc ports.SettlementDoc) (ports.PettyCashPayment, error) {
+	res, err := p.pc.PayRequest(ctx, uuid.UUID(companyID), requestID, integration.SettlementDoc{DocumentID: doc.ID, DocumentNo: doc.No, Date: doc.Date})
+	if err != nil {
+		return ports.PettyCashPayment{}, err
+	}
+	out := ports.PettyCashPayment{DocumentNo: res.DocumentNo, FundCode: res.FundCode, FundName: res.FundName, Amount: res.Amount,
+		Debits: make([]ports.PettyCashDebit, len(res.Debits))}
+	for i, d := range res.Debits {
+		out.Debits[i] = ports.PettyCashDebit{AccountID: vo.GLAccountID(d.AccountID), Description: d.Description, Amount: d.Amount}
+	}
+	return out, nil
+}
+
+func (p *PettyCash) Unpay(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error {
+	return p.pc.UnpayRequest(ctx, uuid.UUID(companyID), documentID)
 }
 
 func vatTotals(t integration.VatTotals, err error) (ports.VatTotals, error) {

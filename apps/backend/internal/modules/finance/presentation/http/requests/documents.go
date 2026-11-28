@@ -224,23 +224,35 @@ type PaymentLine struct {
 }
 
 // Payment: POST /payments — kind: supplier (supplier_id + lines.invoice_id) / other (payee + lines.account_id)
+// / petty_cash (petty_cash_request_id — บรรทัดมาจากคำขอของเงินสดย่อย, lines ไม่ใช้)
 type Payment struct {
-	Kind        string        `json:"kind"`
-	SupplierID  *string       `json:"supplier_id"`
-	Payee       *Party        `json:"payee"`
-	Date        string        `json:"date"`
-	Description string        `json:"description"`
-	Lines       []PaymentLine `json:"lines"`
-	Methods     []Method      `json:"methods"`
+	Kind               string        `json:"kind"`
+	SupplierID         *string       `json:"supplier_id"`
+	PettyCashRequestID *string       `json:"petty_cash_request_id"`
+	Payee              *Party        `json:"payee"`
+	Date               string        `json:"date"`
+	Description        string        `json:"description"`
+	Lines              []PaymentLine `json:"lines"`
+	Methods            []Method      `json:"methods"`
 }
 
 func (r Payment) ToInput() (dto.PaymentInput, error) {
 	kind, err := vo.ParsePaymentKind(r.Kind)
 	if err != nil {
-		return dto.PaymentInput{}, invalid("kind must be supplier or other")
+		return dto.PaymentInput{}, invalid("kind must be supplier, other or petty_cash")
 	}
 	out := dto.PaymentInput{Kind: kind, Description: r.Description}
 	if out.Date, err = date("date", r.Date); err != nil {
+		return out, err
+	}
+	if kind == vo.PaymentPettyCash {
+		if out.PettyCashRequestID, err = partyID("petty_cash_request_id", r.PettyCashRequestID); err != nil {
+			return out, err
+		}
+		if out.PettyCashRequestID == nil {
+			return out, invalid("petty_cash_request_id is required for kind petty_cash")
+		}
+		out.Methods, err = methods(r.Methods)
 		return out, err
 	}
 	if out.SupplierID, err = partyID("supplier_id", r.SupplierID); err != nil {

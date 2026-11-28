@@ -106,6 +106,33 @@ func (r *MembershipRepository) CompanyIDsOf(ctx context.Context, userID vo.UserI
 	return out, nil
 }
 
+// MemberNames — 1 query: memberships JOIN users (เฉพาะสมาชิก active)
+func (r *MembershipRepository) MemberNames(ctx context.Context, companyID vo.CompanyID, userIDs []vo.UserID) (map[vo.UserID]string, error) {
+	out := make(map[vo.UserID]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ids := make([]uuid.UUID, len(userIDs))
+	for i, id := range userIDs {
+		ids[i] = uuid.UUID(id)
+	}
+	var rows []struct {
+		UserID uuid.UUID
+		Name   string
+	}
+	err := database.Conn(ctx, r.db).Table("identity_memberships m").Select("m.user_id, u.name").
+		Joins("JOIN identity_users u ON u.id = m.user_id").
+		Where("m.company_id = ? AND m.status = ? AND m.user_id IN ?", uuid.UUID(companyID), vo.MembershipStatusActive, ids).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[vo.UserID(row.UserID)] = row.Name
+	}
+	return out, nil
+}
+
 // List — 2 query (+1 COUNT เฉพาะกรณีขอหน้าที่เกินข้อมูล):
 //  1. memberships JOIN users กรอง/เรียง/แบ่งหน้าใน DB พร้อม COUNT(*) OVER()
 //  2. role id ของ membership ในหน้านั้น (one-to-many แยก query เพื่อไม่ให้ pagination ผิด)

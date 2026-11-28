@@ -52,14 +52,27 @@ type PaymentLineInput struct {
 	WhtTypeID   *vo.WhtTypeID
 }
 
+// PaymentInput: kind = petty_cash ใช้ PettyCashRequestID (บรรทัดมาจากคำขอของเงินสดย่อย — Lines ไม่ใช้)
 type PaymentInput struct {
-	Kind        vo.PaymentKind
-	SupplierID  *uuid.UUID // kind = supplier
-	Payee       PartyInput // kind = other
-	Date        time.Time
-	Description string
-	Lines       []PaymentLineInput
-	Methods     []MethodInput
+	Kind               vo.PaymentKind
+	SupplierID         *uuid.UUID // kind = supplier
+	PettyCashRequestID *uuid.UUID // kind = petty_cash
+	Payee              PartyInput // kind = other
+	Date               time.Time
+	Description        string
+	Lines              []PaymentLineInput
+	Methods            []MethodInput
+}
+
+// PettyCashRequest คือคำขอเงินสดย่อยที่รอการเงินจ่าย (เลือกในหน้าจ่ายเงิน)
+type PettyCashRequest struct {
+	ID         string
+	DocumentNo string
+	FundCode   string
+	FundName   string
+	Kind       string
+	Date       time.Time
+	Amount     vo.Money
 }
 
 type TransferInput struct {

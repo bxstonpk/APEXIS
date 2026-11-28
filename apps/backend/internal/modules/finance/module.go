@@ -37,13 +37,14 @@ type Identity interface {
 	Authorize(ctx context.Context, userID, companyID uuid.UUID, permission string) (bool, error)
 }
 
-// Organization / Ledger / Receivables / Payables คือ public API ของ *organization.Module, *ledger.Module,
-// *sales.Module (ลูกหนี้) และ *purchasing.Module (เจ้าหนี้)
+// Organization / Ledger / Receivables / Payables / PettyCash คือ public API ของ *organization.Module, *ledger.Module,
+// *sales.Module (ลูกหนี้), *purchasing.Module (เจ้าหนี้) และ *pettycash.Module (คำขอเงินสดย่อย)
 type (
 	Organization = services.OrganizationAccess
 	Ledger       = services.LedgerAccess
 	Receivables  = services.ReceivablesAccess
 	Payables     = services.PayablesAccess
+	PettyCash    = services.PettyCashAccess
 )
 
 type Module struct {
@@ -52,7 +53,8 @@ type Module struct {
 	handler  *handlers.Handler
 }
 
-func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receivables Receivables, payables Payables) *Module {
+// New: pettyCash = การเงินจ่ายคำขอตั้ง / เพิ่มวงเงิน / เบิกชดเชยของเงินสดย่อย และรวมภาษีซื้อของใบสำคัญจ่ายเงินสดย่อยใน ภ.พ.30
+func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receivables Receivables, payables Payables, pettyCash PettyCash) *Module {
 	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
 		Tx:          gp.NewTransactionManager(db),
@@ -61,7 +63,8 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receiv
 		Ledger:      services.NewLedger(ledger),
 		Receivables: services.NewReceivables(receivables),
 		Payables:    services.NewPayables(payables),
-		Vat:         services.NewVat(receivables, payables),
+		PettyCash:   services.NewPettyCash(pettyCash),
+		Vat:         services.NewVat(receivables, payables, pettyCash.InputVat),
 		Accounts:    gormrepo.NewCashAccountRepository(db),
 		Settings:    gormrepo.NewSettingsRepository(db),
 		WhtTypes:    gormrepo.NewWhtTypeRepository(db),

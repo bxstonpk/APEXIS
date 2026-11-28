@@ -159,15 +159,17 @@ func ParseReceiptKind(raw string) (ReceiptKind, error) {
 	return parseEnum(raw, ReceiptKinds, domain.ErrInvalidKind)
 }
 
-// PaymentKind: supplier = จ่ายชำระหนี้ผู้ขาย (ตัดใบแจ้งหนี้ซื้อ), other = จ่ายเงินอื่น (ค่าใช้จ่าย / อื่นๆ ระบุบัญชีเอง)
+// PaymentKind: supplier = จ่ายชำระหนี้ผู้ขาย (ตัดใบแจ้งหนี้ซื้อ), other = จ่ายเงินอื่น (ค่าใช้จ่าย / อื่นๆ ระบุบัญชีเอง),
+// petty_cash = จ่ายคำขอเงินสดย่อย (ตั้ง / เพิ่มวงเงิน / เบิกชดเชย — บรรทัดเดบิตมาจาก pettycash)
 type PaymentKind string
 
 const (
-	PaymentSupplier PaymentKind = "supplier"
-	PaymentOther    PaymentKind = "other"
+	PaymentSupplier  PaymentKind = "supplier"
+	PaymentOther     PaymentKind = "other"
+	PaymentPettyCash PaymentKind = "petty_cash"
 )
 
-var PaymentKinds = []PaymentKind{PaymentSupplier, PaymentOther}
+var PaymentKinds = []PaymentKind{PaymentSupplier, PaymentOther, PaymentPettyCash}
 
 func ParsePaymentKind(raw string) (PaymentKind, error) {
 	return parseEnum(raw, PaymentKinds, domain.ErrInvalidKind)

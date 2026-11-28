@@ -132,6 +132,41 @@ type Settlements interface {
 	Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]OpenInvoice, error)
 }
 
+// ---------- เงินสดย่อย (pettycash) ----------
+
+// PettyCashDebit คือบรรทัดเดบิตของการจ่ายคำขอเงินสดย่อย (เครดิต = ช่องทางจ่ายของการเงิน)
+type PettyCashDebit struct {
+	AccountID   vo.GLAccountID
+	Description string
+	Amount      vo.Money
+}
+
+type PettyCashPayment struct {
+	DocumentNo string
+	FundCode   string
+	FundName   string
+	Amount     vo.Money
+	Debits     []PettyCashDebit
+}
+
+type PettyCashRequest struct {
+	ID         uuid.UUID
+	DocumentNo string
+	FundCode   string
+	FundName   string
+	Kind       string
+	Date       time.Time
+	Amount     vo.Money
+}
+
+// PettyCash: คำขอตั้งวงเงิน / เพิ่มวงเงิน / เบิกชดเชยของเงินสดย่อยที่การเงินจ่าย (อยู่ใน transaction ของใบจ่าย)
+// error กฎของเงินสดย่อยถูกห่อเป็น integration.ErrRejected
+type PettyCash interface {
+	Open(ctx context.Context, companyID vo.CompanyID) ([]PettyCashRequest, error)
+	Pay(ctx context.Context, companyID vo.CompanyID, requestID uuid.UUID, doc SettlementDoc) (PettyCashPayment, error)
+	Unpay(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
+}
+
 // ---------- ภาษีมูลค่าเพิ่ม (ภ.พ.30) ----------
 
 // VatTotals: ยอดรวมเอกสารภาษีของช่วงวันที่ (ใบกำกับหักใบลดหนี้แล้ว)

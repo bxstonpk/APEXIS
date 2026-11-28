@@ -305,7 +305,7 @@ func NewPayment(s PaymentState, amountDecimals int) (*Payment, error) {
 	if err = normalizeParty(&s.Party); err != nil {
 		return nil, err
 	}
-	if s.Kind == vo.PaymentOther && s.Party.Name == "" {
+	if s.Kind != vo.PaymentSupplier && s.Party.Name == "" {
 		return nil, bad("payee name is required")
 	}
 	if len(s.Lines) == 0 || len(s.Lines) > MaxLines {
@@ -321,8 +321,10 @@ func NewPayment(s PaymentState, amountDecimals int) (*Payment, error) {
 		switch {
 		case s.Kind == vo.PaymentSupplier && (l.InvoiceID == nil || l.AccountID != nil):
 			return nil, bad("line %d: invoice_id is required (and account_id is not used) for a supplier payment", i+1)
-		case s.Kind == vo.PaymentOther && (l.AccountID == nil || l.InvoiceID != nil):
+		case s.Kind != vo.PaymentSupplier && (l.AccountID == nil || l.InvoiceID != nil):
 			return nil, bad("line %d: account_id is required (and invoice_id is not used) for other payments", i+1)
+		case s.Kind == vo.PaymentPettyCash && (l.WhtTypeID != nil || !l.Wht.IsZero()):
+			return nil, bad("line %d: withholding tax does not apply to petty cash requests", i+1)
 		case l.InvoiceID != nil && invoices[*l.InvoiceID]:
 			return nil, bad("line %d: invoice appears more than once", i+1)
 		case !l.Amount.IsPositive() || !money(l.Amount):

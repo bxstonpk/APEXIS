@@ -230,11 +230,18 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 	handle("GET "+base+"/receipts/{receiptID}", getDoc(h, "receiptID", uc.Receipts.Get, responses.FromReceipt))
 	handle("PATCH "+base+"/receipts/{receiptID}", cancelDoc(h, "receiptID", uc.Receipts.Cancel, responses.FromReceipt))
 
-	handle("GET "+base+"/payments", listDocs(h, kinds("supplier", "other"), uc.Payments.List, responses.FromPaymentSummary))
+	handle("GET "+base+"/payments", listDocs(h, kinds("supplier", "other", "petty_cash"), uc.Payments.List, responses.FromPaymentSummary))
 	handle("POST "+base+"/payments", createDoc[requests.Payment](h, uc.Payments.Create, responses.FromPayment))
 	handle("GET "+base+"/payments/open-invoices", openInvoices(h, "supplier_id", func(ctx context.Context, a dto.Actor, id uuid.UUID, _ *uuid.UUID) ([]dto.OpenInvoice, error) {
 		return uc.Payments.OpenInvoices(ctx, a, id)
 	}))
+	// คำขอเงินสดย่อยที่รอการเงินจ่าย (หน้าจ่ายเงินชนิด petty_cash)
+	handle("GET "+base+"/payments/petty-cash-requests", func(w http.ResponseWriter, r *http.Request) {
+		h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+			rows, err := uc.Payments.PettyCashRequests(r.Context(), a)
+			return one(responses.FromPettyCashRequests(rows), err)
+		})
+	})
 	handle("GET "+base+"/payments/wht-types", h.listWhtTypes(true))
 	handle("GET "+base+"/payments/{paymentID}", getDoc(h, "paymentID", uc.Payments.Get, responses.FromPayment))
 	handle("PATCH "+base+"/payments/{paymentID}", cancelDoc(h, "paymentID", uc.Payments.Cancel, responses.FromPayment))

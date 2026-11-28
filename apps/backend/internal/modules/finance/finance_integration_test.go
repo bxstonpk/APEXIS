@@ -21,6 +21,7 @@ import (
 	"apexis/backend/internal/modules/inventory"
 	"apexis/backend/internal/modules/ledger"
 	"apexis/backend/internal/modules/organization"
+	"apexis/backend/internal/modules/pettycash"
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/database"
@@ -111,7 +112,7 @@ func setupApp(t *testing.T, hooks []integration.CompanyCreatedHook) api {
 		}
 	}
 	for _, migrate := range []func(*gorm.DB) error{
-		identity.Migrate, organization.Migrate, ledger.Migrate, inventory.Migrate, finance.Migrate, func(db *gorm.DB) error { _, err := purchasing.Migrate(db); return err }, func(db *gorm.DB) error { _, err := sales.Migrate(db); return err },
+		identity.Migrate, organization.Migrate, ledger.Migrate, inventory.Migrate, finance.Migrate, pettycash.Migrate, func(db *gorm.DB) error { _, err := purchasing.Migrate(db); return err }, func(db *gorm.DB) error { _, err := sales.Migrate(db); return err },
 	} {
 		if err := migrate(db); err != nil {
 			t.Fatal(err)
@@ -133,15 +134,17 @@ func setupApp(t *testing.T, hooks []integration.CompanyCreatedHook) api {
 	pur.RegisterRoutes(mux)
 	sal := sales.New(db, idm, org, led, inv)
 	sal.RegisterRoutes(mux)
-	fin := finance.New(db, idm, org, led, sal, pur)
+	pc := pettycash.New(db, idm, org, led)
+	pc.RegisterRoutes(mux)
+	fin := finance.New(db, idm, org, led, sal, pur, pc)
 	fin.RegisterRoutes(mux)
 	if hooks != nil {
-		for _, h := range append([]integration.CompanyCreatedHook{led.ProvisionCompany, sal.ProvisionCompany, pur.ProvisionCompany, inv.ProvisionCompany, fin.ProvisionCompany}, hooks...) {
+		for _, h := range append([]integration.CompanyCreatedHook{led.ProvisionCompany, sal.ProvisionCompany, pur.ProvisionCompany, inv.ProvisionCompany, fin.ProvisionCompany, pc.ProvisionCompany}, hooks...) {
 			org.OnCompanyCreated(h)
 		}
 	}
 	reg := reports.NewRegistry()
-	for _, r := range []interface{ RegisterReports(*reports.Registry) }{led, inv, pur, sal, fin} {
+	for _, r := range []interface{ RegisterReports(*reports.Registry) }{led, inv, pur, sal, fin, pc} {
 		r.RegisterReports(reg)
 	}
 	mux.Handle("GET /api/v1/companies/{companyID}/reports", idm.Authenticate(reg))
