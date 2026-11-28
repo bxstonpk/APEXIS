@@ -336,6 +336,20 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 ทุกประเภทธุรกิจมีทั้ง 2 สาย; จุดเกิดภาษีซื้อกำหนดที่ชนิดเอกสาร (ม.82/3, ม.86 — ขอคืนภาษีซื้อได้เมื่อได้รับใบกำกับภาษี)
 
+**รายการรวม "เอกสารซื้อ"**: `GET /purchase-documents?type=&status=&supplier_id=&q=&start_date=&end_date=&sort=&page=&page_size=`
+
+- `type` (คั่นด้วย comma, ไม่ส่ง = ทุกชนิดที่มีสิทธิ์อ่าน): `order` (PO), `receipt` (RC), `invoice` (PI), `work_order` (WO), `service_acceptance` (SA), `service_invoice` (SI) — ผิด = 400 `type_must_be_…`
+- สิทธิ์: คืนเฉพาะชนิดที่ผู้ใช้มีสิทธิ์อ่าน (สิทธิ์เดียวกับ endpoint รายการของชนิดนั้น); ขอเฉพาะชนิดที่ไม่มีสิทธิ์ = 403
+- `status`: `draft, approved, closed` (ใบสั่ง), `posted` (ใบรับ / ใบแจ้งหนี้), `cancelled` (ทุกชนิด); `sort`: `date | document_no` (ค่าเริ่มต้น `-date, -document_no`); วันที่ = วันที่ใบสั่ง / วันที่รับ / วันที่บันทึกบัญชี
+- query เดียว: `UNION ALL` ของ `purchasing_orders` / `purchasing_receipts` / `purchasing_invoices` (แต่ละส่วนกรองบริษัท / สาย (kind) / ผู้ขาย / สถานะ / ช่วงวันที่ด้วย index `(company_id, วันที่)` ของตาราง) แล้ว JOIN ผู้ขาย ค้นหา (เลขที่ / อ้างอิง / รหัส / ชื่อผู้ขาย) เรียงและแบ่งหน้าในฐานข้อมูล
+
+```jsonc
+// แถว — total: null สำหรับใบรับ / ตรวจรับงาน; outstanding / vat_status เฉพาะใบแจ้งหนี้ (null สำหรับชนิดอื่น)
+{ "type": "service_invoice", "id": "…", "document_no": "SI2026-000002", "date": "2026-11-24",
+  "supplier": { "id": "…", "code": "S001", "name": "…" }, "status": "posted", "reference": "SV-2611-002",
+  "total": "8560", "outstanding": "8560", "vat_status": "undue" }
+```
+
 | สาย | เอกสาร (เลขที่ตั้งได้) | Path | ภาษีซื้อ |
 |---|---|---|---|
 | สินค้า | ใบสั่งซื้อ PO → ใบรับสินค้า RC → ซื้อสินค้า PI | `/purchase-orders`, `/goods-receipts`, `/supplier-invoices` | เกิดตามวันที่ใบกำกับ (ส่งมอบสินค้า) |
