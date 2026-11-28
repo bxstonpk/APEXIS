@@ -38,7 +38,11 @@ export default async function Page({ params, searchParams }: Props) {
               value={formatAmount(d.purchases.current)}
               delta={{ current: d.purchases.current, previous: d.purchases.previous, upIsGood: false }}
               sub={format(t.invoices, { n: String(d.invoice_count) })}
-              href={can(ctx.permissions, 'purchasing.invoice:read') ? `${purchasingPage(companyId, 'invoices')}?${range}` : null}
+              href={
+                can(ctx.permissions, 'purchasing.invoice:read') || can(ctx.permissions, 'purchasing.service_invoice:read')
+                  ? `${purchasingPage(companyId, 'documents')}?type=invoice%2Cservice_invoice&${range}`
+                  : null
+              }
             />
             <KpiCard
               label={t.payables}

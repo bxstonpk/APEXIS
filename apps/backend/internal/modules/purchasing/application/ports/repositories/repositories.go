@@ -60,6 +60,12 @@ type ReceiptRepository interface {
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.ReceiptSummary], error)
 }
 
+// PurchaseDocumentRepository: รายการรวมเอกสารซื้อทุกชนิด (ใบสั่ง / ใบรับ / ใบแจ้งหนี้ × สินค้า / บริการ)
+// query เดียว — f.Types ต้องไม่ว่าง (use case กรองตามสิทธิ์แล้ว)
+type PurchaseDocumentRepository interface {
+	List(ctx context.Context, companyID vo.CompanyID, f dto.PurchaseDocumentFilter) (listing.Result[dto.PurchaseDocument], error)
+}
+
 type InvoiceRepository interface {
 	// SupplierInvoiceNoUsed: เลขที่ใบแจ้งหนี้ของผู้ขายนี้ถูกบันทึกแล้ว (ยังไม่ยกเลิก)
 	SupplierInvoiceNoUsed(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID, no string) (bool, error)

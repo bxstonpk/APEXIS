@@ -21,6 +21,7 @@ var (
 	ErrInvalidTaxType  = errors.New("tax_type must be individual or juristic")
 	ErrInvalidKind     = errors.New("kind must be return or allowance")
 	ErrInvalidReason   = errors.New("reason is required (up to 500 characters)")
+	ErrInvalidDocType  = errors.New("type must be order, receipt, invoice, work_order, service_acceptance or service_invoice")
 )
 
 // ไม่พบ (404)
@@ -96,7 +97,7 @@ var ErrForbidden = errors.New("permission denied")
 
 var all = []error{
 	ErrInvalidID, ErrInvalidCode, ErrInvalidName, ErrInvalidText, ErrInvalidStatus, ErrInvalidDate, ErrInvalidTaxID,
-	ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType,
+	ErrInvalidDocType, ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidVatRate, ErrInvalidLine, ErrInvalidTaxType,
 	ErrInvoicePaid, ErrOverPayment, ErrInvoiceNotPayable, ErrInactiveRef,
 	ErrSupplierNotFound, ErrOrderNotFound, ErrReceiptNotFound, ErrInvoiceNotFound, ErrItemNotFound,
 	ErrCodeExists, ErrInUse, ErrInvoiceNoExists, ErrDocumentNoUsed, ErrTaxIDExists,

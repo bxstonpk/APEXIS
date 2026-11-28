@@ -291,6 +291,18 @@ func (h *Handler) CancelReceipt(w http.ResponseWriter, r *http.Request) {
 
 // ---------- ใบแจ้งหนี้ ----------
 
+// GET /purchase-documents — รายการรวมเอกสารซื้อทุกชนิด (เฉพาะชนิดที่มีสิทธิ์อ่าน)
+func (h *Handler) ListPurchaseDocuments(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		f, err := requests.ParsePurchaseDocumentFilter(r.URL.Query())
+		if err != nil {
+			return nil, err
+		}
+		res, err := h.uc.Documents.List(r.Context(), dto.List[dto.PurchaseDocumentFilter]{Actor: a, Filter: f})
+		return httpx.ToList(res, responses.FromPurchaseDocument), err
+	})
+}
+
 func (h *Handler) ListInvoices(w http.ResponseWriter, r *http.Request) {
 	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
 		f, err := requests.ParseDocumentFilter(r.URL.Query(), false)

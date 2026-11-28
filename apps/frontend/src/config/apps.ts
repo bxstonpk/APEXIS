@@ -27,9 +27,17 @@ import { texts } from './texts'
 export type AppMenuItem = {
   /** key ใน texts.apps[app].menu และ path ต่อจาก /c/{companyId}/{app}/ */
   path: string
-  permission: string
+  /** สิทธิ์ที่ต้องมี — array = มีอย่างน้อยหนึ่ง (เช่น เมนูรวมเอกสารหลายชนิด) */
+  permission: string | readonly string[]
   /** ประเภทธุรกิจที่ใช้เมนูนี้ — ไม่ระบุ = ทุกประเภท (เปิดจาก URL ตรงถูกกันด้วย MenuGuard) */
   businessTypes?: readonly BusinessType[]
+  /** path อื่นที่นับเป็นเมนูนี้ (เน้นแท็บ) เช่น เมนู "เอกสารซื้อ" ครอบคลุม /orders, /invoices ... */
+  also?: readonly string[]
+}
+
+/** มีสิทธิ์ใช้เมนู: permission เดียว หรืออย่างน้อยหนึ่งใน array */
+export function canUseMenu(permissions: readonly string[], item: Pick<AppMenuItem, 'permission'>): boolean {
+  return typeof item.permission === 'string' ? can(permissions, item.permission) : item.permission.some((p) => can(permissions, p))
 }
 
 export type AppDefinition = {
@@ -70,14 +78,19 @@ export const apps: readonly AppDefinition[] = [
     tone: 'bg-app-purchasing',
     menu: [
       { path: 'dashboard', permission: 'purchasing.report:read' },
-      // สายซื้อสินค้า
-      { path: 'orders', permission: 'purchasing.order:read' },
-      { path: 'receipts', permission: 'purchasing.receipt:read' },
-      { path: 'invoices', permission: 'purchasing.invoice:read' },
-      // สายจ้างบริการ
-      { path: 'work-orders', permission: 'purchasing.work_order:read' },
-      { path: 'service-acceptances', permission: 'purchasing.service_acceptance:read' },
-      { path: 'service-invoices', permission: 'purchasing.service_invoice:read' },
+      // เอกสารซื้อ: รายการรวมใบสั่งซื้อ / ใบรับสินค้า / ซื้อสินค้า / ใบสั่งจ้าง / ตรวจรับงาน / ซื้อบริการ (กรองชนิดด้วย ?type=)
+      {
+        path: 'documents',
+        permission: [
+          'purchasing.order:read',
+          'purchasing.receipt:read',
+          'purchasing.invoice:read',
+          'purchasing.work_order:read',
+          'purchasing.service_acceptance:read',
+          'purchasing.service_invoice:read',
+        ],
+        also: ['orders', 'receipts', 'invoices', 'work-orders', 'service-acceptances', 'service-invoices'],
+      },
       { path: 'credit-notes', permission: 'purchasing.invoice:read' },
       { path: 'suppliers', permission: 'purchasing.supplier:read' },
       { path: 'reports', permission: 'purchasing.report:read' },
@@ -204,7 +217,7 @@ export function menuAvailableFor(appKey: string, path: string, businessType: Bus
 export function visibleApps(permissions: readonly string[], businessType?: BusinessType | null): AppDefinition[] {
   return apps
     .filter((app) => appAvailableFor(app, businessType))
-    .map((app) => ({ ...app, menu: app.menu.filter((m) => menuItemAvailableFor(m, businessType) && can(permissions, m.permission)) }))
+    .map((app) => ({ ...app, menu: app.menu.filter((m) => menuItemAvailableFor(m, businessType) && canUseMenu(permissions, m)) }))
     .filter((app) => app.menu.length > 0)
 }
 

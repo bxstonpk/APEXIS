@@ -4,7 +4,10 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cx } from '@/lib/cx'
 
-export type AppNavItem = { href: string; label: string }
+/** match: path อื่นที่นับเป็นเมนูนี้ (เช่น เมนูรวม "เอกสารซื้อ" เน้นเมื่ออยู่หน้าใบสั่งซื้อ / ซื้อบริการ ...) */
+export type AppNavItem = { href: string; label: string; match?: readonly string[] }
+
+const under = (pathname: string, href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
 /** เมนูด้านบนของแอป (บนแถบสีเข้ม) — เมนูที่ตรงกับ URL ปัจจุบัน (รวมหน้าย่อย เช่น /branches/new) ถูกเน้น; จอเล็กเลื่อนซ้าย-ขวาได้ */
 export function AppNav({ items, label }: { items: readonly AppNavItem[]; label: string }) {
@@ -12,7 +15,7 @@ export function AppNav({ items, label }: { items: readonly AppNavItem[]; label: 
   return (
     <nav aria-label={label} className="flex h-full min-w-0 items-stretch overflow-x-auto [scrollbar-width:none]">
       {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+        const active = under(pathname, item.href) || (item.match ?? []).some((h) => under(pathname, h))
         return (
           <Link
             key={item.href}

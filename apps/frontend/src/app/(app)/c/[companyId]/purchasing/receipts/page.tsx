@@ -1,17 +1,10 @@
-import type { Metadata } from 'next'
-import { texts } from '@/config'
-import { ReceiptList } from '@/features/purchasing/pages'
-import { getCompanyContext } from '@/lib/server/company'
+import { redirectToDocuments } from '@/features/purchasing/pages'
 import type { SearchParams } from '@/lib/url'
-
-export const metadata: Metadata = { title: texts.purchasing.receipts.pageTitle }
 
 type Props = { params: Promise<{ companyId: string }>; searchParams: Promise<SearchParams> }
 
-/** ใบรับสินค้า — สร้างจากหน้าใบสั่งซื้อที่อนุมัติแล้ว (ปุ่ม "รับสินค้า") */
+/** รายการใบรับสินค้าย้ายไปรวมที่ "เอกสารซื้อ" (?type=receipt) */
 export default async function Page({ params, searchParams }: Props) {
   const { companyId } = await params
-  const ctx = await getCompanyContext(companyId)
-  if (!ctx) return null
-  return <ReceiptList companyId={companyId} sp={await searchParams} />
+  redirectToDocuments(companyId, 'receipt', await searchParams)
 }

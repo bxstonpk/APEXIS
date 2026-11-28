@@ -91,6 +91,30 @@ func ParseDocumentFilter(v url.Values, orders bool) (dto.DocumentFilter, error) 
 	return f, q.err
 }
 
+// GET /purchase-documents?type=order,service_invoice&status=&supplier_id=&q=&start_date=&end_date=&sort=&page=&page_size=
+// status รับได้ทั้งสถานะใบสั่ง (draft / approved / closed / cancelled) และเอกสาร (posted / cancelled)
+func ParsePurchaseDocumentFilter(v url.Values) (dto.PurchaseDocumentFilter, error) {
+	q := &query{v: v}
+	types := parse(q, func() ([]vo.PurchaseDocType, error) { return listing.ParseList(v, "type", vo.ParsePurchaseDocType) })
+	statuses := parse(q, func() ([]string, error) {
+		return listing.ParseList(v, "status", func(raw string) (string, error) {
+			if _, err := vo.ParseOrderStatus(raw); err == nil {
+				return raw, nil
+			}
+			s, err := vo.ParseDocStatus(raw)
+			return string(s), err
+		})
+	})
+	f := dto.PurchaseDocumentFilter{
+		Types: types, Search: q.search(), Statuses: statuses, SupplierID: optionalIDParam[vo.SupplierID](q, "supplier_id"),
+		Sort: q.sort(dto.DocumentSortKeys, dto.DefaultDocumentSort), Page: q.page(),
+	}
+	if q.err == nil {
+		f.StartDate, f.EndDate, q.err = listing.ParseDateRange(v, "start_date", "end_date")
+	}
+	return f, q.err
+}
+
 func strs[T ~string](in []T) []string {
 	out := make([]string, len(in))
 	for i, s := range in {

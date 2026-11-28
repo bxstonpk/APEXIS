@@ -8,12 +8,11 @@ import { SalesDocForm } from '@/features/sales/SalesDocForm'
 import { dateText, EntryLink, Facts, LinesTable } from '@/features/sales/Views'
 import { can } from '@/lib/permissions'
 import { getCompanyContext } from '@/lib/server/company'
-import { listHrefFromBack } from '@/lib/server/list'
 import { param, type SearchParams } from '@/lib/url'
 import { flowTexts, loadPurchaseVat, PurchaseStatus, VatBadge } from './pages'
 import { TaxInvoicesPanel } from './TaxInvoicesPanel'
 import {
-  PURCHASE_DOC_QUERY_KEYS,
+  documentsHref,
   purchasingApi,
   purchasingDocsApi,
   purchasingPage,
@@ -37,8 +36,9 @@ export async function OrderNewPage({ companyId, flow }: { companyId: string; flo
   if (!can(ctx.permissions, flow.perms.orderManage)) return <NoPermission />
   const ft = flowTexts(flow)
   const path = purchasingPage(companyId, flow.menu.orders)
+  const listHref = documentsHref(companyId, flow.docTypes.orders)
   return (
-    <FormPage crumb={{ app: texts.apps.purchasing.name, label: ft.orders.heading, href: path }} title={ft.orders.newTitle}>
+    <FormPage crumb={{ app: texts.apps.purchasing.name, label: texts.purchasing.documents.heading, href: listHref }} title={ft.orders.newTitle}>
       <SalesDocForm
         kind={flow.kind === 'service' ? 'work-order' : 'purchase-order'}
         itemTypes={flow.itemTypes}
@@ -46,7 +46,7 @@ export async function OrderNewPage({ companyId, flow }: { companyId: string; flo
         partiesApi={purchasingApi.suppliers(companyId)}
         itemsApi={purchasingDocsApi.items(companyId)}
         docsPath={path}
-        listHref={path}
+        listHref={listHref}
         vat={await loadPurchaseVat(companyId)}
       />
     </FormPage>
@@ -65,7 +65,7 @@ export async function OrderViewPage({ companyId, docId, sp, flow }: DocProps) {
   const a = t.actions
   const service = flow.kind === 'service'
   const path = purchasingPage(companyId, flow.menu.orders)
-  const listHref = listHrefFromBack(path, param(await sp, 'back'), PURCHASE_DOC_QUERY_KEYS)
+  const listHref = documentsHref(companyId, flow.docTypes.orders, param(await sp, 'back'))
   const res = await loadItem<PurchaseOrder>(flow.api.orders(companyId), docId, ft.orders.notFound)
   if ('panel' in res) return res.panel
   const o = res.item
@@ -104,7 +104,7 @@ export async function OrderViewPage({ companyId, docId, sp, flow }: DocProps) {
 
   return (
     <FormPage
-      crumb={{ app: texts.apps.purchasing.name, label: ft.orders.heading, href: listHref }}
+      crumb={{ app: texts.apps.purchasing.name, label: texts.purchasing.documents.heading, href: listHref }}
       title={o.order_no ?? ft.orders.draftTitle}
       description={o.supplier.name}
       aside={<PurchaseStatus kind="order" status={o.status} />}
@@ -172,7 +172,7 @@ export async function ReceiptViewPage({ companyId, docId, sp, flow }: DocProps) 
   const t = texts.purchasing
   const ft = flowTexts(flow)
   const service = flow.kind === 'service'
-  const listHref = listHrefFromBack(purchasingPage(companyId, flow.menu.receipts), param(await sp, 'back'), PURCHASE_DOC_QUERY_KEYS)
+  const listHref = documentsHref(companyId, flow.docTypes.receipts, param(await sp, 'back'))
   const res = await loadItem<GoodsReceipt>(flow.api.receipts(companyId), docId, ft.receipts.notFound)
   if ('panel' in res) return res.panel
   const r = res.item
@@ -183,7 +183,7 @@ export async function ReceiptViewPage({ companyId, docId, sp, flow }: DocProps) 
       : []
   return (
     <FormPage
-      crumb={{ app: texts.apps.purchasing.name, label: ft.receipts.heading, href: listHref }}
+      crumb={{ app: texts.apps.purchasing.name, label: texts.purchasing.documents.heading, href: listHref }}
       title={r.document_no}
       description={r.supplier.name}
       aside={<PurchaseStatus kind="posted" status={r.status} />}
@@ -229,7 +229,7 @@ export async function InvoiceViewPage({ companyId, docId, sp, flow }: DocProps) 
   const ft = flowTexts(flow)
   const a = t.actions
   const service = flow.kind === 'service'
-  const listHref = listHrefFromBack(purchasingPage(companyId, flow.menu.invoices), param(await sp, 'back'), PURCHASE_DOC_QUERY_KEYS)
+  const listHref = documentsHref(companyId, flow.docTypes.invoices, param(await sp, 'back'))
   const res = await loadItem<SupplierInvoice>(flow.api.invoices(companyId), docId, ft.invoices.notFound)
   if ('panel' in res) return res.panel
   const inv = res.item
@@ -243,7 +243,7 @@ export async function InvoiceViewPage({ companyId, docId, sp, flow }: DocProps) 
   const vat = toUnits(inv.totals.vat) > 0n
   return (
     <FormPage
-      crumb={{ app: texts.apps.purchasing.name, label: ft.invoices.heading, href: listHref }}
+      crumb={{ app: texts.apps.purchasing.name, label: texts.purchasing.documents.heading, href: listHref }}
       title={inv.document_no}
       description={`${inv.supplier.name} · ${inv.supplier_invoice_no}`}
       aside={

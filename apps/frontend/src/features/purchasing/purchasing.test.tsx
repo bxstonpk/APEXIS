@@ -2,11 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { format, texts } from '@/config'
-import { findApp } from '@/config/apps'
+import { findApp, visibleApps } from '@/config/apps'
 import { SalesDocForm } from '@/features/sales/SalesDocForm'
+import { CreateMenu } from './CreateMenu'
 import { PurchaseFulfilForm } from './FulfilForm'
 import { taxInvoicePayload, TaxInvoicesPanel } from './TaxInvoicesPanel'
-import { flows, type PurchaseOrder } from './types'
+import { docTypeMenu, documentsHref, flows, PURCHASE_DOC_TYPES, type PurchaseOrder } from './types'
 
 /** จัดซื้อแยกสายซื้อสินค้า / จ้างบริการ: ตัวเลือกสินค้าตามชนิด, ตรวจรับงานไม่เกินที่สั่ง, บันทึกใบกำกับภาษีที่ได้รับ, ลำดับเมนู */
 
@@ -53,22 +54,15 @@ describe('สายเอกสาร', () => {
     expect(new URL(url, 'http://x').searchParams.get('type')).toBe('service')
   })
 
-  it('เมนูจัดซื้อ: สายซื้อสินค้าก่อน แล้วสายจ้างบริการ', () => {
-    expect(findApp('purchasing')!.menu.map((m) => m.path)).toEqual([
-      'dashboard',
-      'orders',
-      'receipts',
-      'invoices',
-      'work-orders',
-      'service-acceptances',
-      'service-invoices',
-      'credit-notes',
-      'suppliers',
-      'reports',
-      'settings',
-    ])
-    expect(texts.apps.purchasing.menu['work-orders']).toBe('ใบสั่งจ้าง')
-    expect(texts.apps.purchasing.menu['service-invoices']).toBe('ซื้อบริการ')
+  it('เมนูจัดซื้อ: เอกสารซื้อเมนูเดียวรวม 6 ชนิด — แท็บเน้นในหน้าเอกสารทุกชนิด', () => {
+    const menu = findApp('purchasing')!.menu
+    expect(menu.map((m) => m.path)).toEqual(['dashboard', 'documents', 'credit-notes', 'suppliers', 'reports', 'settings'])
+    expect(texts.apps.purchasing.menu.documents).toBe('เอกสารซื้อ')
+    const docs = menu.find((m) => m.path === 'documents')!
+    expect(docs.also).toEqual(['orders', 'receipts', 'invoices', 'work-orders', 'service-acceptances', 'service-invoices'])
+    // มีสิทธิ์อ่านชนิดใดชนิดหนึ่ง = เห็นเมนู
+    expect(visibleApps(['purchasing.service_invoice:read']).find((a) => a.key === 'purchasing')?.menu.map((m) => m.path)).toEqual(['documents'])
+    expect(visibleApps(['purchasing.supplier:read']).find((a) => a.key === 'purchasing')?.menu.map((m) => m.path)).toEqual(['suppliers'])
   })
 })
 
@@ -160,5 +154,42 @@ describe('ใบกำกับภาษีที่ได้รับ (ซื�
     expect(String(posts(fetch)[0]![0])).toContain('/si/1/tax-invoices')
     expect(bodyOf(posts(fetch)[0]!)).toEqual({ tax_invoice_no: 'TX-001', tax_invoice_date: expect.any(String) })
     await vi.waitFor(() => expect(refresh).toHaveBeenCalled())
+  })
+})
+
+describe('เอกสารซื้อ (รายการรวม)', () => {
+  it('ลิงก์กลับรายการคงตัวกรองเดิม (รวม type) — ไม่มี type เดิม = ชนิดของเอกสารนี้', () => {
+    expect(documentsHref('c1', 'work_order')).toBe('/c/c1/purchasing/documents?type=work_order')
+    expect(documentsHref('c1', 'order', 'type=order%2Cinvoice&q=abc&page=2&foo=x')).toBe('/c/c1/purchasing/documents?type=order%2Cinvoice&q=abc&page=2')
+    expect(Object.keys(docTypeMenu).sort()).toEqual([...PURCHASE_DOC_TYPES].sort())
+  })
+
+  it('ชื่อชนิดเอกสารครบ 6 ชนิดสำหรับป้ายในตาราง', () => {
+    expect(PURCHASE_DOC_TYPES.map((t) => texts.purchasing.documents.types[t])).toEqual(['ใบสั่งซื้อ', 'ใบรับสินค้า', 'ซื้อสินค้า', 'ใบสั่งจ้าง', 'ตรวจรับงาน', 'ซื้อบริการ'])
+  })
+
+  it('ปุ่มสร้าง: เมนูกลุ่มสินค้า / บริการ, ลูกศรเลื่อน, Esc ปิดแล้วโฟกัสกลับปุ่ม', async () => {
+    render(
+      <CreateMenu
+        label="สร้าง"
+        groups={[
+          { label: 'สินค้า', items: [{ label: 'ใบสั่งซื้อ', href: '/po/new' }, { label: 'ซื้อสินค้า', href: '/pi/new' }] },
+          { label: 'บริการ', items: [{ label: 'ใบสั่งจ้าง', href: '/wo/new' }] },
+        ]}
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'สร้าง' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    button.focus()
+    await userEvent.keyboard('{ArrowDown}')
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && g.textContent)).toEqual(['สินค้าใบสั่งซื้อซื้อสินค้า', 'บริการใบสั่งจ้าง'])
+    await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: 'ใบสั่งซื้อ' })).toHaveFocus())
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    expect(screen.getByRole('menuitem', { name: 'ใบสั่งจ้าง' })).toHaveFocus()
+    expect(screen.getByRole('menuitem', { name: 'ใบสั่งจ้าง' })).toHaveAttribute('href', '/wo/new')
+    await userEvent.keyboard('{Escape}')
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(button).toHaveFocus()
   })
 })
