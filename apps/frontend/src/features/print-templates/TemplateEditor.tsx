@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Alert, Button, ButtonLink, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
-import { apiRequest, errorMessage } from '@/lib/http'
+import { ApiError, apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
 import { builtinTemplate, familyOf } from './builtin'
 import { HELPERS, sampleData, VARIABLES, variableSnippet } from './catalog'
@@ -65,17 +65,21 @@ export function TemplateEditor({ companyId, initial, listHref, canManage }: { co
   const code = useRef<HTMLTextAreaElement>(null)
   const gutter = useRef<HTMLDivElement>(null)
 
+  // ตัวอย่างสร้างเฉพาะฝั่ง browser (DOMPurify ต้องมี DOM) — กัน HTML ฝั่ง server ไม่ตรงกับฝั่ง browser
+  const [mounted, setMounted] = useState(false)
   useEffect(() => {
+    setMounted(true)
     void loadAssetMap(companyId).then(setAssets)
   }, [companyId])
 
   const preview = useMemo(() => {
+    if (!mounted) return null
     try {
       return { html: renderDocument(html, paper, sampleData(docType), assets) }
     } catch (err) {
       return { error: format(t.errors.render, { message: err instanceof Error ? err.message : String(err) }) }
     }
-  }, [html, paper, docType, assets, t.errors.render])
+  }, [mounted, html, paper, docType, assets, t.errors.render])
 
   const lines = useMemo(() => html.split('\n').length, [html])
 
@@ -121,9 +125,12 @@ export function TemplateEditor({ companyId, initial, listHref, canManage }: { co
       else router.refresh()
     } catch (err) {
       const msg = errorMessage(err)
-      // เนื้อหาที่ไม่อนุญาต / HTML ผิด แสดงที่ช่อง HTML
-      if (err instanceof Error && 'code' in err && /template/.test(String((err as { code: string }).code))) setErrors({ html: `${msg} (${err.message})` })
-      else setFormError(msg)
+      // เนื้อหาที่ไม่อนุญาต / HTML ผิด แสดงที่ช่อง HTML พร้อมสิ่งที่ backend พบ (ข้อความหลัง ":")
+      const code = err instanceof ApiError ? err.code : ''
+      if (code.startsWith('template_')) {
+        const detail = err instanceof Error && err.message.includes(': ') ? err.message.slice(err.message.indexOf(': ') + 2) : ''
+        setErrors({ html: detail ? `${msg}: ${detail}` : msg })
+      } else setFormError(msg)
     } finally {
       setBusy(false)
     }
@@ -235,7 +242,9 @@ export function TemplateEditor({ companyId, initial, listHref, canManage }: { co
             {t.editor.preview} <span className="text-sm font-normal text-ink-muted">· {t.sampleData}</span>
           </h2>
           <div className="overflow-auto rounded-(--radius-panel) border border-line bg-neutral-100 p-3">
-            {'error' in preview ? (
+            {preview === null ? (
+              <div aria-busy="true" className="h-[60rem] w-full min-w-[220mm] animate-pulse rounded bg-white" />
+            ) : 'error' in preview ? (
               <Alert tone="error">{preview.error}</Alert>
             ) : (
               <iframe title={t.editor.preview} sandbox="allow-same-origin" srcDoc={preview.html} className="block h-[60rem] w-full min-w-[220mm] border-0 bg-transparent" />
