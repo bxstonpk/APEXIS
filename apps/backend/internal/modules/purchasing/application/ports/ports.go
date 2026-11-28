@@ -46,6 +46,7 @@ type Item struct {
 	Code               string
 	Name               string
 	Stock              bool
+	Service            bool // สินค้าชนิดบริการ — ใช้ได้เฉพาะเอกสารสายจ้างบริการ
 	Active             bool
 	PurchaseAccountID  *vo.AccountID
 	InventoryAccountID *vo.AccountID

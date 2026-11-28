@@ -111,6 +111,8 @@ type creditNoteRow struct {
 	InvoiceNo            string
 	SupplierInvoiceNo    string
 	Kind                 string
+	InvoiceKind          string
+	VatKind              string
 	SupplierCreditNoteNo string
 	CreditNoteDate       time.Time
 	Reason               string
@@ -132,15 +134,23 @@ type creditNoteRow struct {
 }
 
 func (r creditNoteRow) summary() dto.CreditNoteSummary {
+	doc := r.DocRow.summary()
+	doc.Kind = string(vo.KindOrDefault(r.InvoiceKind)) // สายของใบแจ้งหนี้เดิม
+	vatKind := r.VatKind
+	if vatKind == "" {
+		vatKind = "output"
+	}
 	return dto.CreditNoteSummary{
-		DocumentSummary: r.DocRow.summary(), Invoice: dto.Ref{ID: r.InvoiceID.String(), Code: r.InvoiceNo, Name: r.SupplierInvoiceNo},
-		Kind: r.Kind, SupplierCreditNoteNo: r.SupplierCreditNoteNo, CreditNoteDate: gp.DateUTC(r.CreditNoteDate), Reason: r.Reason,
+		DocumentSummary: doc, Invoice: dto.Ref{ID: r.InvoiceID.String(), Code: r.InvoiceNo, Name: r.SupplierInvoiceNo},
+		VatKind: vatKind,
+		Kind:    r.Kind, SupplierCreditNoteNo: r.SupplierCreditNoteNo, CreditNoteDate: gp.DateUTC(r.CreditNoteDate), Reason: r.Reason,
 		Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
 	}
 }
 
 var (
 	creditNoteSummaryColumns = creditNoteTable.columns(`d.invoice_id, i.document_no AS invoice_no, i.supplier_invoice_no, d.kind,
+		i.kind AS invoice_kind, d.vat_kind,
 		d.supplier_credit_note_no, d.credit_note_date, d.reason, d.total_net, d.total_vat, d.total_gross`)
 	creditNoteColumns = creditNoteSummaryColumns + `, d.description, d.vat_rate, d.price_includes_vat, d.warehouse_id, d.system,
 		d.stock_document_no, d.created_by, d.bill_from_name, d.bill_from_tax_id, d.bill_from_branch_no, d.bill_from_address`

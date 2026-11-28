@@ -25,7 +25,9 @@ type SettingsModel struct {
 	InputVatAccountID        *uuid.UUID      `gorm:"type:uuid"`
 	PriceVarianceAccountID   *uuid.UUID      `gorm:"type:uuid"`
 	PurchaseReturnsAccountID *uuid.UUID      `gorm:"type:uuid"`
-	UpdatedAt                time.Time       `gorm:"not null"`
+	UndueInputVatAccountID   *uuid.UUID      `gorm:"type:uuid"`
+	ServiceExpenseAccountID  *uuid.UUID      `gorm:"type:uuid"`
+	UpdatedAt               time.Time       `gorm:"not null"`
 }
 
 func (SettingsModel) TableName() string { return "purchasing_settings" }
@@ -71,6 +73,8 @@ type OrderModel struct {
 	SupplierID       uuid.UUID       `gorm:"type:uuid;not null;index"`
 	Supplier         *SupplierModel  `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
 	SupplierBranchNo string          `gorm:"size:5;not null;default:''"` // ว่าง = สาขาหลักของผู้ขาย
+	// Kind: goods = ใบสั่งซื้อ, service = ใบสั่งจ้าง (ข้อมูลเดิม = goods)
+	Kind string `gorm:"size:10;not null;default:'goods';check:chk_pur_orders_kind,kind IN ('goods','service')"`
 	OrderDate        time.Time       `gorm:"type:date;not null;index:idx_pur_orders_date,priority:2"`
 	DeliveryDate     *time.Time      `gorm:"type:date"`
 	Reference        string          `gorm:"size:100;not null;default:''"`
@@ -126,6 +130,8 @@ type ReceiptModel struct {
 	SupplierID      uuid.UUID          `gorm:"type:uuid;not null;index"`
 	Supplier        *SupplierModel     `gorm:"foreignKey:SupplierID;constraint:OnDelete:RESTRICT"`
 	ReceiptDate     time.Time          `gorm:"type:date;not null;index:idx_pur_receipts_date,priority:2"`
+	// Kind: goods = ใบรับสินค้า, service = ใบตรวจรับงาน (ไม่มีบัญชี / สต็อก)
+	Kind string `gorm:"size:10;not null;default:'goods';check:chk_pur_receipts_kind,kind IN ('goods','service')"`
 	WarehouseID     *uuid.UUID         `gorm:"type:uuid"`
 	Reference       string             `gorm:"size:100;not null;default:''"`
 	Description     string             `gorm:"size:500;not null;default:''"`
@@ -187,6 +193,16 @@ type InvoiceModel struct {
 	TotalVat          decimal.Decimal    `gorm:"type:numeric(24,6);not null"`
 	TotalGross        decimal.Decimal    `gorm:"type:numeric(24,6);not null;check:chk_pur_invoices_total,total_gross = total_net + total_vat"`
 	PaidAmount        decimal.Decimal    `gorm:"type:numeric(24,6);not null;default:0;check:chk_pur_invoices_paid,paid_amount >= 0 AND paid_amount <= total_gross"`
+	// Kind: goods = ซื้อสินค้า, service = ซื้อบริการ; TaxInvoiceNo / Date = ใบกำกับที่มาพร้อมใบแจ้งหนี้ค่าบริการ
+	Kind           string     `gorm:"size:10;not null;default:'goods';check:chk_pur_invoices_kind,kind IN ('goods','service')"`
+	TaxInvoiceNo   string     `gorm:"size:50;not null;default:''"`
+	TaxInvoiceDate *time.Time `gorm:"type:date"`
+	// ภาษีซื้อยังไม่ถึงกำหนด: false = ยังไม่ได้รับใบกำกับภาษี (ซื้อบริการ) — ใบเดิมทั้งหมด = ได้รับแล้ว
+	TaxInvoiceReceived bool            `gorm:"not null;default:true"`
+	VatRecognized      decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_pur_invoices_vat_recognized,vat_recognized >= 0"`
+	BaseRecognized     decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
+	VatCredited        decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_pur_invoices_vat_credited,vat_credited >= 0"`
+	BaseCredited       decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
 	EntryID           *uuid.UUID         `gorm:"type:uuid"`
 	EntryNo           string             `gorm:"size:30;not null;default:''"`
 	Status            string             `gorm:"size:20;not null;check:chk_pur_invoices_status,status IN ('posted','cancelled')"`
@@ -239,6 +255,8 @@ type CreditNoteModel struct {
 	CreditNoteDate       time.Time             `gorm:"type:date;not null"`
 	PostingDate          time.Time             `gorm:"type:date;not null;index:idx_pur_credit_notes_date,priority:2"`
 	Kind                 string                `gorm:"size:20;not null;check:chk_pur_credit_notes_kind,kind IN ('return','allowance')"`
+	// VatKind: output = ลดภาษีซื้อ (ใบเดิมได้รับใบกำกับแล้ว), undue = ลดภาษีซื้อยังไม่ถึงกำหนด (ไม่เข้ารายงานภาษีซื้อ)
+	VatKind string `gorm:"size:10;not null;default:'output';check:chk_pur_credit_notes_vat_kind,vat_kind IN ('output','undue')"`
 	Reason               string                `gorm:"size:500;not null;check:chk_pur_credit_notes_reason,reason <> ''"`
 	Description          string                `gorm:"size:500;not null;default:''"`
 	VatRate              decimal.Decimal       `gorm:"type:numeric(5,2);not null"`
@@ -294,11 +312,36 @@ type SequenceModel struct {
 
 func (SequenceModel) TableName() string { return "purchasing_number_sequences" }
 
+// TaxInvoiceModel คือใบกำกับภาษีที่ได้รับจากผู้ขายภายหลังใบแจ้งหนี้ (ซื้อบริการ — ผู้ขายออกเมื่อได้รับเงิน)
+// ทำให้ภาษีซื้อยังไม่ถึงกำหนดของใบแจ้งหนี้ถึงกำหนด: Dr ภาษีซื้อ / Cr ภาษีซื้อยังไม่ถึงกำหนด
+type TaxInvoiceModel struct {
+	ID             uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	CompanyID      uuid.UUID     `gorm:"type:uuid;not null;index:idx_pur_tax_invoices_date,priority:1;uniqueIndex:uq_pur_tax_invoices_no,priority:1,where:status = 'posted'"`
+	InvoiceID      uuid.UUID     `gorm:"type:uuid;not null;index"`
+	Invoice        *InvoiceModel `gorm:"foreignKey:InvoiceID;constraint:OnDelete:RESTRICT"`
+	SupplierID     uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:uq_pur_tax_invoices_no,priority:2,where:status = 'posted'"`
+	TaxInvoiceNo   string        `gorm:"size:50;not null;uniqueIndex:uq_pur_tax_invoices_no,priority:3,where:status = 'posted';check:chk_pur_tax_invoices_no,tax_invoice_no <> ''"`
+	TaxInvoiceDate time.Time     `gorm:"type:date;not null"`
+	PostingDate    time.Time     `gorm:"type:date;not null;index:idx_pur_tax_invoices_date,priority:2"`
+	Base           decimal.Decimal `gorm:"type:numeric(24,6);not null"`
+	Vat            decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_pur_tax_invoices_vat,vat > 0"`
+	EntryID        *uuid.UUID    `gorm:"type:uuid"`
+	EntryNo        string        `gorm:"size:30;not null;default:''"`
+	Status         string        `gorm:"size:20;not null;check:chk_pur_tax_invoices_status,status IN ('posted','cancelled')"`
+	CreatedBy      uuid.UUID     `gorm:"type:uuid;not null"`
+	CancelledBy    *uuid.UUID    `gorm:"type:uuid"`
+	CancelledAt    *time.Time    `gorm:"check:chk_pur_tax_invoices_cancelled,(status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL)"`
+	CreatedAt      time.Time     `gorm:"not null"`
+	UpdatedAt      time.Time     `gorm:"not null"`
+}
+
+func (TaxInvoiceModel) TableName() string { return "purchasing_tax_invoices" }
+
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&SettingsModel{}, &SupplierModel{}, &SupplierBranchModel{}, &OrderModel{}, &OrderLineModel{},
 		&ReceiptModel{}, &ReceiptLineModel{}, &InvoiceModel{}, &InvoiceLineModel{}, &SequenceModel{},
-		&SettlementModel{}, &CreditNoteModel{}, &CreditNoteLineModel{},
+		&SettlementModel{}, &CreditNoteModel{}, &CreditNoteLineModel{}, &TaxInvoiceModel{},
 	); err != nil {
 		return err
 	}

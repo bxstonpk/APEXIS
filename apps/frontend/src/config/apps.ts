@@ -69,9 +69,14 @@ export const apps: readonly AppDefinition[] = [
     tone: 'bg-app-purchasing',
     menu: [
       { path: 'dashboard', permission: 'purchasing.report:read' },
+      // สายซื้อสินค้า
       { path: 'orders', permission: 'purchasing.order:read' },
       { path: 'receipts', permission: 'purchasing.receipt:read' },
       { path: 'invoices', permission: 'purchasing.invoice:read' },
+      // สายจ้างบริการ
+      { path: 'work-orders', permission: 'purchasing.work_order:read' },
+      { path: 'service-acceptances', permission: 'purchasing.service_acceptance:read' },
+      { path: 'service-invoices', permission: 'purchasing.service_invoice:read' },
       { path: 'credit-notes', permission: 'purchasing.invoice:read' },
       { path: 'suppliers', permission: 'purchasing.supplier:read' },
       { path: 'reports', permission: 'purchasing.report:read' },

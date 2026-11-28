@@ -5,7 +5,7 @@ import { companyPath } from '@/config/apps'
 import { formatAmount, toUnits } from '@/features/accounting/money'
 import { ListHeader, ListToolbar, ListView, rowHref, rowLinkClass } from '@/features/lists/ListParts'
 import { FormPage, loadItem, NoPermission, RefFilter } from '@/features/organization/pages'
-import { docPerms, purchasingApi, purchasingDocsApi, purchasingPage, type SupplierInvoice } from '@/features/purchasing/types'
+import { docPerms, flows, purchasingApi, purchasingDocsApi, purchasingPage, type SupplierInvoice } from '@/features/purchasing/types'
 import { DocActions, type DocAction } from '@/features/sales/Actions'
 import { branchLabel } from '@/features/sales/PrintDocument'
 import { perms as salesPerms, salesApi, salesPage, type Invoice } from '@/features/sales/types'
@@ -160,9 +160,15 @@ function creditable(mode: CreditMode, inv: Invoice | SupplierInvoice): Creditabl
 export async function CreditNoteNewPage({ mode, companyId, invoiceId, invoiceKind = '' }: { mode: CreditMode; companyId: string; invoiceId: string; invoiceKind?: string }) {
   const ctx = await getCompanyContext(companyId)
   if (!ctx) return null
-  const service = mode === 'sales' && invoiceKind === 'service_invoice'
+  const salesService = mode === 'sales' && invoiceKind === 'service_invoice'
+  const purchaseService = mode === 'purchasing' && invoiceKind === 'service'
+  const service = salesService || purchaseService
   const base = cfg(mode, companyId)
-  const c = service ? { ...base, invoicesApi: salesApi.serviceInvoices(companyId), invoicesPath: salesPage(companyId, 'service-invoices') } : base
+  const c = salesService
+    ? { ...base, invoicesApi: salesApi.serviceInvoices(companyId), invoicesPath: salesPage(companyId, 'service-invoices') }
+    : purchaseService
+      ? { ...base, invoicesApi: flows.service.api.invoices(companyId), invoicesPath: purchasingPage(companyId, flows.service.menu.invoices) }
+      : base
   if (!can(ctx.permissions, c.post)) return <NoPermission />
   const t = texts.creditNotes
   const page = t[mode]
@@ -213,11 +219,18 @@ export async function CreditNoteViewPage({ mode, companyId, docId, sp }: { mode:
   const party = sales ? sales.bill_to : pur!.bill_from
   const partyRef = sales ? sales.customer : pur!.supplier
   const invoiceNo = pur ? `${d.invoice.document_no} · ${pur.invoice.supplier_invoice_no}` : d.invoice.document_no
-  const invoicesPath = sales?.invoice.kind === 'service_invoice' ? salesPage(companyId, 'service-invoices') : c.invoicesPath
+  const invoicesPath =
+    sales?.invoice.kind === 'service_invoice'
+      ? salesPage(companyId, 'service-invoices')
+      : pur?.invoice_kind === 'service'
+        ? purchasingPage(companyId, flows.service.menu.invoices)
+        : c.invoicesPath
+  const vatKind = sales?.vat_kind || (pur?.invoice_kind === 'service' && toUnits(d.totals.vat) !== 0n ? pur.vat_kind : undefined)
+  const vatKindLabels = sales ? texts.creditNotes.vatKinds : texts.creditNotes.purchaseVatKinds
   const facts: [string, React.ReactNode][] = [
     [mode === 'sales' ? texts.sales.fields.customer : texts.purchasing.facts.billFrom, [`${partyRef.code} ${party.name || partyRef.name}`, party.tax_id, branchLabel(party.branch_no)].filter(Boolean).join(' · ')],
     [f.invoice, <EntryLink key="i" href={`${invoicesPath}/${d.invoice.id}`} no={invoiceNo} />],
-    ...(sales?.vat_kind ? ([[texts.sales.fields.vatStatus, texts.creditNotes.vatKinds[sales.vat_kind] ?? sales.vat_kind]] as [string, string][]) : []),
+    ...(vatKind ? ([[texts.sales.fields.vatStatus, vatKindLabels[vatKind] ?? vatKind]] as [string, string][]) : []),
     ...(sales ? ([[f.invoiceDate, dateText(sales.invoice_date)]] as [string, string][]) : []),
     ...(pur
       ? ([

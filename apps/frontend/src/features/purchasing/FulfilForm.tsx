@@ -34,8 +34,11 @@ export function PurchaseFulfilForm({
   warehousesApi,
   docsPath,
   orderHref,
+  service = false,
 }: {
   mode: 'receipt' | 'invoice'
+  /** สายจ้างบริการ: ตรวจรับงาน (ไม่มีคลัง) / ซื้อบริการ (เลขที่ใบกำกับภาษีที่มาพร้อมใบแจ้งหนี้) */
+  service?: boolean
   order: PurchaseOrder
   apiPath: string
   warehousesApi: string
@@ -47,7 +50,7 @@ export function PurchaseFulfilForm({
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const left = remainingQty(order, mode)
-  const [head, setHead] = useState({ date: today(), invoiceDate: today(), supplierInvoiceNo: '', reference: '', description: '' })
+  const [head, setHead] = useState({ date: today(), invoiceDate: today(), supplierInvoiceNo: '', reference: '', description: '', taxInvoiceNo: '', taxInvoiceDate: '' })
   const [warehouse, setWarehouse] = useState<Ref | null>(null)
   const [qty, setQty] = useState<Record<number, string>>(() => Object.fromEntries(order.lines.map((l) => [l.line_no, toString(left[l.line_no]!)])))
   const [price, setPrice] = useState<Record<number, string>>(() => Object.fromEntries(order.lines.map((l) => [l.line_no, l.unit_price])))
@@ -60,7 +63,7 @@ export function PurchaseFulfilForm({
     e.preventDefault()
     const errs: Record<string, string> = {}
     if (!head.date) errs.date = requiredMessage(invoice ? f.postingDate : texts.sales.fields.date)
-    if (invoice && !head.supplierInvoiceNo.trim()) errs.supplierInvoiceNo = requiredMessage(f.supplierInvoiceNo)
+    if (invoice && !head.supplierInvoiceNo.trim()) errs.supplierInvoiceNo = requiredMessage(service ? f.serviceInvoiceNo : f.supplierInvoiceNo)
     if (invoice && !head.invoiceDate) errs.invoiceDate = requiredMessage(f.invoiceDate)
     const lines: { order_line_no: number; quantity: string; unit_price?: string }[] = []
     for (const l of order.lines) {
@@ -82,7 +85,12 @@ export function PurchaseFulfilForm({
     if (Object.keys(errs).length) return focusFirstInvalid(formRef.current)
     const body: Record<string, unknown> = invoice
       ? { order_id: order.id, supplier_invoice_no: head.supplierInvoiceNo.trim(), invoice_date: head.invoiceDate, date: head.date, description: head.description.trim(), lines }
-      : { order_id: order.id, date: head.date, warehouse_id: warehouse?.id ?? null, reference: head.reference.trim(), description: head.description.trim(), lines }
+      : { order_id: order.id, date: head.date, reference: head.reference.trim(), description: head.description.trim(), lines }
+    if (!invoice && !service) body.warehouse_id = warehouse?.id ?? null
+    if (invoice && service && head.taxInvoiceNo.trim()) {
+      body.tax_invoice_no = head.taxInvoiceNo.trim()
+      body.tax_invoice_date = head.taxInvoiceDate || head.invoiceDate
+    }
     setBusy(true)
     setError(null)
     try {
@@ -104,7 +112,7 @@ export function PurchaseFulfilForm({
         {invoice ? (
           <>
             <TextField
-              label={f.supplierInvoiceNo}
+              label={service ? f.serviceInvoiceNo : f.supplierInvoiceNo}
               required
               value={head.supplierInvoiceNo}
               maxLength={50}
@@ -112,7 +120,7 @@ export function PurchaseFulfilForm({
               onChange={(e) => setHead((h) => ({ ...h, supplierInvoiceNo: e.target.value }))}
             />
             <TextField
-              label={f.invoiceDate}
+              label={service ? f.serviceInvoiceDate : f.invoiceDate}
               required
               type="date"
               value={head.invoiceDate}
@@ -126,17 +134,37 @@ export function PurchaseFulfilForm({
               error={errors.date}
               onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))}
             />
+            {service && (
+              <>
+                <TextField
+                  label={f.taxInvoiceNo}
+                  value={head.taxInvoiceNo}
+                  maxLength={50}
+                  onChange={(e) => setHead((h) => ({ ...h, taxInvoiceNo: e.target.value }))}
+                />
+                <TextField
+                  label={f.taxInvoiceDate}
+                  type="date"
+                  value={head.taxInvoiceDate}
+                  disabled={!head.taxInvoiceNo.trim()}
+                  onChange={(e) => setHead((h) => ({ ...h, taxInvoiceDate: e.target.value }))}
+                />
+              </>
+            )}
           </>
         ) : (
           <>
             <TextField label={texts.sales.fields.date} required type="date" value={head.date} error={errors.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} />
-            <ReferenceSelect
-              label={f.warehouse}              source={warehousesApi}
-              params={{ status: 'active' }}
-              value={warehouse}
-              onChange={setWarehouse}
-              texts={texts.reference}
-            />
+            {!service && (
+              <ReferenceSelect
+                label={f.warehouse}
+                source={warehousesApi}
+                params={{ status: 'active' }}
+                value={warehouse}
+                onChange={setWarehouse}
+                texts={texts.reference}
+              />
+            )}
             <TextField label={texts.sales.fields.reference} value={head.reference} maxLength={100} onChange={(e) => setHead((h) => ({ ...h, reference: e.target.value }))} />
           </>
         )}
@@ -154,7 +182,7 @@ export function PurchaseFulfilForm({
                 <th scope="col" className="px-3 py-2.5 font-medium">
                   {texts.sales.lines.item}
                 </th>
-                {[f.ordered, f.received, f.invoiced, f.remaining].map((h) => (
+                {[f.ordered, service ? f.accepted : f.received, f.invoiced, f.remaining].map((h) => (
                   <th key={h} scope="col" className="px-3 py-2.5 text-right font-medium">
                     {h}
                   </th>
@@ -224,7 +252,7 @@ export function PurchaseFulfilForm({
             {texts.common.cancel}
           </ButtonLink>
           <Button type="submit" loading={busy} loadingText={texts.common.saving}>
-            {invoice ? t.actions.invoice : t.actions.receive}
+            {invoice ? (service ? t.actions.serviceInvoice : t.actions.invoice) : service ? t.actions.accept : t.actions.receive}
           </Button>
         </div>
       </FormBar>

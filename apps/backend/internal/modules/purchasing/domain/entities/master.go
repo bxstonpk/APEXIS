@@ -31,6 +31,10 @@ type Settings struct {
 	PriceVarianceAccountID *vo.AccountID // ผลต่างราคา (perpetual: ราคาใบแจ้งหนี้ต่างจากราคารับสินค้า)
 	// PurchaseReturnsAccountID: ส่งคืนสินค้าและส่วนลดรับ (ใบลดหนี้ผู้ขาย) — ไม่ตั้ง = บัญชีซื้อของสินค้า
 	PurchaseReturnsAccountID *vo.AccountID
+	// UndueInputVatAccountID: ภาษีซื้อยังไม่ถึงกำหนด — ซื้อบริการที่ยังไม่ได้รับใบกำกับภาษี (ม.82/3: ใช้สิทธิเมื่อได้รับใบกำกับ)
+	UndueInputVatAccountID *vo.AccountID
+	// ServiceExpenseAccountID: บัญชีค่าใช้จ่ายเริ่มต้นของซื้อบริการ (บรรทัดไม่ระบุบัญชีเอง)
+	ServiceExpenseAccountID *vo.AccountID
 }
 
 func DefaultSettings() Settings { return Settings{VatRate: DefaultVatRate} }
@@ -45,7 +49,7 @@ func NewSettings(s Settings) (Settings, error) {
 // AccountIDs คือบัญชีทั้งหมดที่ตั้งไว้ (ใช้ตรวจกับ ledger)
 func (s Settings) AccountIDs() []vo.AccountID {
 	var out []vo.AccountID
-	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID, s.PurchaseReturnsAccountID} {
+	for _, p := range []*vo.AccountID{s.GRIRAccountID, s.APAccountID, s.InputVatAccountID, s.PriceVarianceAccountID, s.PurchaseReturnsAccountID, s.UndueInputVatAccountID, s.ServiceExpenseAccountID} {
 		if p != nil {
 			out = append(out, *p)
 		}
@@ -59,6 +63,8 @@ func (s Settings) Require(fields ...string) error {
 		"journal_id": s.JournalID != nil, "grir_account_id": s.GRIRAccountID != nil, "ap_account_id": s.APAccountID != nil,
 		"input_vat_account_id": s.InputVatAccountID != nil, "price_variance_account_id": s.PriceVarianceAccountID != nil,
 		"purchase_returns_account_id": s.PurchaseReturnsAccountID != nil,
+		"undue_input_vat_account_id":  s.UndueInputVatAccountID != nil,
+		"service_expense_account_id":  s.ServiceExpenseAccountID != nil,
 	}
 	var missing []string
 	for _, f := range fields {

@@ -390,7 +390,7 @@ export function MoneyDocForm({
                           {inv.partner_ref && <span className="block text-[12px] text-ink-muted">{inv.partner_ref}</span>}
                           {(inv.kind || undue || inv.tax_invoice) && (
                             <span className="mt-1 flex flex-wrap gap-1">
-                              {inv.kind && <Badge tone={inv.kind === 'service_invoice' ? 'info' : 'neutral'}>{tr.kindBadge[inv.kind] ?? inv.kind}</Badge>}
+                              {inv.kind && <Badge tone={inv.kind === 'service_invoice' || inv.kind === 'service' ? 'info' : 'neutral'}>{tr.kindBadge[inv.kind] ?? inv.kind}</Badge>}
                               {undue && (
                                 <Badge tone="warning">
                                   {format(tr.vatUndue, { vat: formatAmount(inv.vat_undue) })}

@@ -54,7 +54,8 @@ func SettingsToModel(companyID vo.CompanyID, s entities.Settings) models.Setting
 		CompanyID: uuid.UUID(companyID), VatRate: s.VatRate, JournalID: OptUUID(s.JournalID),
 		GRIRAccountID: OptUUID(s.GRIRAccountID), APAccountID: OptUUID(s.APAccountID),
 		InputVatAccountID: OptUUID(s.InputVatAccountID), PriceVarianceAccountID: OptUUID(s.PriceVarianceAccountID),
-		PurchaseReturnsAccountID: OptUUID(s.PurchaseReturnsAccountID),
+		PurchaseReturnsAccountID: OptUUID(s.PurchaseReturnsAccountID), UndueInputVatAccountID: OptUUID(s.UndueInputVatAccountID),
+		ServiceExpenseAccountID: OptUUID(s.ServiceExpenseAccountID),
 	}
 }
 
@@ -64,6 +65,8 @@ func SettingsToEntity(m models.SettingsModel) entities.Settings {
 		GRIRAccountID: OptID[vo.AccountID](m.GRIRAccountID), APAccountID: OptID[vo.AccountID](m.APAccountID),
 		InputVatAccountID: OptID[vo.AccountID](m.InputVatAccountID), PriceVarianceAccountID: OptID[vo.AccountID](m.PriceVarianceAccountID),
 		PurchaseReturnsAccountID: OptID[vo.AccountID](m.PurchaseReturnsAccountID),
+		UndueInputVatAccountID:   OptID[vo.AccountID](m.UndueInputVatAccountID),
+		ServiceExpenseAccountID:  OptID[vo.AccountID](m.ServiceExpenseAccountID),
 	}
 }
 
@@ -113,7 +116,7 @@ func OrderToModel(o *entities.Order) models.OrderModel {
 		OrderDate: s.Data.Date, DeliveryDate: s.Data.DeliveryDate, Reference: s.Data.Reference, Description: s.Data.Description,
 		VatRegistered: s.Terms.Vat.Registered, VatRate: s.Terms.Vat.Rate, PriceIncludesVat: s.Terms.Vat.Inclusive,
 		PaymentTermDays: s.Terms.PaymentTermDays, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
-		Status: string(s.Status), CreatedBy: uuid.UUID(s.CreatedBy),
+		Status: string(s.Status), CreatedBy: uuid.UUID(s.CreatedBy), Kind: string(vo.KindOrDefault(string(s.Data.Kind))),
 	}
 	if a := s.Approval; a != nil {
 		no, year, by, at := a.OrderNo, a.FiscalYear, uuid.UUID(a.By), a.At
@@ -143,7 +146,7 @@ func OrderToEntity(m models.OrderModel) *entities.Order {
 	s := entities.OrderState{
 		ID: vo.OrderID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Status: vo.OrderStatus(m.Status), CreatedBy: vo.UserID(m.CreatedBy),
 		Data: entities.OrderData{
-			SupplierID: vo.SupplierID(m.SupplierID), SupplierBranchNo: m.SupplierBranchNo, Date: DateUTC(m.OrderDate), DeliveryDate: optDate(m.DeliveryDate),
+			Kind: vo.KindOrDefault(m.Kind), SupplierID: vo.SupplierID(m.SupplierID), SupplierBranchNo: m.SupplierBranchNo, Date: DateUTC(m.OrderDate), DeliveryDate: optDate(m.DeliveryDate),
 			Reference: m.Reference, Description: m.Description, PriceIncludesVat: m.PriceIncludesVat,
 			Lines: make([]entities.OrderLineData, len(m.Lines)),
 		},
@@ -197,7 +200,7 @@ func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
 		ReceiptDate: s.Date, WarehouseID: OptUUID(s.WarehouseID), Reference: s.Reference, Description: s.Description,
 		System: string(s.System), StockDocumentID: OptUUID(s.StockDocumentID), StockDocumentNo: s.StockDocumentNo,
 		TotalValue: decimal.Zero, EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
-		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
+		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At, Kind: string(vo.KindOrDefault(string(s.Kind))),
 	}
 	m.CancelledBy, m.CancelledAt = cancellation(s.Cancellation)
 	m.Lines = make([]models.ReceiptLineModel, len(s.Lines))
@@ -213,7 +216,7 @@ func ReceiptToModel(r *entities.Receipt) models.ReceiptModel {
 
 func ReceiptToEntity(m models.ReceiptModel) *entities.Receipt {
 	s := entities.ReceiptState{
-		ID: vo.ReceiptID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), OrderID: vo.OrderID(m.OrderID), SupplierID: vo.SupplierID(m.SupplierID),
+		ID: vo.ReceiptID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Kind: vo.KindOrDefault(m.Kind), OrderID: vo.OrderID(m.OrderID), SupplierID: vo.SupplierID(m.SupplierID),
 		Date: DateUTC(m.ReceiptDate), WarehouseID: OptID[vo.WarehouseID](m.WarehouseID), Reference: m.Reference,
 		Description: m.Description, System: vo.AccountingSystem(m.System), StockDocumentID: OptID[vo.StockDocumentID](m.StockDocumentID),
 		StockDocumentNo: m.StockDocumentNo, Status: vo.DocStatus(m.Status), Lines: make([]entities.ReceiptLine, len(m.Lines)),
@@ -241,6 +244,9 @@ func InvoiceToModel(inv *entities.Invoice) models.InvoiceModel {
 		BillFromName: s.BillFrom.Name, BillFromTaxID: s.BillFrom.TaxID, BillFromBranchNo: s.BillFrom.BranchNo, BillFromAddress: s.BillFrom.Address,
 		Description: s.Description, VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive,
 		TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross, PaidAmount: s.Paid,
+		TaxInvoiceReceived: s.TaxInvoiceReceived, VatRecognized: s.Deferral.VatRecognized, BaseRecognized: s.Deferral.BaseRecognized,
+		VatCredited: s.Deferral.VatCredited, BaseCredited: s.Deferral.BaseCredited,
+		Kind: string(vo.KindOrDefault(string(s.Kind))), TaxInvoiceNo: s.TaxInvoiceNo, TaxInvoiceDate: s.TaxInvoiceDate,
 		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
 		CreatedBy: uuid.UUID(s.Posting.By), PostedAt: s.Posting.At,
 	}
@@ -264,7 +270,9 @@ func InvoiceToEntity(m models.InvoiceModel) *entities.Invoice {
 		BillFrom: entities.BillFrom{Name: m.BillFromName, TaxID: m.BillFromTaxID, BranchNo: m.BillFromBranchNo, Address: m.BillFromAddress},
 		Vat:      services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
 		Totals:   services.Amounts{Net: m.TotalNet, Vat: m.TotalVat, Gross: m.TotalGross}, Paid: m.PaidAmount,
-		Status: vo.DocStatus(m.Status), Lines: make([]entities.InvoiceLine, len(m.Lines)),
+		TaxInvoiceReceived: m.TaxInvoiceReceived, Kind: vo.KindOrDefault(m.Kind), TaxInvoiceNo: m.TaxInvoiceNo, TaxInvoiceDate: optDate(m.TaxInvoiceDate),
+		Deferral: entities.VatDeferral{VatRecognized: m.VatRecognized, BaseRecognized: m.BaseRecognized, VatCredited: m.VatCredited, BaseCredited: m.BaseCredited},
+		Status:   vo.DocStatus(m.Status), Lines: make([]entities.InvoiceLine, len(m.Lines)),
 		Posting: entities.Posting{
 			DocumentNo: m.DocumentNo, FiscalYear: m.FiscalYear, PeriodID: vo.FiscalPeriodID(m.FiscalPeriodID),
 			EntryID: OptID[vo.EntryID](m.EntryID), EntryNo: m.EntryNo, By: vo.UserID(m.CreatedBy), At: m.PostedAt,
@@ -290,7 +298,7 @@ func CreditNoteToModel(c *entities.CreditNote) models.CreditNoteModel {
 		FiscalPeriodID: uuid.UUID(s.Posting.PeriodID), InvoiceID: uuid.UUID(s.InvoiceID), OrderID: uuid.UUID(s.OrderID),
 		SupplierID: uuid.UUID(s.SupplierID), SupplierCreditNoteNo: s.SupplierCreditNoteNo,
 		BillFromName: s.BillFrom.Name, BillFromTaxID: s.BillFrom.TaxID, BillFromBranchNo: s.BillFrom.BranchNo, BillFromAddress: s.BillFrom.Address,
-		CreditNoteDate: s.CreditNoteDate, PostingDate: s.Date, Kind: string(s.Kind), Reason: s.Reason, Description: s.Description,
+		CreditNoteDate: s.CreditNoteDate, PostingDate: s.Date, Kind: string(s.Kind), VatKind: vatKind(s.VatKind), Reason: s.Reason, Description: s.Description,
 		VatRate: s.Vat.Rate, PriceIncludesVat: s.Vat.Inclusive, TotalNet: s.Totals.Net, TotalVat: s.Totals.Vat, TotalGross: s.Totals.Gross,
 		WarehouseID: OptUUID(s.WarehouseID), System: string(s.System), StockDocumentID: OptUUID(s.StockDocumentID), StockDocumentNo: s.StockDocumentNo,
 		EntryID: OptUUID(s.Posting.EntryID), EntryNo: s.Posting.EntryNo, Status: string(s.Status),
@@ -313,7 +321,7 @@ func CreditNoteToEntity(m models.CreditNoteModel) *entities.CreditNote {
 		ID: vo.CreditNoteID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), InvoiceID: vo.InvoiceID(m.InvoiceID), OrderID: vo.OrderID(m.OrderID),
 		SupplierID: vo.SupplierID(m.SupplierID), SupplierCreditNoteNo: m.SupplierCreditNoteNo,
 		BillFrom:       entities.BillFrom{Name: m.BillFromName, TaxID: m.BillFromTaxID, BranchNo: m.BillFromBranchNo, Address: m.BillFromAddress},
-		CreditNoteDate: DateUTC(m.CreditNoteDate), Date: DateUTC(m.PostingDate), Kind: vo.CreditNoteKind(m.Kind), Reason: m.Reason,
+		CreditNoteDate: DateUTC(m.CreditNoteDate), Date: DateUTC(m.PostingDate), Kind: vo.CreditNoteKind(m.Kind), VatKind: m.VatKind, Reason: m.Reason,
 		Description: m.Description, Vat: services.VatTerms{Registered: !m.VatRate.IsZero(), Rate: m.VatRate, Inclusive: m.PriceIncludesVat},
 		WarehouseID: OptID[vo.WarehouseID](m.WarehouseID), System: vo.AccountingSystem(m.System),
 		StockDocumentID: OptID[vo.StockDocumentID](m.StockDocumentID), StockDocumentNo: m.StockDocumentNo,
@@ -340,3 +348,11 @@ func CreditNoteToEntity(m models.CreditNoteModel) *entities.CreditNote {
 func addressToModel(a thaiaddress.Address) models.AddressColumns { return models.AddressColumns(a) }
 
 func addressToDomain(m models.AddressColumns) thaiaddress.Address { return thaiaddress.Address(m) }
+
+// vatKind: ใบลดหนี้เดิม / ไม่ระบุ = output (ลดภาษีซื้อ)
+func vatKind(k string) string {
+	if k == "" {
+		return "output"
+	}
+	return k
+}

@@ -232,7 +232,7 @@ type OpenInvoice struct {
 	Net         string `json:"net"` // ยอดก่อน VAT
 	Gross       string `json:"gross"`
 	Outstanding string `json:"outstanding"`
-	Kind        string `json:"kind"`        // ขาย: invoice | service_invoice | deposit ("" = จัดซื้อ)
+	Kind        string `json:"kind"`        // ขาย: invoice | service_invoice | deposit; จัดซื้อ: goods | service
 	VatUndue    string `json:"vat_undue"`   // ขายบริการ: ภาษีขายยังไม่ถึงกำหนด
 	TaxInvoice  bool   `json:"tax_invoice"` // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }

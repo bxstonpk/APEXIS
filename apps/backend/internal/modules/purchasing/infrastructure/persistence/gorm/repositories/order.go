@@ -133,6 +133,7 @@ func (r *OrderRepository) FindForUpdate(ctx context.Context, companyID vo.Compan
 }
 
 type orderRow struct {
+	Kind             string
 	ID               uuid.UUID
 	OrderNo          *string
 	OrderDate        time.Time
@@ -169,7 +170,7 @@ func dateOpt(t *time.Time) *time.Time {
 
 func (r orderRow) summary() dto.OrderSummary {
 	out := dto.OrderSummary{
-		ID: r.ID.String(), Date: gp.DateUTC(r.OrderDate), DeliveryDate: dateOpt(r.DeliveryDate),
+		Kind: string(vo.KindOrDefault(r.Kind)), ID: r.ID.String(), Date: gp.DateUTC(r.OrderDate), DeliveryDate: dateOpt(r.DeliveryDate),
 		Supplier: dto.Ref{ID: r.SupplierID.String(), Code: r.SupplierCode, Name: r.SupplierName}, SupplierBranchNo: r.SupplierBranchNo, Reference: r.Reference,
 		VatRate: r.VatRate, PriceIncludesVat: r.PriceIncludesVat,
 		Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross}, Status: r.Status,
@@ -180,7 +181,7 @@ func (r orderRow) summary() dto.OrderSummary {
 	return out
 }
 
-const orderSummaryColumns = `o.id, o.order_no, o.order_date, o.delivery_date, o.supplier_id, s.code AS supplier_code, s.name AS supplier_name, o.supplier_branch_no,
+const orderSummaryColumns = `o.kind, o.id, o.order_no, o.order_date, o.delivery_date, o.supplier_id, s.code AS supplier_code, s.name AS supplier_name, o.supplier_branch_no,
 	o.reference, o.vat_rate, o.price_includes_vat, o.total_net, o.total_vat, o.total_gross, o.status`
 
 const orderColumns = orderSummaryColumns + `, o.description, o.vat_registered, o.payment_term_days, o.created_by,
@@ -230,6 +231,9 @@ func (r *OrderRepository) List(ctx context.Context, companyID vo.CompanyID, f dt
 	}
 	base := func() *gorm.DB {
 		q := r.base(ctx, companyID)
+		if f.Kind != "" {
+			q = q.Where("o.kind = ?", string(f.Kind))
+		}
 		if len(f.Statuses) > 0 {
 			q = q.Where("o.status IN ?", f.Statuses)
 		}

@@ -21,6 +21,7 @@ import (
 func (r *InvoiceRepository) Open(ctx context.Context, companyID vo.CompanyID, supplierID vo.SupplierID) ([]dto.OpenInvoice, error) {
 	var rows []struct {
 		ID                uuid.UUID
+		Kind              string
 		DocumentNo        string
 		SupplierInvoiceNo string
 		InvoiceDate       time.Time
@@ -30,12 +31,12 @@ func (r *InvoiceRepository) Open(ctx context.Context, companyID vo.CompanyID, su
 		PaidAmount        decimal.Decimal
 	}
 	err := database.Conn(ctx, r.db).Table("purchasing_invoices").
-		Select("id, document_no, supplier_invoice_no, invoice_date, due_date, total_net, total_gross, paid_amount").
+		Select("id, kind, document_no, supplier_invoice_no, invoice_date, due_date, total_net, total_gross, paid_amount").
 		Where("company_id = ? AND supplier_id = ? AND status = 'posted' AND paid_amount < total_gross", uuidOf(companyID), uuidOf(supplierID)).
 		Order("due_date, document_no").Limit(500).Scan(&rows).Error
 	out := make([]dto.OpenInvoice, len(rows))
 	for i, x := range rows {
-		out[i] = dto.OpenInvoice{ID: x.ID.String(), DocumentNo: x.DocumentNo, SupplierInvoiceNo: x.SupplierInvoiceNo,
+		out[i] = dto.OpenInvoice{Kind: string(vo.KindOrDefault(x.Kind)), ID: x.ID.String(), DocumentNo: x.DocumentNo, SupplierInvoiceNo: x.SupplierInvoiceNo,
 			Date: gp.DateUTC(x.InvoiceDate), DueDate: gp.DateUTC(x.DueDate), Net: x.TotalNet, Gross: x.TotalGross, Outstanding: x.TotalGross.Sub(x.PaidAmount)}
 	}
 	return out, err

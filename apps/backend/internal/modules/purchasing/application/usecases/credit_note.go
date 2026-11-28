@@ -65,6 +65,10 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		if is.Status != vo.DocPosted {
 			return domain.ErrInvoiceNotCreditable
 		}
+		service := inv.Kind() == vo.KindService
+		if service && d.Kind == vo.CreditReturn {
+			return domain.ErrReturnOnServiceInvoice // บริการคืนไม่ได้ — ลดราคา / ส่วนลดภายหลังเท่านั้น
+		}
 		if d.Date.Before(is.Date) {
 			return domain.ErrCreditBeforeInvoice
 		}
@@ -180,6 +184,13 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		for i := range lines {
 			l := &lines[i]
 			item := found[l.ItemID]
+			if service {
+				// ซื้อบริการ: ลดค่าใช้จ่ายของบรรทัดเดิม
+				if acc := is.Lines[l.InvoiceLineNo-1].VarianceAccountID; acc != nil {
+					l.AccountID = *acc
+					continue
+				}
+			}
 			if l.Stock && system == vo.Perpetual {
 				if item.InventoryAccountID == nil {
 					return fmt.Errorf("%w: inventory account of item %s not set", domain.ErrSettingsMissing, item.Code)
@@ -210,12 +221,25 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		}
 		s := cn.State()
 
+		// VAT ของใบลดหนี้: ใบเดิมยังรอใบกำกับ = ลดภาษีซื้อยังไม่ถึงกำหนด (ไม่ใช่ใบลดหนี้ทางภาษี), ได้รับใบกำกับแล้ว = ลดภาษีซื้อ
+		undue, err := inv.CreditUndue(s.Totals.Net, s.Totals.Vat)
+		if err != nil {
+			return err
+		}
+		cn.SetVatKind(undue)
 		inputVat := vo.AccountID{}
 		if !s.Totals.Vat.IsZero() {
-			if err := settings.Require("input_vat_account_id"); err != nil {
+			key := "input_vat_account_id"
+			if undue {
+				key = "undue_input_vat_account_id"
+			}
+			if err := settings.Require(key); err != nil {
 				return err
 			}
 			inputVat = *settings.InputVatAccountID
+			if undue {
+				inputVat = *settings.UndueInputVatAccountID
+			}
 		}
 		if journal := cn.Journal(*settings.APAccountID, inputVat); len(journal) > 0 {
 			entryID, entryNo, err := uc.ledger.Post(ctx, ports.LedgerEntry{
@@ -239,6 +263,11 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		}
 		if err := uc.invoices.SavePaid(ctx, []*entities.Invoice{inv}); err != nil {
 			return err
+		}
+		if undue {
+			if err := uc.invoices.SaveVat(ctx, inv); err != nil {
+				return err
+			}
 		}
 		id = cn.ID()
 		if err := uc.notes.Create(ctx, cn); err != nil {
@@ -285,6 +314,12 @@ func (uc *CreditNoteUseCases) Cancel(ctx context.Context, in dto.ByID[vo.CreditN
 			}
 			for _, inv := range invoices {
 				inv.Unpay(amounts[inv.ID()])
+				if s.VatKind == entities.VatKindUndue && inv.ID() == s.InvoiceID {
+					inv.UncreditUndue(s.Totals.Net, s.Totals.Vat)
+					if err := uc.invoices.SaveVat(ctx, inv); err != nil {
+						return err
+					}
+				}
 			}
 			if err := uc.invoices.SavePaid(ctx, invoices); err != nil {
 				return err
