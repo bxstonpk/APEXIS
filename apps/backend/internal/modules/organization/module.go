@@ -64,6 +64,8 @@ func New(db *gorm.DB, identity Identity) *Module {
 		Fiscal:        gormrepo.NewFiscalRepository(db),
 		Dimensions:    gormrepo.NewDimensionRepository(db),
 		Numbering:     gormrepo.NewNumberingRepository(db),
+		Templates:     gormrepo.NewDocumentTemplateRepository(db),
+		Assets:        gormrepo.NewDocumentAssetRepository(db),
 		DocumentTypes: types,
 	})
 	return &Module{UseCases: uc, identity: identity, documentTypes: types, provisioning: provisioning, handler: handlers.NewHandler(uc, identity.CurrentUserID)}

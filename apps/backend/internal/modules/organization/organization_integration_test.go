@@ -97,7 +97,8 @@ func setup(t *testing.T) api {
 	}
 	for _, tbl := range []string{
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
-		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings", "organization_companies",
+		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings",
+		"organization_document_templates", "organization_document_assets", "organization_companies",
 		"identity_membership_roles", "identity_memberships", "identity_role_permissions", "identity_roles", "identity_users",
 		"organization_company_profiles", "identity_companies", // ตารางของ schema เดิม (ก่อนย้ายบริษัทมา organization)
 	} {

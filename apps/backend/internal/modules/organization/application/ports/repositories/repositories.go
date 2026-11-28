@@ -106,3 +106,24 @@ type NumberingRepository interface {
 	List(ctx context.Context, companyID vo.CompanyID) (map[string]numbering.Format, error)
 	Save(ctx context.Context, companyID vo.CompanyID, docType string, f numbering.Format) error
 }
+
+// DocumentTemplateRepository: แม่แบบเอกสารพิมพ์ของบริษัท — ค่าเริ่มต้นได้ 1 แม่แบบต่อชนิดเอกสาร (partial unique index)
+type DocumentTemplateRepository interface {
+	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.DocumentTemplateID) (*entities.DocumentTemplate, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.DocumentTemplateID) (dto.DocumentTemplate, error)
+	GetDefault(ctx context.Context, companyID vo.CompanyID, docType string) (dto.DocumentTemplate, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentTemplateFilter) (listing.Result[dto.DocumentTemplate], error)
+	Create(ctx context.Context, t *entities.DocumentTemplate, createdBy vo.UserID) error
+	Update(ctx context.Context, t *entities.DocumentTemplate) error
+	// SetDefault ล้างค่าเริ่มต้นเดิมของชนิดเอกสารนั้น แล้วตั้ง id เป็นค่าเริ่มต้น (ต้องอยู่ใน transaction)
+	SetDefault(ctx context.Context, companyID vo.CompanyID, docType string, id vo.DocumentTemplateID) error
+	Delete(ctx context.Context, companyID vo.CompanyID, id vo.DocumentTemplateID) error
+}
+
+// DocumentAssetRepository: รูปของแม่แบบ (เก็บใน DB) — ชื่อไม่ซ้ำในบริษัท
+type DocumentAssetRepository interface {
+	List(ctx context.Context, companyID vo.CompanyID) ([]dto.DocumentAsset, error)
+	Content(ctx context.Context, companyID vo.CompanyID, id vo.DocumentAssetID) (dto.DocumentAssetContent, error)
+	Create(ctx context.Context, a *entities.DocumentAsset) error
+	Delete(ctx context.Context, companyID vo.CompanyID, id vo.DocumentAssetID) error
+}

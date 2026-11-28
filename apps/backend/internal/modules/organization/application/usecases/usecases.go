@@ -36,6 +36,8 @@ type Deps struct {
 	Fiscal        repositories.FiscalRepository
 	Dimensions    repositories.DimensionRepository
 	Numbering     repositories.NumberingRepository
+	Templates     repositories.DocumentTemplateRepository
+	Assets        repositories.DocumentAssetRepository
 	DocumentTypes *DocumentTypes
 	Clock         func() time.Time // optional
 }
@@ -50,6 +52,7 @@ type UseCases struct {
 	Fiscal        *FiscalUseCases
 	Lookups       *LookupUseCases
 	Numbering     *NumberingUseCases
+	Templates     *TemplateUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -80,6 +83,7 @@ func New(d Deps) *UseCases {
 		Fiscal:    &FiscalUseCases{base: b, fiscal: d.Fiscal, hooks: d.FiscalHooks},
 		Lookups:   &LookupUseCases{companies: d.Companies, fiscal: d.Fiscal, dimensions: d.Dimensions},
 		Numbering: &NumberingUseCases{base: b, repo: d.Numbering, types: d.DocumentTypes, now: d.Clock},
+		Templates: &TemplateUseCases{base: b, members: d.Members, templates: d.Templates, assets: d.Assets},
 	}
 }
 

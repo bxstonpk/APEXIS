@@ -22,6 +22,9 @@ const (
 	PermFiscalPeriodClose Permission = "organization.fiscal_period:close"  // ปิด / เปิดงวด
 	PermNumberingRead     Permission = "organization.numbering:read"
 	PermNumberingManage   Permission = "organization.numbering:manage" // รูปแบบเลขที่เอกสาร
+	// แม่แบบเอกสารพิมพ์: อ่านเพื่อพิมพ์ = สมาชิกทุกคน (ไม่ต้องมีสิทธิ์นี้); read = เปิดหน้าจัดการแม่แบบ; manage = สร้าง / แก้ / ลบ / ตั้งค่าเริ่มต้น / รูป
+	PermDocumentTemplateRead   Permission = "organization.document_template:read"
+	PermDocumentTemplateManage Permission = "organization.document_template:manage"
 )
 
 func (p Permission) String() string { return string(p) }
@@ -45,4 +48,6 @@ var AllPermissions = []Permission{
 	PermFiscalPeriodClose,
 	PermNumberingRead,
 	PermNumberingManage,
+	PermDocumentTemplateRead,
+	PermDocumentTemplateManage,
 }

@@ -336,3 +336,52 @@ type FiscalPeriod struct {
 	EndDate      time.Time
 	Status       string
 }
+
+// ---------- แม่แบบเอกสารพิมพ์ ----------
+
+// DocumentTemplateFilter: GET /document-templates?doc_type=&q=&status=&page=&page_size=
+type DocumentTemplateFilter struct {
+	DocType string
+	Search  string
+	Status  string
+	Page    listing.Page
+}
+
+// DocumentTemplate คือแม่แบบที่บริษัทสร้าง (หน้ารายการไม่ส่ง HTML — HTML อยู่ในรายตัว)
+type DocumentTemplate struct {
+	ID        string
+	DocType   string
+	Name      string
+	HTML      string
+	Paper     string
+	IsDefault bool
+	Status    string
+	CreatedBy string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type DocumentTemplateInput struct {
+	Actor
+	DocType string
+	Name    string
+	HTML    string
+	Paper   string
+	Status  string
+	Default bool // สร้างแล้วตั้งเป็นค่าเริ่มต้นทันที
+}
+
+// DocumentAsset คือรูปที่แม่แบบใช้ (หน้ารายการไม่ส่งเนื้อไฟล์)
+type DocumentAsset struct {
+	ID          string
+	Name        string
+	ContentType string
+	Size        int
+	CreatedAt   time.Time
+}
+
+type DocumentAssetContent struct {
+	ContentType string
+	Data        []byte
+	UpdatedAt   time.Time
+}
