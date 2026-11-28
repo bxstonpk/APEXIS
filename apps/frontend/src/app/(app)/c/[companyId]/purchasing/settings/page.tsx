@@ -12,7 +12,7 @@ import { loadRef } from '@/lib/server/list'
 
 export const metadata: Metadata = { title: texts.purchasing.settings.pageTitle }
 
-/** ค่าตั้งการจัดซื้อ — ชื่อสมุด / บัญชีที่ตั้งไว้โหลดพร้อมกัน (5 คำขอขนานกัน) */
+/** ค่าตั้งการจัดซื้อ — ชื่อสมุด / บัญชีที่ตั้งไว้โหลดพร้อมกัน (8 คำขอขนานกัน) */
 export default async function Page({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params
   const ctx = await getCompanyContext(companyId)
@@ -25,13 +25,15 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   if (!res || typeof res !== 'object' || !('vat_rate' in res)) return <Alert tone="error">{errorMessage(res)}</Alert>
   const s = res as PurchasingSettings
   const accounts = purchasingDocsApi.accounts(companyId)
-  const [journal, grir, ap, inputVat, variance, returns] = await Promise.all([
+  const [journal, grir, ap, inputVat, undue, variance, returns, serviceExpense] = await Promise.all([
     loadRef(purchasingDocsApi.journals(companyId), s.journal_id ?? ''),
     loadRef(accounts, s.grir_account_id ?? ''),
     loadRef(accounts, s.ap_account_id ?? ''),
     loadRef(accounts, s.input_vat_account_id ?? ''),
+    loadRef(accounts, s.undue_input_vat_account_id ?? ''),
     loadRef(accounts, s.price_variance_account_id ?? ''),
     loadRef(accounts, s.purchase_returns_account_id ?? ''),
+    loadRef(accounts, s.service_expense_account_id ?? ''),
   ])
   return (
     <FormPage title={t.heading}>
@@ -41,7 +43,16 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
         accountsApi={accounts}
         canManage={can(ctx.permissions, docPerms.settingsManage)}
         settings={s}
-        refs={{ journal_id: journal, grir_account_id: grir, ap_account_id: ap, input_vat_account_id: inputVat, price_variance_account_id: variance, purchase_returns_account_id: returns }}
+        refs={{
+          journal_id: journal,
+          grir_account_id: grir,
+          ap_account_id: ap,
+          input_vat_account_id: inputVat,
+          undue_input_vat_account_id: undue,
+          price_variance_account_id: variance,
+          purchase_returns_account_id: returns,
+          service_expense_account_id: serviceExpense,
+        }}
       />
     </FormPage>
   )

@@ -7,7 +7,14 @@ import { format, texts } from '@/config'
 import type { CsvCell } from '@/features/accounting/csv'
 import { formatAmount, plainAmount } from '@/features/accounting/money'
 import { ReportActions } from '@/features/accounting/ReportActions'
-import { purchasingDocsApi, purchasingPage, type ApAging, type InputVatReport, type PurchasingOutstandingRow } from '@/features/purchasing/types'
+import {
+  purchasingDocsApi,
+  purchasingPage,
+  type ApAging,
+  type InputVatReport,
+  type PurchasingOutstandingRow,
+  type UndueInputVatReport,
+} from '@/features/purchasing/types'
 import { ReportTable } from '@/features/reports/ReportTable'
 import { formatDate, today } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
@@ -19,8 +26,10 @@ export const metadata: Metadata = { title: texts.purchasing.reports.pageTitle }
 
 type Props = { params: Promise<{ companyId: string }>; searchParams: Promise<SearchParams> }
 
-const BOOKS = ['outstanding-purchase-orders', 'ap-aging', 'input-vat'] as const
+const BOOKS = ['outstanding-purchase-orders', 'outstanding-work-orders', 'ap-aging', 'input-vat', 'undue-input-vat'] as const
 type Book = (typeof BOOKS)[number]
+const OUTSTANDING: readonly Book[] = ['outstanding-purchase-orders', 'outstanding-work-orders']
+const AS_OF: readonly Book[] = ['ap-aging', 'undue-input-vat']
 
 const num = 'px-3 py-2 text-right tabular-nums whitespace-nowrap print:py-0.5'
 const totalCell = `${num} border-b-4 border-double border-ink/70`
@@ -42,32 +51,39 @@ export default async function Page({ params, searchParams }: Props) {
   const end = param(sp, 'end_date') || today()
   const start = param(sp, 'start_date') || `${end.slice(0, 8)}01`
   const query = new URLSearchParams({ book, page_size: '100' })
-  if (book === 'ap-aging' || book === 'input-vat') query.set('end_date', end)
+  if (book !== 'outstanding-purchase-orders' && book !== 'outstanding-work-orders') query.set('end_date', end)
   if (book === 'input-vat') query.set('start_date', start)
   if (param(sp, 'page')) query.set('page', param(sp, 'page'))
   const res = await backendGet<unknown>(purchasingDocsApi.reports(companyId), query).then(
     (r) => r as { data: unknown; meta?: ListMeta },
     (err: unknown) => ({ error: errorMessage(err) }),
   )
-  const period =
-    book === 'ap-aging' ? `${t.fields.asOf} ${formatDate(end)}` : book === 'input-vat' ? format(texts.reports.period, { start: formatDate(start), end: formatDate(end) }) : ''
+  const period = AS_OF.includes(book)
+    ? `${t.fields.asOf} ${formatDate(end)}`
+    : book === 'input-vat'
+      ? format(texts.reports.period, { start: formatDate(start), end: formatDate(end) })
+      : ''
   const head = [[ctx.company.name], [t.books[book], period], []]
   let table: ReactNode = null
   let csv: CsvCell[][] = []
 
-  if ('data' in res && book === 'outstanding-purchase-orders') {
+  if ('data' in res && OUTSTANDING.includes(book)) {
     const rows = (res.data as { rows: PurchasingOutstandingRow[] }).rows
+    const service = book === 'outstanding-work-orders'
+    const orderLabel = service ? c.workOrder : c.order
+    const itemLabel = service ? c.service : c.item
+    const receiveLabel = service ? c.toAccept : c.toReceive
     csv = [
       ...head,
-      [c.order, c.date, c.supplier, c.item, c.ordered, c.toReceive, c.toInvoice],
+      [orderLabel, c.date, c.supplier, itemLabel, c.ordered, receiveLabel, c.toInvoice],
       ...rows.map((r) => [r.order.order_no, r.date, r.supplier.name, `${r.item.code} ${r.item.name}`, plainAmount(r.quantity), plainAmount(r.to_receive), plainAmount(r.to_invoice)]),
     ]
     table = (
-      <ReportTable minWidth="48rem" head={[c.order, c.date, c.supplier, c.item]} numHead={[c.ordered, c.toReceive, c.toInvoice]} empty={rows.length === 0}>
+      <ReportTable minWidth="48rem" head={[orderLabel, c.date, c.supplier, itemLabel]} numHead={[c.ordered, receiveLabel, c.toInvoice]} empty={rows.length === 0}>
         {rows.map((r) => (
           <tr key={`${r.order.id}-${r.line_no}`} className="border-b border-line break-inside-avoid">
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
-              <Link href={`${purchasingPage(companyId, 'orders')}/${r.order.id}`} className="text-primary hover:underline print:text-ink">
+              <Link href={`${purchasingPage(companyId, service ? 'work-orders' : 'orders')}/${r.order.id}`} className="text-primary hover:underline print:text-ink">
                 {r.order.order_no}
               </Link>
             </td>
@@ -125,22 +141,23 @@ export default async function Page({ params, searchParams }: Props) {
 
   if ('data' in res && book === 'input-vat') {
     const x = res.data as InputVatReport
-    const docHref = (r: InputVatReport['rows'][number]) => `${purchasingPage(companyId, r.kind === 'credit_note' ? 'credit-notes' : 'invoices')}/${r.document_id}`
+    const menuOf = { credit_note: 'credit-notes', invoice: 'invoices', service_invoice_with_tx: 'service-invoices', tax_invoice: 'service-invoices' } as const
+    const docHref = (r: InputVatReport['rows'][number]) => `${purchasingPage(companyId, menuOf[r.kind])}/${r.document_id}`
     csv = [
       ...head,
-      [c.postingDate, c.no, c.taxInvoice, c.taxInvoiceDate, c.refNo, c.supplier, c.taxId, c.branch, c.base, c.tax],
-      ...x.rows.map((r) => [r.date, r.document_no, r.tax_invoice_no, r.tax_invoice_date, r.reference_no, r.supplier.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
-      ['', '', '', '', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
+      [c.postingDate, t.kind, c.no, c.taxInvoice, c.taxInvoiceDate, c.refNo, c.supplier, c.taxId, c.branch, c.base, c.tax],
+      ...x.rows.map((r) => [r.date, t.kinds[r.kind] ?? r.kind, r.document_no, r.tax_invoice_no, r.tax_invoice_date, r.reference_no, r.supplier.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
+      ['', '', '', '', '', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
     ]
     table = (
       <ReportTable
-        minWidth="60rem"
-        head={[c.postingDate, c.taxInvoice, c.supplier, c.taxId]}
+        minWidth="66rem"
+        head={[c.postingDate, t.kind, c.taxInvoice, c.supplier, c.taxId]}
         numHead={[c.base, c.tax]}
         empty={x.rows.length === 0}
         foot={
           <tr className="border-t-2 border-ink/70 font-semibold">
-            <td colSpan={4} className="px-3 py-2 text-right">
+            <td colSpan={5} className="px-3 py-2 text-right">
               {t.total}
             </td>
             <td className={totalCell}>{formatAmount(x.total_base)}</td>
@@ -156,6 +173,7 @@ export default async function Page({ params, searchParams }: Props) {
                 {r.document_no}
               </Link>
             </td>
+            <td className="px-3 py-2 whitespace-nowrap text-[13px]">{t.kinds[r.kind] ?? r.kind}</td>
             <td className="px-3 py-2 whitespace-nowrap">
               <span className="font-mono text-[13px]">{r.tax_invoice_no}</span>
               <span className="block text-[12px] text-ink-muted">
@@ -170,6 +188,56 @@ export default async function Page({ params, searchParams }: Props) {
             </td>
             <td className={num}>{formatAmount(r.base)}</td>
             <td className={num}>{formatAmount(r.tax)}</td>
+          </tr>
+        ))}
+      </ReportTable>
+    )
+  }
+
+  if ('data' in res && book === 'undue-input-vat') {
+    const u = res.data as UndueInputVatReport
+    const keys = ['gross', 'vat_total', 'vat_claimed', 'vat_credited', 'vat_undue'] as const
+    const labels = [c.gross, c.vatTotal, c.vatClaimed, c.vatCredited, c.vatUndue]
+    csv = [
+      ...head,
+      [c.serviceInvoice, c.date, c.supplier, ...labels],
+      ...u.rows.map((r) => [r.invoice.document_no, r.date, r.supplier.name, ...keys.map((k) => plainAmount(r[k]))]),
+      ['', '', t.total, ...keys.map((k) => plainAmount(u.totals[k]))],
+    ]
+    table = (
+      <ReportTable
+        minWidth="60rem"
+        head={[c.serviceInvoice, c.date, c.supplier]}
+        numHead={labels}
+        empty={u.rows.length === 0}
+        foot={
+          <tr className="border-t-2 border-ink/70 font-semibold">
+            <td colSpan={3} className="px-3 py-2 text-right">
+              {t.total}
+            </td>
+            {keys.map((k) => (
+              <td key={k} className={totalCell}>
+                {formatAmount(u.totals[k])}
+              </td>
+            ))}
+          </tr>
+        }
+      >
+        {u.rows.map((r) => (
+          <tr key={r.invoice.id} className="border-b border-line break-inside-avoid">
+            <td className="px-3 py-2 whitespace-nowrap">
+              <Link href={`${purchasingPage(companyId, 'service-invoices')}/${r.invoice.id}`} className="font-mono text-[13px] text-primary hover:underline print:text-ink">
+                {r.invoice.document_no}
+              </Link>
+              {r.invoice.supplier_invoice_no && <span className="block text-[12px] text-ink-muted">{r.invoice.supplier_invoice_no}</span>}
+            </td>
+            <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date)}</td>
+            <td className="px-3 py-2">{r.supplier.name}</td>
+            {keys.map((k) => (
+              <td key={k} className={`${num} ${k === 'vat_undue' ? 'font-medium' : ''}`}>
+                {formatAmount(r[k], { dashZero: k === 'vat_claimed' || k === 'vat_credited' })}
+              </td>
+            ))}
           </tr>
         ))}
       </ReportTable>
@@ -191,7 +259,7 @@ export default async function Page({ params, searchParams }: Props) {
       <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-72" />
         {book === 'input-vat' && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
-        {book !== 'outstanding-purchase-orders' && <TextField name="end_date" type="date" label={book === 'ap-aging' ? t.fields.asOf : t.fields.end} defaultValue={end} />}
+        {!OUTSTANDING.includes(book) && <TextField name="end_date" type="date" label={AS_OF.includes(book) ? t.fields.asOf : t.fields.end} defaultValue={end} />}
         <Button type="submit">{texts.reports.run}</Button>
       </Form>
       {'error' in res && <Alert tone="error">{res.error}</Alert>}
