@@ -48,6 +48,9 @@ func (r *ReportRepository) SumByAccount(ctx context.Context, companyID vo.Compan
 			cond = "e.entry_date BETWEEN ? AND ?"
 			bargs = []any{*b.From, b.To}
 		}
+		if b.ExcludeClosing {
+			cond += " AND NOT e.is_closing"
+		}
 		cols = append(cols,
 			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s THEN l.debit END), 0) AS d%d", cond, i),
 			fmt.Sprintf("COALESCE(SUM(CASE WHEN %s THEN l.credit END), 0) AS c%d", cond, i))

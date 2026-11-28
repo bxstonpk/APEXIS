@@ -193,7 +193,43 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | PUT | `/journal-entries/{entryID}` | `ledger.entry:manage` | แทนที่ draft ทั้งก้อน |
 | PATCH | `/journal-entries/{entryID}` | `ledger.entry:post` | `{"status": "posted"}` — เปลี่ยนได้ทางเดียว |
 | DELETE | `/journal-entries/{entryID}` | `ledger.entry:manage` | เฉพาะ draft — 204 |
-| POST | `/journal-entries/{entryID}/reversals` | `ledger.entry:post` | `{"date": "2026-12-31", "description": ""}` → คืนรายการกลับที่ผ่านแล้ว — 201 |
+| POST | `/journal-entries/{entryID}/reversals` | `ledger.entry:post` | `{"date": "2026-12-31", "description": ""}` → คืนรายการกลับที่ผ่านแล้ว — 201; รายการปิดบัญชี = 422 `fiscal_year_is_closed_(reopen_the_year-end_closing_first)` (ใช้ reopen แทน); ต้นฉบับมีรายการกลับอัตโนมัติ = กลับ / ลบรายการนั้นด้วยใน transaction เดียว |
+
+รายการบัญชี (ทั้ง list และรายละเอียด) มีฟิลด์เพิ่ม:
+- `adjusting_period` (งวดปรับปรุง = งวดที่ 13), `is_closing` (รายการปิดบัญชีสิ้นปี)
+- `template` (`accrued_revenue`, `accrued_expense`, `deferred_revenue`, `prepaid_expense`, `other` หรือ `""`), `auto_reverse`, `is_auto_reversal`
+- `auto_reversal`: `{id, entry_no, date, status}` ของรายการกลับอัตโนมัติ (`entry_no: null` + `status: "draft"` = ค้างรองวด) — JOIN ในคิวรีเดียวกับรายการ
+
+POST / PUT `/journal-entries` รับ `"adjusting_period": true` — วันที่ต้องเป็นวันสิ้นปีบัญชี (ไม่ใช่ = 422 `adjusting-period_entries_must_be_dated_the_last_day_of_the_fiscal_year`); ผ่านได้เมื่องวด 12 ปิดแล้วและปียังไม่ปิดบัญชี
+
+### รายการปรับปรุง / ปิดบัญชีสิ้นปี
+
+| Method | Path | Permission | หมายเหตุ |
+|---|---|---|---|
+| GET | `/adjusting-entries` | `ledger.entry:read` | รายการที่มี `template` — query เดียวกับ `/journal-entries` + `template=accrued_revenue,…` |
+| POST | `/adjusting-entries` | `ledger.entry:manage` + `ledger.entry:post` | สร้างแล้วผ่านทันที — 201; `template` บังคับ, `auto_reverse` ไม่ส่ง = true (ยกเว้น `other` = false); วันที่ = วันสิ้นปี (`adjusting_period: true`) หรือวันสิ้นเดือน (อื่น = 422 `adjusting_entries_must_be_dated_the_last_day_of_a_period`); `template` ไม่รู้จัก = 400 `invalid_adjusting_entry_template` |
+| GET | `/adjusting-entries/templates` | `ledger.entry:read` | `[{template, balance_debit, balance_account, result_account, auto_reverse}]` — บัญชีตั้งต้นจากผังมาตรฐาน (ไม่มีในผัง = `null`) |
+| POST | `/adjusting-entries/pending-reversals` | `ledger.entry:post` | ผ่านรายการกลับอัตโนมัติที่ค้างและงวดเปิดแล้ว → `{"posted": n}` (ปกติผ่านเองตอนสร้างปีบัญชีใหม่) |
+| GET | `/year-end-closings` | `ledger.report:read` | ทุกปีบัญชี (ล่าสุดก่อน): `fiscal_year, start_date, end_date, deadline` (สิ้นปี + 120 วัน), `status` (`open`/`closed`), `deadline_status` (`on_time`/`overdue`/`closed`), `periods, open_periods, can_close, can_reopen, closing` |
+| GET | `/year-end-closings/{fiscalYear}` | `ledger.report:read` | เหมือนข้างบน + `suspense` (บัญชีพักที่มียอด ณ สิ้นปี), `settings_ready` |
+| POST | `/year-end-closings/{fiscalYear}/close` | `ledger.year_end:close` | ไม่มี body → 200 พร้อม `closing: {net_income, entry_id, entry_no, closed_at, closed_by}` |
+| POST | `/year-end-closings/{fiscalYear}/reopen` | `ledger.year_end:close` | กลับรายการปิดบัญชี (`closing.reversal_no`) → `status: "open"` |
+| GET / PUT | `/ledger-settings` | `ledger.account:read` / `ledger.account:manage` | `{retained_earnings_account_id, income_summary_account_id, closing_journal_id}` (GET คืนเป็น `{id, code, name}`) — ค่าเริ่มต้นจากผังมาตรฐาน 3302000000 / 3303000000 / GEN |
+
+ข้อผิดพลาดของการปิดบัญชี:
+
+| Status | code | เมื่อ |
+|---|---|---|
+| 404 | `fiscal_year_not_found` | ไม่มีปีบัญชีนั้น |
+| 422 | `all_periods_of_the_fiscal_year_must_be_closed` | งวด 1–12 ยังเปิด (`details`) |
+| 422 | `suspense_accounts_must_have_a_zero_balance_at_year_end` | บัญชีพักมียอด (`details`) |
+| 409 | `fiscal_year_is_already_closed` | ปิดซ้ำ |
+| 422 | `fiscal_year_is_not_closed` | reopen ปีที่ยังไม่ปิด |
+| 422 | `the_next_fiscal_year_is_closed_(reopen_it_first)` | reopen เมื่อปีถัดไปปิดแล้ว |
+| 422 | `fiscal_year_is_closed_(reopen_the_year-end_closing_first)` | ผ่าน / กลับรายการวันที่ในปีที่ปิดแล้ว |
+| 422 | `ledger_settings_are_incomplete_(retained_earnings_account_/_closing_journal)` | ยังไม่ตั้งค่า |
+
+รายการปิดบัญชี: บรรทัดล้างยอดรายได้ / ค่าใช้จ่ายรายบัญชีเข้าบัญชีสรุปผลกำไรขาดทุน แล้วโอนยอดสุทธิเข้ากำไรสะสม (ไม่ตั้งบัญชีสรุป = เข้ากำไรสะสมตรง) — อ้างอิง `FY{ปี}`, ลงวันสิ้นปีในงวดปรับปรุง
 
 ### รายงาน (`ledger.report:read`) — endpoint เดียว เลือกด้วย `book`
 
@@ -212,6 +248,8 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | `balance-sheet` | `end_date` (บังคับ = ณ วันที่; `start_date` ไม่ใช้) | งบแสดงฐานะการเงิน — ยอดตามด้านปกติของหมวด, บรรทัดมี `level`, `is_header`; `suspense` / `total_suspense` = บัญชีพักที่ยังมียอด (เดบิตเป็นบวก): `total_assets + total_suspense = total_liabilities_and_equity` |
 | `income-statement` | `start_date`, `end_date` (บังคับ) | งบกำไรขาดทุน — `suspense` / `total_suspense` = ยอดเคลื่อนไหวของบัญชีพักในช่วง (เดบิตเป็นบวก) แสดงแยก **ไม่รวมใน `net_income`** |
 | `general-ledger` | `account_id`, `start_date`, `end_date` (บังคับ), `page`, `page_size` | บัญชีแยกประเภทของบัญชีเดียว — มี `meta` สำหรับแบ่งหน้าบรรทัด; `balance` คือยอดสะสมรวมยอดยกมา |
+| `dbd-balance-sheet` | `end_date` (บังคับ) | งบแสดงฐานะการเงินตามแบบกรมพัฒนาธุรกิจการค้า — `columns` (ปีนี้ + ปีก่อน ณ วันเดียวกัน ถ้ามีปีบัญชี) และ `rows: [{key, kind: header\|line\|subtotal\|total, level, amounts[]}]` (`key` แปลชื่อที่ frontend); `total_assets` = `total_liabilities_equity`; ปีก่อนยังไม่ปิด = บรรทัด `retained_unclosed` |
+| `dbd-income-statement` | `end_date` (บังคับ) | งบกำไรขาดทุนตามแบบ — ตั้งแต่ต้นปีบัญชีถึง `end_date` (+ ช่วงเดียวกันของปีก่อน); รวมรายการปรับปรุง ไม่รวมรายการปิดบัญชี; บัญชีพักไม่อยู่ในงบ |
 
 - response ทุกรายงานมี `data.book` บอกชนิดรายงาน — frontend ใช้เลือกรูปแบบการแสดงผล
 - `book` ไม่มี / ไม่รู้จัก, หรือขาด parameter ที่บังคับ → `400 invalid_query_parameter` (ข้อความบอกค่าที่ใช้ได้)

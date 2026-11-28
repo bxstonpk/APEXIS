@@ -13,6 +13,7 @@ const (
 	PermEntryManage   Permission = "ledger.entry:manage" // สร้าง / แก้ / ลบ draft
 	PermEntryPost     Permission = "ledger.entry:post"   // ผ่านรายการ / กลับรายการ
 	PermReportRead    Permission = "ledger.report:read"
+	PermYearEndClose  Permission = "ledger.year_end:close" // ปิด / เปิดบัญชีสิ้นปี
 )
 
 func (p Permission) String() string { return string(p) }
@@ -27,4 +28,5 @@ var AllPermissions = []Permission{
 	PermEntryManage,
 	PermEntryPost,
 	PermReportRead,
+	PermYearEndClose,
 }

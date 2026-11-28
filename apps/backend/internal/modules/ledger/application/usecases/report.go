@@ -172,7 +172,8 @@ func (uc *ReportUseCases) IncomeStatement(ctx context.Context, in dto.DateRange)
 	if err := uc.authorize(ctx, in.Actor, vo.PermReportRead); err != nil {
 		return dto.IncomeStatement{}, err
 	}
-	sums, err := uc.reports.SumByAccount(ctx, in.CompanyID, nil, []repositories.Bucket{{From: &in.Start, To: in.End}})
+	// ไม่นับรายการปิดบัญชีสิ้นปี — งบของปีที่ปิดแล้วยังแสดงผลการดำเนินงาน (รวมงวดปรับปรุง)
+	sums, err := uc.reports.SumByAccount(ctx, in.CompanyID, nil, []repositories.Bucket{{From: &in.Start, To: in.End, ExcludeClosing: true}})
 	if err != nil {
 		return dto.IncomeStatement{}, err
 	}

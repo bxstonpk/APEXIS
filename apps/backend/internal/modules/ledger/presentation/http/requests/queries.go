@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"apexis/backend/internal/modules/ledger/application/dto"
+	"apexis/backend/internal/modules/ledger/domain/entities"
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 	"apexis/backend/internal/platform/listing"
 )
@@ -118,6 +119,24 @@ func ParseEntryFilter(v url.Values) (dto.EntryFilter, error) {
 	return f, q.err
 }
 
+// GET /adjusting-entries?template=accrued_revenue,...&status=&start_date=&end_date=&q=&sort=&page= — รายการปรับปรุงสิ้นงวดเท่านั้น
+func ParseAdjustingFilter(v url.Values) (dto.EntryFilter, error) {
+	f, err := ParseEntryFilter(v)
+	if err != nil {
+		return f, err
+	}
+	f.Adjustments = true
+	ts, err := listing.ParseList(v, "template", func(s string) (string, error) {
+		t, err := entities.ParseTemplate(s)
+		return string(t), err
+	})
+	if err != nil {
+		return f, fmt.Errorf("%w: template must be one of accrued_revenue, accrued_expense, deferred_revenue, prepaid_expense, other", listing.ErrInvalidQuery)
+	}
+	f.Templates = ts
+	return f, nil
+}
+
 // Book คือชนิดรายงาน — หน้ารายงานของ frontend เป็นหน้าเดียว เลือกรายงานด้วย ?book=
 type Book string
 
@@ -126,9 +145,12 @@ const (
 	BookBalanceSheet    Book = "balance-sheet"    // งบแสดงฐานะการเงิน ณ end_date (start_date ไม่ใช้)
 	BookIncomeStatement Book = "income-statement" // งบกำไรขาดทุน: start_date, end_date
 	BookGeneralLedger   Book = "general-ledger"   // บัญชีแยกประเภท: account_id, start_date, end_date, page, page_size
+	// งบการเงินตามแบบกรมพัฒนาธุรกิจการค้า ณ end_date เทียบปีก่อน (งบกำไรขาดทุน = ต้นปีบัญชีถึง end_date)
+	BookDBDBalanceSheet    Book = "dbd-balance-sheet"
+	BookDBDIncomeStatement Book = "dbd-income-statement"
 )
 
-var Books = []Book{BookTrialBalance, BookBalanceSheet, BookIncomeStatement, BookGeneralLedger}
+var Books = []Book{BookTrialBalance, BookBalanceSheet, BookIncomeStatement, BookGeneralLedger, BookDBDBalanceSheet, BookDBDIncomeStatement}
 
 // ReportQuery คือ URL query ของ GET /reports — ทุกรายงานใช้ชื่อ parameter ชุดเดียวกัน
 // parameter ที่รายงานนั้นไม่ใช้ถูกเพิกเฉย จึงเปลี่ยน book โดยคงค่าอื่นใน URL ไว้ได้
@@ -152,7 +174,7 @@ func ParseReport(v url.Values) (ReportQuery, error) {
 	switch out.Book {
 	case BookTrialBalance, BookIncomeStatement:
 		out.Start, out.End = q.dateRange()
-	case BookBalanceSheet:
+	case BookBalanceSheet, BookDBDBalanceSheet, BookDBDIncomeStatement:
 		out.End = q.requiredDate("end_date")
 	case BookGeneralLedger:
 		id := optionalIDParam[vo.AccountID](q, "account_id")

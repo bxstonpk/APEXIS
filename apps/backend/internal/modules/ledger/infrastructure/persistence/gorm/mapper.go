@@ -83,6 +83,9 @@ func EntryToModel(e *entities.Entry) models.EntryModel {
 		EntryDate: s.Data.Date, Description: s.Data.Description, Reference: s.Data.Reference, Status: string(s.Status),
 		TotalDebit: debit, TotalCredit: credit,
 		ReversalOfID: optUUID(s.ReversalOf), ReversedByID: optUUID(s.ReversedBy), CreatedBy: uuid.UUID(s.CreatedBy),
+		AdjustingPeriod: s.Data.AdjustingPeriod, IsClosing: s.Closing,
+		Template: string(s.Data.Template), AutoReverse: s.Data.AutoReverse,
+		AutoReversalID: optUUID(s.AutoReversalID), IsAutoReversal: s.AutoReversal,
 	}
 	if p := s.Posting; p != nil {
 		no, period, by, at := p.EntryNo, uuid.UUID(p.PeriodID), uuid.UUID(p.By), p.At
@@ -104,9 +107,11 @@ func EntryToEntity(m models.EntryModel) *entities.Entry {
 	s := entities.EntryState{
 		ID: vo.EntryID(m.ID), CompanyID: vo.CompanyID(m.CompanyID), Status: vo.EntryStatus(m.Status),
 		ReversalOf: optID[vo.EntryID](m.ReversalOfID), ReversedBy: optID[vo.EntryID](m.ReversedByID),
-		CreatedBy: vo.UserID(m.CreatedBy),
+		CreatedBy: vo.UserID(m.CreatedBy), Closing: m.IsClosing,
+		AutoReversalID: optID[vo.EntryID](m.AutoReversalID), AutoReversal: m.IsAutoReversal,
 		Data: entities.EntryData{
-			JournalID: vo.JournalID(m.JournalID), Date: DateUTC(m.EntryDate),
+			JournalID: vo.JournalID(m.JournalID), Date: DateUTC(m.EntryDate), AdjustingPeriod: m.AdjustingPeriod,
+			Template: entities.AdjustmentTemplate(m.Template), AutoReverse: m.AutoReverse,
 			Description: m.Description, Reference: m.Reference, Lines: make([]entities.LineData, len(m.Lines)),
 		},
 	}

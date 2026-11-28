@@ -145,6 +145,8 @@ func run(logger *slog.Logger) error {
 	organizationModule.OnCompanyCreated(financeModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(manufacturingModule.ProvisionCompany)
 	organizationModule.OnCompanyCreated(pettyCashModule.ProvisionCompany)
+	// สร้างปีบัญชีใหม่ -> ผ่านรายการกลับอัตโนมัติของรายการปรับปรุงที่รอปีนั้น (transaction เดียวกัน)
+	organizationModule.OnFiscalYearCreated(ledgerModule.FiscalYearCreated)
 	// ค้นหาผู้จด VAT จากกรมสรรพากร (เติมฟอร์มลูกค้า / ผู้ขาย) — ใช้ได้เมื่อจัดการลูกค้าหรือผู้ขายได้
 	taxregistry.New(identityModule, cfg.VatRegistryURL, []string{"sales.customer:manage", "purchasing.supplier:manage"}).RegisterRoutes(mux)
 

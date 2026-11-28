@@ -28,6 +28,19 @@ func Reject(module string, err error) error {
 
 // ---------- ledger ----------
 
+// FiscalYearCreatedHook ถูกเรียกหลังสร้างปีบัญชีใหม่ ภายใน transaction เดียวกัน (error = ยกเลิกการสร้างปี)
+// ledger ใช้ผ่านรายการกลับอัตโนมัติของรายการปรับปรุงที่รอปีนี้
+type FiscalYearCreatedHook func(ctx context.Context, companyID uuid.UUID, year int) error
+
+// FiscalYearStatus คือปีบัญชี (organization) พร้อมจำนวนงวดทั้งหมด / งวดที่ยังเปิด — ledger ใช้กับการปิดบัญชีสิ้นปี
+type FiscalYearStatus struct {
+	Year        int
+	Start       time.Time
+	End         time.Time
+	Periods     int
+	OpenPeriods int
+}
+
 // JournalLine คือบรรทัดรายการบัญชีที่ module อื่นส่งให้ ledger ลงบัญชี (เดบิตหรือเครดิตด้านเดียว)
 type JournalLine struct {
 	AccountID   uuid.UUID

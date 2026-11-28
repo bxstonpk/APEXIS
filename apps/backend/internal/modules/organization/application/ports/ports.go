@@ -29,6 +29,12 @@ type CompanyProvisioner interface {
 	Provision(ctx context.Context, companyID vo.CompanyID, businessType vo.BusinessType) error
 }
 
+// FiscalYearListener แจ้ง module อื่นเมื่อสร้างปีบัญชีใหม่ (เช่น ledger ผ่านรายการกลับอัตโนมัติที่รอปีนี้)
+// ต้องเข้าร่วม transaction ใน ctx — error = rollback การสร้างปีบัญชี
+type FiscalYearListener interface {
+	FiscalYearCreated(ctx context.Context, companyID vo.CompanyID, year int) error
+}
+
 // Authorizer ตรวจสิทธิ์ของ user ในบริษัท (implementation เรียก identity module)
 // คืน domain.ErrForbidden เมื่อไม่มีสิทธิ์ — เข้าร่วม transaction ใน ctx ได้
 type Authorizer interface {

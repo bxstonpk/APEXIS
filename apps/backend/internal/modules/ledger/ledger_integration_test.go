@@ -109,6 +109,7 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
+		"ledger_year_end_closings", "ledger_settings",
 		"ledger_journal_sequences", "ledger_number_sequences", "ledger_journal_lines", "ledger_journal_entries", "ledger_journals", "ledger_accounts",
 		"organization_fiscal_periods", "organization_fiscal_years", "organization_project_sites", "organization_cost_centers",
 		"organization_departments", "organization_business_units", "organization_branches", "organization_document_numberings", "organization_companies",

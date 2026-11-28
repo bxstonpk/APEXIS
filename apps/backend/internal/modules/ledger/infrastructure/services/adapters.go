@@ -45,9 +45,19 @@ type OrganizationAccess interface {
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
 	CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error)
+	FiscalYears(ctx context.Context, companyID uuid.UUID) ([]integration.FiscalYearStatus, error)
 }
 
 var _ ports.Organization = (*Organization)(nil)
+
+func (o *Organization) FiscalYears(ctx context.Context, companyID vo.CompanyID) ([]ports.FiscalYear, error) {
+	ys, err := o.org.FiscalYears(ctx, uuid.UUID(companyID))
+	out := make([]ports.FiscalYear, len(ys))
+	for i, y := range ys {
+		out[i] = ports.FiscalYear{Year: y.Year, Start: y.Start, End: y.End, Periods: y.Periods, OpenPeriods: y.OpenPeriods}
+	}
+	return out, err
+}
 
 type Organization struct{ org OrganizationAccess }
 

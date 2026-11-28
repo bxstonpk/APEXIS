@@ -71,6 +71,8 @@ type EntryRepository interface {
 	Update(ctx context.Context, e *entities.Entry) error
 	// UpdateStatus เขียนเฉพาะสถานะ / ข้อมูลการผ่านรายการ / การกลับรายการ ของหัวรายการ
 	UpdateStatus(ctx context.Context, e *entities.Entry) error
+	// PendingAutoReversals: รายการกลับอัตโนมัติที่ยังรอผ่าน (draft) ทั้งหมดของบริษัท เรียงตามวันที่
+	PendingAutoReversals(ctx context.Context, companyID vo.CompanyID) ([]*entities.Entry, error)
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.EntryID) error // ลบจริง (เฉพาะ draft)
 	// FindForUpdate โหลดรายการพร้อม lock แถวหัวรายการ (SELECT ... FOR UPDATE) กันการผ่าน / กลับรายการซ้อนกัน
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.EntryID) (*entities.Entry, error)
@@ -82,6 +84,8 @@ type EntryRepository interface {
 type Bucket struct {
 	From *time.Time
 	To   time.Time
+	// ExcludeClosing: ไม่นับรายการปิดบัญชีสิ้นปี (งบกำไรขาดทุนของปีที่ปิดแล้วยังแสดงผลการดำเนินงาน)
+	ExcludeClosing bool
 }
 
 // Sum คือยอดรวมเดบิต / เครดิตของบัญชีในหนึ่ง bucket
@@ -102,4 +106,22 @@ type ReportRepository interface {
 	EntryActivity(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (drafts, posted int64, err error)
 	// RecentEntries: รายการที่มีผลล่าสุด (วันที่ / เลขที่ล่าสุดก่อน)
 	RecentEntries(ctx context.Context, companyID vo.CompanyID, limit int) ([]dto.RecentEntry, error)
+}
+
+// SettingsRepository: ค่าตั้งของ ledger (1 แถวต่อบริษัท)
+type SettingsRepository interface {
+	// Get คืนค่าตั้ง — found = false เมื่อยังไม่เคยบันทึก
+	Get(ctx context.Context, companyID vo.CompanyID) (s entities.Settings, found bool, err error)
+	Save(ctx context.Context, companyID vo.CompanyID, s entities.Settings) error // upsert
+}
+
+// YearEndRepository: การปิดบัญชีสิ้นปี (1 แถวต่อบริษัทต่อปีบัญชี)
+type YearEndRepository interface {
+	// FindForUpdate lock แถวของปี (FOR UPDATE) — nil = ยังไม่เคยปิด
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, year int) (*entities.YearEnd, error)
+	Save(ctx context.Context, y *entities.YearEnd) error // upsert
+	// IsClosed: ปีบัญชีปิดบัญชีแล้ว (ใช้กันการลงรายการในปีที่ปิด — อ่านแบบ FOR SHARE ใน transaction)
+	IsClosed(ctx context.Context, companyID vo.CompanyID, year int) (bool, error)
+	// List คืนการปิดบัญชีทุกปีของบริษัท พร้อมเลขที่รายการปิด / รายการกลับ — 1 query
+	List(ctx context.Context, companyID vo.CompanyID) ([]dto.YearEndRecord, error)
 }
