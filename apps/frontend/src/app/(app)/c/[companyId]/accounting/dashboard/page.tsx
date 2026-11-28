@@ -31,7 +31,7 @@ export default async function Page({ params, searchParams }: Props) {
   const suspense = d ? toUnits(d.suspense_balance) !== 0n : false
   return (
     <div className="flex flex-col gap-6">
-      <DashboardHeader company={ctx.company.name} title={t.title} description={t.description} period={period} />
+      <DashboardHeader company={ctx.company.name} title={t.title} period={period} />
       {error && <DashboardError message={error} />}
       {d && (
         <>
@@ -47,7 +47,7 @@ export default async function Page({ params, searchParams }: Props) {
             <KpiCard
               label={t.suspense}
               value={formatAmount(d.suspense_balance)}
-              sub={suspense ? t.suspenseHint : t.suspenseClear}
+              sub={suspense ? undefined : t.suspenseClear}
               warn={suspense}
               href={`${reports}?book=balance-sheet&end_date=${period.end}`}
             />

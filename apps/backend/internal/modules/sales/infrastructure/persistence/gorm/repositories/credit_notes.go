@@ -58,19 +58,21 @@ func (r *CreditNoteRepository) base(ctx context.Context, companyID vo.CompanyID)
 
 const creditNoteColumns = `d.id, d.document_no, d.doc_date, iv.id AS order_id, iv.document_no AS order_no, d.customer_id,
 	c.code AS customer_code, c.name AS customer_name, d.status, d.entry_id, d.entry_no, d.cancelled_at,
-	d.kind, d.reason, d.total_net, d.total_vat, d.total_gross`
+	d.kind, d.vat_kind, iv.kind AS invoice_kind, d.reason, d.total_net, d.total_vat, d.total_gross`
 
 type CreditNoteRow struct {
 	PostedRow
-	Kind       string
-	Reason     string
-	TotalNet   decimal.Decimal
-	TotalVat   decimal.Decimal
-	TotalGross decimal.Decimal
+	Kind        string
+	VatKind     string
+	InvoiceKind string
+	Reason      string
+	TotalNet    decimal.Decimal
+	TotalVat    decimal.Decimal
+	TotalGross  decimal.Decimal
 }
 
 func (r CreditNoteRow) summary() dto.CreditNoteSummary {
-	return dto.CreditNoteSummary{PostedSummary: r.PostedRow.summary(), Kind: r.Kind, Reason: r.Reason,
+	return dto.CreditNoteSummary{PostedSummary: r.PostedRow.summary(), Kind: r.Kind, VatKind: r.VatKind, InvoiceKind: r.InvoiceKind, Reason: r.Reason,
 		Totals: dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross}}
 }
 

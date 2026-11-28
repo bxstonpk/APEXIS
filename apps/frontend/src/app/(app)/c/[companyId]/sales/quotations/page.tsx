@@ -23,9 +23,7 @@ export default async function Page({ params, searchParams }: Props) {
       kind="quotation"
       path={path}
       apiPath={salesApi.quotations(companyId)}
-      heading={t.heading}
-      description={t.description}
-      createHref={can(ctx.permissions, perms.quotationManage) && `${path}/new`}
+      heading={t.heading}      createHref={can(ctx.permissions, perms.quotationManage) && `${path}/new`}
     />
   )
 }

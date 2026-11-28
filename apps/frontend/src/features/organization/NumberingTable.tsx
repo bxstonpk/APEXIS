@@ -9,6 +9,26 @@ import { showToast } from '@/lib/toast'
 import { DEFAULT_TEMPLATE, previewNumber } from '@/lib/numbering'
 import type { DocumentNumbering } from './resources'
 
+/** ลำดับกลุ่มตาม module (ส่วนหน้าของ doc_type เช่น "sales.invoice") — module ที่ไม่อยู่ในรายการต่อท้ายตามชื่อ */
+const MODULE_ORDER = ['sales', 'purchasing', 'inventory', 'manufacturing', 'finance', 'ledger', 'organization']
+
+const moduleOf = (docType: string) => docType.split('.')[0] ?? ''
+const rank = (m: string) => {
+  const i = MODULE_ORDER.indexOf(m)
+  return i < 0 ? MODULE_ORDER.length : i
+}
+
+/** เรียงตามกลุ่ม module (คงลำดับเดิมจาก backend ภายในกลุ่ม) */
+export function groupNumberings(items: DocumentNumbering[]): DocumentNumbering[] {
+  return items
+    .map((n, i) => ({ n, i }))
+    .sort((a, b) => rank(moduleOf(a.n.doc_type)) - rank(moduleOf(b.n.doc_type)) || moduleOf(a.n.doc_type).localeCompare(moduleOf(b.n.doc_type)) || a.i - b.i)
+    .map((x) => x.n)
+}
+
+/** ชื่อชนิดเอกสาร: ชื่อไทยจาก config (ถ้ามี) ไม่งั้นใช้ชื่อจาก backend */
+const docName = (n: DocumentNumbering) => texts.numbering.docTypes[n.doc_type] ?? n.name
+
 /**
  * รูปแบบเลขที่เอกสารทุกชนิด — แก้ทีละแถว (PUT /document-numberings/{docType})
  * ระหว่างพิมพ์แสดงตัวอย่างเลขที่ทันที (ตรวจด้วยกติกาเดียวกับ backend) — บันทึกแล้วตัวอย่างมาจาก backend
@@ -50,19 +70,6 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
 
   return (
     <div className="flex flex-col gap-4">
-      <details className="group rounded-(--radius-panel) border border-line bg-surface px-4 py-3 text-sm shadow-card">
-        <summary className="cursor-pointer font-medium text-primary marker:text-ink-subtle">{t.helpTitle}</summary>
-        <dl className="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-[auto_1fr]">
-          {t.help.map(([token, desc]) => (
-            <Fragment key={token}>
-              <dt className="font-mono text-[13px] text-ink">{token}</dt>
-              <dd className="text-ink-muted">{desc}</dd>
-            </Fragment>
-          ))}
-        </dl>
-        <p className="mt-3 text-ink-muted">{t.resetHint}</p>
-      </details>
-
       <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full border-collapse text-sm tabular-nums">
           <thead className="bg-subtle text-[13px] text-ink-muted">
@@ -75,11 +82,19 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
             </tr>
           </thead>
           <tbody>
-            {items.map((n) =>
-              editing === n.doc_type ? (
+            {groupNumberings(items).map((n, i, all) => (
+              <Fragment key={n.doc_type}>
+              {(i === 0 || moduleOf(all[i - 1]!.doc_type) !== moduleOf(n.doc_type)) && (
+                <tr className="border-b border-line bg-subtle/60">
+                  <th scope="colgroup" colSpan={canManage ? 5 : 4} className="px-4 py-2 text-left text-[13px] font-semibold text-ink-muted">
+                    {texts.permissions.modules[moduleOf(n.doc_type)] ?? moduleOf(n.doc_type)}
+                  </th>
+                </tr>
+              )}
+              {editing === n.doc_type ? (
                 <tr key={n.doc_type} className="border-b border-line bg-primary-soft/60 last:border-b-0">
                   <td className="px-4 py-3 align-top">
-                    <div className="font-medium">{n.name}</div>
+                    <div className="font-medium">{docName(n)}</div>
                     <div className="text-xs text-ink-subtle">{n.doc_type}</div>
                   </td>
                   <td className="px-4 py-2 align-top">
@@ -112,7 +127,7 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
                       <Button size="sm" variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
                         {texts.common.cancel}
                       </Button>
-                      <Button size="sm" loading={busy} loadingText={texts.common.saving} disabled={!preview.ok} onClick={() => save(n.doc_type, n.name)}>
+                      <Button size="sm" loading={busy} loadingText={texts.common.saving} disabled={!preview.ok} onClick={() => save(n.doc_type, docName(n))}>
                         {texts.common.save}
                       </Button>
                     </div>
@@ -121,7 +136,7 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
               ) : (
                 <tr key={n.doc_type} className="border-b border-line last:border-b-0 hover:bg-subtle">
                   <td className="px-4 py-3">
-                    <div className="font-medium">{n.name}</div>
+                    <div className="font-medium">{docName(n)}</div>
                     <div className="text-xs text-ink-subtle">{n.doc_type}</div>
                   </td>
                   <td className="px-4 py-3 font-mono text-[13px]">{n.prefix || '–'}</td>
@@ -137,8 +152,9 @@ export function NumberingTable({ apiPath, items, canManage }: { apiPath: string;
                     </td>
                   )}
                 </tr>
-              ),
-            )}
+              )}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </div>

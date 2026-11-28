@@ -40,7 +40,7 @@ export function CreateClosing({ apiPath, defaultDate }: { apiPath: string; defau
     <form noValidate onSubmit={submit} className="flex flex-col gap-3 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card">
       {error && <Alert tone="error">{error}</Alert>}
       <div className="flex flex-wrap items-end gap-2">
-        <TextField label={t.date} hint={t.dateHint} required type="date" value={date} error={fieldError} onChange={(e) => setDate(e.target.value)} />
+        <TextField label={t.date} required type="date" value={date} error={fieldError} onChange={(e) => setDate(e.target.value)} />
         <Button type="submit" loading={busy} loadingText={texts.common.saving} className="sm:mb-[22px]">
           {t.create}
         </Button>

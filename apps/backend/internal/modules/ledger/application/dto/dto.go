@@ -126,6 +126,12 @@ type EntryFilter struct {
 // ---------- Output (read model) ----------
 
 // Ref คือข้อมูลอ้างอิงสั้นๆ ของ record ที่เกี่ยวข้อง (ได้จาก JOIN)
+// CodeName คือรหัส / ชื่อของบัญชีหรือสมุด (ให้ module อื่นแสดงในเอกสาร)
+type CodeName struct {
+	Code string
+	Name string
+}
+
 type Ref struct {
 	ID   string
 	Code string

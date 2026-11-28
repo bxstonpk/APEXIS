@@ -20,6 +20,7 @@ import (
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/database"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -75,7 +76,10 @@ func (a api) expect(r resp, status int, what string) resp {
 	return r
 }
 
-func setup(t *testing.T) (api, string) {
+func setup(t *testing.T) (api, string) { return setupApp(t, false) }
+
+// setupApp: provision = ผูก hook ตั้งค่าเริ่มต้นตอนสร้างบริษัท (ผังบัญชี / ค่าตั้งของทุก module ตามประเภทธุรกิจ) เหมือน main.go
+func setupApp(t *testing.T, provision bool) (api, string) {
 	dsn := os.Getenv("IDENTITY_TEST_DSN")
 	if dsn == "" {
 		t.Skip("IDENTITY_TEST_DSN not set")
@@ -121,6 +125,11 @@ func setup(t *testing.T) (api, string) {
 	// ใบเสร็จรับเงินอยู่ที่ finance — ตัดยอดใบแจ้งหนี้ขายผ่าน sales.SettleReceivables
 	fin := finance.New(db, idm, org, led, sal, pur)
 	fin.RegisterRoutes(mux)
+	if provision {
+		for _, hook := range []integration.CompanyCreatedHook{led.ProvisionCompany, sal.ProvisionCompany, pur.ProvisionCompany, inv.ProvisionCompany, fin.ProvisionCompany} {
+			org.OnCompanyCreated(hook)
+		}
+	}
 	reg := reports.NewRegistry()
 	led.RegisterReports(reg)
 	inv.RegisterReports(reg)
@@ -137,7 +146,7 @@ func setup(t *testing.T) (api, string) {
 
 func TestSalesFlow(t *testing.T) {
 	a, owner := setup(t)
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 
@@ -208,30 +217,26 @@ func TestSalesFlow(t *testing.T) {
 	}
 	a.expect(a.do("PATCH", base+"/sales-orders/"+so2, owner, obj{"status": "cancelled"}), 200, "cancel order 2")
 
-	// ---------- แยกใบ: ส่ง 3 (ต้นทุน 180) แล้วออกบิล 3 ----------
+	// ---------- ขายสินค้า (ส่งของ + ใบกำกับภาษี) จากใบสั่งขาย: A 3 (ต้นทุน 180) ----------
 	ship := func(n int, q string) obj { return obj{"order_line_no": n, "quantity": q} }
-	a.expect(a.do("POST", base+"/deliveries", owner, obj{"order_id": soID, "date": "2026-03-06", "warehouse_id": wh, "lines": []obj{ship(1, "9")}}), 422, "over delivery")
-	do := a.expect(a.do("POST", base+"/deliveries", owner, obj{"order_id": soID, "date": "2026-03-06", "warehouse_id": wh, "lines": []obj{ship(1, "3")}}), 201, "delivery").data()
-	if do["document_no"] != "DO2026-000001" || do["total_cost"] != "180" || do["stock_document_no"] != "GI2026-000001" || do["entry_no"] == "" {
-		t.Fatalf("delivery = %v", do)
-	}
 	invoice := func(body obj, status int, what string) obj {
 		t.Helper()
-		body["order_id"], body["date"] = soID, "2026-03-07"
+		body["order_id"], body["date"], body["warehouse_id"] = soID, "2026-03-07", wh
 		r := a.expect(a.do("POST", base+"/sales-invoices", owner, body), status, what)
 		if status != 201 {
 			return nil
 		}
 		return r.data()
 	}
-	invoice(obj{"lines": []obj{ship(1, "4")}}, 422, "invoice more than delivered")
-	iv1 := invoice(obj{"lines": []obj{ship(1, "3")}}, 201, "separate invoice")
-	if iv1["document_no"] != "IV2026-000001" || iv1["totals"].(obj)["gross"] != "321" || iv1["due_date"] != "2026-04-06" || iv1["with_delivery"] != false {
+	invoice(obj{"lines": []obj{ship(1, "9")}}, 422, "invoice more than ordered")
+	iv1 := invoice(obj{"lines": []obj{ship(1, "3")}}, 201, "goods sale 1")
+	if iv1["document_no"] != "IV2026-000001" || iv1["totals"].(obj)["gross"] != "321" || iv1["due_date"] != "2026-04-06" ||
+		iv1["kind"] != "invoice" || iv1["vat_status"] != "output" || iv1["stock_document_no"] != "GI2026-000001" || objs(iv1["lines"])[0]["cost"] != "180" {
 		t.Fatalf("invoice 1 = %v", iv1)
 	}
 
-	// ---------- รวมใบ: ส่ง + ออกบิล A 5 + SVC 1 (ต้นทุน 300) ----------
-	iv2 := invoice(obj{"with_delivery": true, "warehouse_id": wh, "lines": []obj{ship(1, "5"), ship(2, "1")}}, 201, "delivery + tax invoice")
+	// ---------- ขายสินค้า A 5 + บริการ SVC 1 (ต้นทุน 300) — ใบกำกับภาษีทำให้ภาษีของบริการในใบเกิดทันที ----------
+	iv2 := invoice(obj{"lines": []obj{ship(1, "5"), ship(2, "1")}}, 201, "goods + service sale")
 	if iv2["totals"].(obj)["gross"] != "1605" || iv2["stock_document_no"] != "GI2026-000002" || iv2["accounting_system"] != "perpetual" {
 		t.Fatalf("invoice 2 = %v", iv2)
 	}
@@ -306,13 +311,12 @@ func TestSalesFlow(t *testing.T) {
 	}
 	a.expect(a.do("GET", base+"/reports?book=output-vat&start_date=2026-03-31&end_date=2026-03-01", owner, nil), 400, "bad date range")
 
-	// ---------- ยกเลิกย้อนลำดับ: ใบเสร็จ -> บิลรวมใบ (คืนสต็อก, ใบสั่งขายเปิดกลับ) ----------
+	// ---------- ยกเลิกย้อนลำดับ: ใบเสร็จ -> ขายสินค้า (คืนสต็อก, ใบสั่งขายเปิดกลับ) ----------
 	a.expect(a.do("PATCH", base+"/receipts/"+rv["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel receipt")
 	if r := book("ar-aging&end_date=2026-03-31"); r["totals"].(obj)["total"] != "1926" {
 		t.Fatalf("AR aging after cancelling the receipt = %v", r)
 	}
-	a.expect(a.do("PATCH", base+"/deliveries/"+do["id"].(string), owner, obj{"status": "cancelled"}), 422, "cancel invoiced delivery")
-	a.expect(a.do("PATCH", base+"/sales-invoices/"+iv2["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel combined invoice")
+	a.expect(a.do("PATCH", base+"/sales-invoices/"+iv2["id"].(string), owner, obj{"status": "cancelled"}), 200, "cancel goods sale")
 	if v := book("stock-on-hand&end_date=2026-03-31"); v["total_value"] != "420" {
 		t.Fatalf("stock after cancel = %v", v["total_value"])
 	}

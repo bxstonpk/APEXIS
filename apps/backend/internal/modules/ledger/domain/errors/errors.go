@@ -9,16 +9,17 @@ import "errors"
 
 // รูปแบบข้อมูลไม่ถูกต้อง (400)
 var (
-	ErrInvalidID          = errors.New("invalid id")
-	ErrInvalidCode        = errors.New("invalid code")
-	ErrInvalidName        = errors.New("invalid name")
-	ErrInvalidText        = errors.New("text is too long")
-	ErrInvalidStatus      = errors.New("invalid status")
-	ErrInvalidAccountType = errors.New("invalid account type")
-	ErrInvalidAmount      = errors.New("invalid amount") // detailed
-	ErrInvalidLine        = errors.New("invalid line")   // detailed
-	ErrInvalidDate        = errors.New("invalid date")
-	ErrInvalidNumbering   = errors.New("invalid document number format") // detailed
+	ErrInvalidID           = errors.New("invalid id")
+	ErrInvalidCode         = errors.New("invalid code")
+	ErrInvalidName         = errors.New("invalid name")
+	ErrInvalidText         = errors.New("text is too long")
+	ErrInvalidStatus       = errors.New("invalid status")
+	ErrInvalidBusinessType = errors.New("invalid business type")
+	ErrInvalidAccountType  = errors.New("invalid account type")
+	ErrInvalidAmount       = errors.New("invalid amount") // detailed
+	ErrInvalidLine         = errors.New("invalid line")   // detailed
+	ErrInvalidDate         = errors.New("invalid date")
+	ErrInvalidNumbering    = errors.New("invalid document number format") // detailed
 )
 
 // ไม่พบ (404)

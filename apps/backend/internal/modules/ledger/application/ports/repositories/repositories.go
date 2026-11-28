@@ -25,6 +25,10 @@ type AccountRepository interface {
 	CreateMany(ctx context.Context, as []*entities.Account) error
 	// HasAny: บริษัทมีบัญชีอยู่แล้วหรือไม่
 	HasAny(ctx context.Context, companyID vo.CompanyID) (bool, error)
+	// PostableIDsByCode คืน id ของบัญชีที่ลงรายการได้ (active, ไม่ใช่บัญชีคุม) ตามรหัส — รหัสที่ไม่พบไม่อยู่ในผลลัพธ์; query เดียว
+	PostableIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error)
+	// RefsByIDs คืนรหัส / ชื่อบัญชีตาม id (รวมที่ลบแล้ว — เอกสารเดิมยังแสดงชื่อได้); query เดียว
+	RefsByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) (map[vo.AccountID]dto.CodeName, error)
 	Update(ctx context.Context, a *entities.Account) error
 	Delete(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) error // soft delete
 	FindByID(ctx context.Context, companyID vo.CompanyID, id vo.AccountID) (*entities.Account, error)
@@ -50,6 +54,10 @@ type JournalRepository interface {
 	HasEntries(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
 	// ExistingCodes คืนรหัสสมุดที่มีอยู่แล้วจาก codes — query เดียว
 	ExistingCodes(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]bool, error)
+	// ActiveIDsByCode คืน id ของสมุดที่ active ตามรหัส — query เดียว
+	ActiveIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error)
+	// RefsByIDs คืนรหัส / ชื่อสมุดตาม id (รวมที่ลบแล้ว); query เดียว
+	RefsByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.JournalID) (map[vo.JournalID]dto.CodeName, error)
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (dto.Journal, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.JournalFilter) (listing.Result[dto.Journal], error)
 	// NextNumber คืนเลขลำดับถัดไปของสมุด + ปีบัญชี (เริ่ม 1) — ต้องอยู่ใน transaction

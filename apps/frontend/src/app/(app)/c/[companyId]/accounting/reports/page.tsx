@@ -79,9 +79,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
         {book !== 'balance-sheet' && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
         <TextField name="end_date" type="date" label={book === 'balance-sheet' ? t.fields.asOf : t.fields.end} defaultValue={end} />
         {book === 'general-ledger' && <RefFilter label={t.fields.account} name="account_id" source={ledgerApi.accounts(companyId)} value={account} />}
-        <Button type="submit">{t.run}</Button>
-        <p className="w-full text-[13px] text-ink-muted">{t.bookHints[book]}</p>
-      </Form>
+        <Button type="submit">{t.run}</Button>      </Form>
 
       {needsAccount && <Alert>{t.pickAccount}</Alert>}
       {res && 'error' in res && <Alert tone="error">{res.error}</Alert>}

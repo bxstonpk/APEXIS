@@ -8,9 +8,9 @@ import type { FieldErrors } from '@/lib/validation'
 
 /**
  * กลุ่มช่องในฟอร์ม — แบบเดียวกับหน้าข้อมูลบริษัท:
- * จอกว้าง = ซ้ายหัวข้อ + คำอธิบาย, ขวากรอบช่องกรอก (2 คอลัมน์); จอแคบเรียงบนลงล่าง
+ * จอกว้าง = ซ้ายหัวข้อ, ขวากรอบช่องกรอก (2 คอลัมน์); จอแคบเรียงบนลงล่าง — ไม่มีคำอธิบาย (หน้าจอไม่อธิบาย)
  */
-export function FormSection({ title, description, aside, children }: { title: string; description?: string; aside?: ReactNode; children: ReactNode }) {
+export function FormSection({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="grid gap-4 border-b border-line pb-8 last-of-type:border-b-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-10">
@@ -19,7 +19,6 @@ export function FormSection({ title, description, aside, children }: { title: st
           {title}
           {aside}
         </h2>
-        {description && <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{description}</p>}
       </div>
       <div className="grid gap-x-5 gap-y-4 rounded-(--radius-panel) border border-line bg-surface p-5 shadow-card sm:grid-cols-2">{children}</div>
     </section>

@@ -131,7 +131,7 @@ func itemMap(items []dto.PurchaseItem) map[uuid.UUID]integration.Item {
 	out := make(map[uuid.UUID]integration.Item, len(items))
 	for _, i := range items {
 		out[uuid.UUID(i.ID)] = integration.Item{
-			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
+			ID: uuid.UUID(i.ID), Code: i.Code, Name: i.Name, Uom: i.Uom, Stock: i.Stock, Service: i.Service, Active: i.Active,
 			PurchaseAccountID: accountUUID(i.Accounts.Purchase), InventoryAccountID: accountUUID(i.Accounts.Inventory),
 			RevenueAccountID: accountUUID(i.Accounts.Revenue),
 		}
@@ -196,6 +196,24 @@ func DocumentTypes() []integration.DocumentType {
 // Migrate สร้างตารางของ inventory
 func Migrate(db *gorm.DB) error { return models.AutoMigrate(db) }
 
+// Warehouses คืนคลังตาม id (คลังที่ไม่พบจะไม่อยู่ใน map) — ใช้แสดงชื่อ / ตรวจสถานะในเอกสารของ module อื่น
+func (m *Module) Warehouses(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Warehouse, error) {
+	in := make([]vo.WarehouseID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.WarehouseID(id)
+	}
+	found, err := m.UseCases.Facade.Warehouses(ctx, vo.CompanyID(companyID), in)
+	if err != nil {
+		return nil, reject(err)
+	}
+	out := make(map[uuid.UUID]integration.Warehouse, len(found))
+	for _, w := range found {
+		d := w.Data()
+		out[uuid.UUID(w.ID())] = integration.Warehouse{ID: uuid.UUID(w.ID()), Code: d.Code, Name: d.Name, Active: w.IsActive()}
+	}
+	return out, nil
+}
+
 // SalesItems / SalesContext คือ PurchaseItems / PurchaseContext สำหรับ module ขาย
 // (ข้อมูลเดียวกัน: สินค้า + บัญชีที่ใช้จริง และระบบบัญชีของปีบัญชี)
 func (m *Module) SalesItems(ctx context.Context, companyID uuid.UUID, itemIDs []uuid.UUID) (map[uuid.UUID]integration.Item, error) {
@@ -204,6 +222,12 @@ func (m *Module) SalesItems(ctx context.Context, companyID uuid.UUID, itemIDs []
 
 func (m *Module) SalesContext(ctx context.Context, companyID uuid.UUID, date time.Time, itemIDs []uuid.UUID) (integration.PurchaseContext, error) {
 	return m.PurchaseContext(ctx, companyID, date, itemIDs)
+}
+
+// ProvisionCompany ตั้งค่าเริ่มต้นของ module ให้บริษัทใหม่ตามประเภทธุรกิจ (บัญชี / สมุดรายวันจากผังบัญชีมาตรฐาน)
+// ลงทะเบียนเป็น hook ของ organization.Module.OnCompanyCreated หลัง ledger — ทำงานใน transaction ของการสร้างบริษัท
+func (m *Module) ProvisionCompany(ctx context.Context, c integration.NewCompany) error {
+	return m.UseCases.Settings.Provision(ctx, vo.CompanyID(c.ID), c.BusinessType)
 }
 
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)

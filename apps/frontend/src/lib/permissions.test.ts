@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { visibleApps } from '@/config/apps'
+import { appAvailableFor, findApp, visibleApps } from '@/config/apps'
+import { BUSINESS_TYPES } from '@/config/businessTypes'
 import { can, covers } from './permissions'
 
 describe('covers (กติกาเดียวกับ backend)', () => {
@@ -25,7 +26,7 @@ describe('covers (กติกาเดียวกับ backend)', () => {
 describe('visibleApps', () => {
   it('owner (*) เห็นทุกแอปและทุกเมนู', () => {
     const apps = visibleApps(['*'])
-    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'accounting', 'finance', 'organization', 'users'])
+    expect(apps.map((a) => a.key)).toEqual(['sales', 'purchasing', 'inventory', 'manufacturing', 'accounting', 'finance', 'organization', 'users'])
     expect(apps.find((a) => a.key === 'organization')!.menu[0]!.path).toBe('branches')
   })
 
@@ -38,5 +39,24 @@ describe('visibleApps', () => {
 
   it('สิทธิ์ manage อย่างเดียวไม่ทำให้เห็นเมนู (ต้องมี read)', () => {
     expect(visibleApps(['organization.branch:manage'])).toEqual([])
+  })
+
+  it('ธุรกิจบริการไม่เห็นแอปคลังสินค้า; ซื้อขาย / ผลิต / ก่อสร้างเห็น', () => {
+    expect(visibleApps(['*'], 'service').map((a) => a.key)).not.toContain('inventory')
+    for (const type of ['trading', 'manufacturing', 'construction'] as const) {
+      expect(visibleApps(['*'], type).map((a) => a.key)).toContain('inventory')
+    }
+  })
+
+  it('ไม่รู้ประเภทธุรกิจ = เห็นทุกแอปตามสิทธิ์ (ข้อมูลบริษัทเก่า)', () => {
+    expect(visibleApps(['*'], undefined)).toHaveLength(visibleApps(['*']).length)
+  })
+})
+
+describe('appAvailableFor', () => {
+  it('แอปที่ไม่ระบุ businessTypes ใช้ได้ทุกประเภท', () => {
+    const sales = findApp('sales')!
+    for (const type of BUSINESS_TYPES) expect(appAvailableFor(sales, type)).toBe(true)
+    expect(appAvailableFor(findApp('inventory')!, 'service')).toBe(false)
   })
 })

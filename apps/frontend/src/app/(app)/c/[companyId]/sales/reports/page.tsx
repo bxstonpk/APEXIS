@@ -8,7 +8,7 @@ import { formatAmount, plainAmount } from '@/features/accounting/money'
 import { ReportActions } from '@/features/accounting/ReportActions'
 import type { CsvCell } from '@/features/accounting/csv'
 import { ReportTable as Table } from '@/features/reports/ReportTable'
-import { salesApi, salesPage, type Aging, type OutstandingRow, type TaxReport } from '@/features/sales/types'
+import { salesApi, salesPage, type Aging, type OutstandingRow, type TaxReport, type TaxRowKind, type UndueVatReport } from '@/features/sales/types'
 import { formatDate, today } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { backendGet, type ListMeta } from '@/lib/server/backend'
@@ -19,15 +19,26 @@ export const metadata: Metadata = { title: texts.sales.reports.pageTitle }
 
 type Props = { params: Promise<{ companyId: string }>; searchParams: Promise<SearchParams> }
 
-const BOOKS = ['outstanding-sales-orders', 'ar-aging', 'output-vat'] as const
+const BOOKS = ['outstanding-sales-orders', 'ar-aging', 'output-vat', 'undue-output-vat'] as const
 type Book = (typeof BOOKS)[number]
+
+/**
+ * ลิงก์เอกสารของแถวภาษีขาย — ใบกำกับภาษีบริการ = หน้าใบแจ้งหนี้ค่าบริการ (document_id = ใบแจ้งหนี้)
+ * ใบรับเงินเป็นเอกสารของการเงิน: แอปขายไม่ลิงก์ไปการเงิน (เข้าการเงินจากหน้ารวมแอปเท่านั้น) — แสดงเลขที่อย่างเดียว
+ */
+function taxRowHref(companyId: string, kind: TaxRowKind, id: string): string | null {
+  if (kind === 'receipt') return null
+  const menu: Record<string, string> = { invoice: 'invoices', deposit: 'deposits', tax_invoice: 'service-invoices', credit_note: 'credit-notes' }
+  return `${salesPage(companyId, menu[kind] ?? 'invoices')}/${id}`
+}
 
 const num = 'px-3 py-2 text-right tabular-nums whitespace-nowrap print:py-0.5'
 const totalCell = `${num} border-b-4 border-double border-ink/70`
 
 /**
  * รายงานขาย — ?book=&start_date=&end_date=&page= ส่งต่อ GET /reports ตรงๆ (กรอง / แบ่งหน้าใน DB, คิวรีเดียว)
- *   ค้างส่ง / ค้างออกบิล: ไม่ใช้วันที่; อายุลูกหนี้: ณ วันที่ (end_date); ภาษีขาย: ช่วงวันที่
+ *   ค้างออกเอกสารขาย: ไม่ใช้วันที่; อายุลูกหนี้ / ภาษีขายยังไม่ถึงกำหนด: ณ วันที่ (end_date); ภาษีขาย: ช่วงวันที่
+ *   ภาษีขาย = เฉพาะเอกสารที่ภาษีเกิดแล้ว (ขายสินค้า / มัดจำ / ใบกำกับภาษีบริการ / รับเงินค่าบริการ / ใบลดหนี้)
  */
 export default async function Page({ params, searchParams }: Props) {
   const { companyId } = await params
@@ -48,8 +59,8 @@ export default async function Page({ params, searchParams }: Props) {
     (r) => r as { data: unknown; meta?: ListMeta },
     (err: unknown) => ({ error: errorMessage(err) }),
   )
-  const period =
-    book === 'output-vat' ? format(texts.reports.period, { start: formatDate(start), end: formatDate(end) }) : book === 'ar-aging' ? `${t.fields.asOf} ${formatDate(end)}` : ''
+  const asOf = book === 'ar-aging' || book === 'undue-output-vat'
+  const period = book === 'output-vat' ? format(texts.reports.period, { start: formatDate(start), end: formatDate(end) }) : asOf ? `${t.fields.asOf} ${formatDate(end)}` : ''
 
   let table: ReactNode = null
   let csv: CsvCell[][] = []
@@ -60,11 +71,11 @@ export default async function Page({ params, searchParams }: Props) {
     const rows = (res.data as { rows: OutstandingRow[] }).rows
     csv = [
       ...head,
-      [c.order, c.date, c.customer, c.item, c.ordered, c.toDeliver, c.toInvoice],
-      ...rows.map((r) => [r.order.order_no, r.date, r.customer.name, `${r.item.code} ${r.item.name}`, plainAmount(r.quantity), plainAmount(r.to_deliver), plainAmount(r.to_invoice)]),
+      [c.order, c.date, c.customer, c.item, c.ordered, c.invoiced, c.toInvoice],
+      ...rows.map((r) => [r.order.order_no, r.date, r.customer.name, `${r.item.code} ${r.item.name}`, plainAmount(r.quantity), plainAmount(r.invoiced_quantity), plainAmount(r.to_invoice)]),
     ]
     table = (
-      <Table minWidth="48rem" head={[c.order, c.date, c.customer, c.item]} numHead={[c.ordered, c.toDeliver, c.toInvoice]} empty={rows.length === 0}>
+      <Table minWidth="48rem" head={[c.order, c.date, c.customer, c.item]} numHead={[c.ordered, c.invoiced, c.toInvoice]} empty={rows.length === 0}>
         {rows.map((r) => (
           <tr key={`${r.order.id}-${r.line_no}`} className="border-b border-line break-inside-avoid">
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
@@ -78,7 +89,7 @@ export default async function Page({ params, searchParams }: Props) {
               <span className="text-[13px] text-ink-muted">{r.item.code}</span> {r.item.name}
             </td>
             <td className={num}>{formatAmount(r.quantity)}</td>
-            <td className={num}>{formatAmount(r.to_deliver, { dashZero: true })}</td>
+            <td className={num}>{formatAmount(r.invoiced_quantity, { dashZero: true })}</td>
             <td className={num}>{formatAmount(r.to_invoice, { dashZero: true })}</td>
           </tr>
         ))}
@@ -126,12 +137,15 @@ export default async function Page({ params, searchParams }: Props) {
 
   if ('data' in res && book === 'output-vat') {
     const x = res.data as TaxReport
-    const docHref = (r: TaxReport['rows'][number]) => `${salesPage(companyId, r.kind === 'credit_note' ? 'credit-notes' : 'invoices')}/${r.document_id}`
+    const docHref = (r: TaxReport['rows'][number]) => taxRowHref(companyId, r.kind, r.document_id)
+    // อ้างอิง: ใบแจ้งหนี้ค่าบริการต้นทาง (ใบกำกับภาษี / รับเงิน) หรือใบกำกับเดิม (ใบลดหนี้)
+    const refHref = (r: TaxReport['rows'][number]) =>
+      r.reference_id ? `${salesPage(companyId, r.kind === 'credit_note' ? 'invoices' : 'service-invoices')}/${r.reference_id}` : null
     csv = [
       ...head,
-      [c.date, c.no, c.refNo, c.customer, c.taxId, c.branch, c.base, c.tax],
-      ...x.rows.map((r) => [r.date, r.document_no, r.reference_no, r.customer.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
-      ['', '', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
+      [c.date, c.no, c.kind, c.refNo, c.customer, c.taxId, c.branch, c.base, c.tax],
+      ...x.rows.map((r) => [r.date, r.document_no, t.taxKinds[r.kind] ?? r.kind, r.reference_no, r.customer.name, r.tax_id, r.branch_no, plainAmount(r.base), plainAmount(r.tax)]),
+      ['', '', '', '', t.total, '', '', plainAmount(x.total_base), plainAmount(x.total_tax)],
     ]
     table = (
       <Table
@@ -153,14 +167,28 @@ export default async function Page({ params, searchParams }: Props) {
           <tr key={`${r.document_id}-${i}`} className="border-b border-line break-inside-avoid">
             <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date)}</td>
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
-              <Link href={docHref(r)} className="text-primary hover:underline print:text-ink">
-                {r.document_no}
-              </Link>
-              {r.kind === 'credit_note' && (
-                <span className="block font-sans text-[12px] text-ink-muted">
-                  {texts.creditNotes.print.title} · {r.reference_no}
-                </span>
+              {docHref(r) ? (
+                <Link href={docHref(r)!} className="text-primary hover:underline print:text-ink">
+                  {r.document_no}
+                </Link>
+              ) : (
+                r.document_no
               )}
+              <span className="block font-sans text-[12px] text-ink-muted">
+                {t.taxKinds[r.kind] ?? r.kind}
+                {r.reference_no && (
+                  <>
+                    {' · '}
+                    {refHref(r) ? (
+                      <Link href={refHref(r)!} className="hover:underline print:no-underline">
+                        {r.reference_no}
+                      </Link>
+                    ) : (
+                      r.reference_no
+                    )}
+                  </>
+                )}
+              </span>
             </td>
             <td className="px-3 py-2">{r.customer.name}</td>
             <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
@@ -172,6 +200,57 @@ export default async function Page({ params, searchParams }: Props) {
           </tr>
         ))}
       </Table>
+    )
+  }
+
+  if ('data' in res && book === 'undue-output-vat') {
+    const x = res.data as UndueVatReport
+    const keys = ['gross', 'vat_total', 'vat_recognized', 'vat_undue'] as const
+    const labels = [c.gross, c.vatTotal, c.vatRecognized, c.vatUndue]
+    csv = [
+      ...head,
+      [c.date, c.invoice, c.customer, ...labels],
+      ...x.rows.map((r) => [r.date, r.invoice.document_no, r.customer.name, ...keys.map((k) => plainAmount(r[k]))]),
+      ['', '', t.total, ...keys.map((k) => plainAmount(x.totals[k]))],
+    ]
+    table = (
+      <>
+        <Table
+          minWidth="52rem"
+          head={[c.date, c.invoice, c.customer]}
+          numHead={labels}
+          empty={x.rows.length === 0}
+          foot={
+            <tr className="border-t-2 border-ink/70 font-semibold">
+              <td colSpan={3} className="px-3 py-2 text-right">
+                {t.total}
+              </td>
+              {keys.map((k) => (
+                <td key={k} className={totalCell}>
+                  {formatAmount(x.totals[k])}
+                </td>
+              ))}
+            </tr>
+          }
+        >
+          {x.rows.map((r) => (
+            <tr key={r.invoice.id} className="border-b border-line break-inside-avoid">
+              <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date)}</td>
+              <td className="px-3 py-2 font-mono text-[13px] whitespace-nowrap">
+                <Link href={`${salesPage(companyId, 'service-invoices')}/${r.invoice.id}`} className="text-primary hover:underline print:text-ink">
+                  {r.invoice.document_no}
+                </Link>
+              </td>
+              <td className="px-3 py-2">{r.customer.name}</td>
+              {keys.map((k) => (
+                <td key={k} className={`${num} ${k === 'vat_undue' ? 'font-medium' : ''}`}>
+                  {formatAmount(r[k], { dashZero: k === 'vat_recognized' })}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </Table>
+      </>
     )
   }
 
@@ -191,7 +270,7 @@ export default async function Page({ params, searchParams }: Props) {
       <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-72" />
         {book === 'output-vat' && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
-        {book !== 'outstanding-sales-orders' && <TextField name="end_date" type="date" label={book === 'ar-aging' ? t.fields.asOf : t.fields.end} defaultValue={end} />}
+        {book !== 'outstanding-sales-orders' && <TextField name="end_date" type="date" label={asOf ? t.fields.asOf : t.fields.end} defaultValue={end} />}
         <Button type="submit">{texts.reports.run}</Button>
       </Form>
 

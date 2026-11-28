@@ -39,13 +39,15 @@ func optNo(s string) *string {
 	return &s
 }
 
+// Ref: Type = ชนิดสินค้า (service | stock | non_stock) — เฉพาะสินค้าในบรรทัดเอกสาร
 type Ref struct {
 	ID   string `json:"id"`
 	Code string `json:"code"`
 	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
 }
 
-func ref(r dto.Ref) Ref { return Ref{ID: r.ID, Code: r.Code, Name: r.Name} }
+func ref(r dto.Ref) Ref { return Ref{ID: r.ID, Code: r.Code, Name: r.Name, Type: r.Type} }
 
 type Totals struct {
 	Net   string `json:"net"`
@@ -64,21 +66,24 @@ func meta[T any](r listing.Result[T]) httpx.Meta {
 // ---------- ค่าตั้ง / ลูกค้า ----------
 
 type Settings struct {
-	VatRegistered         bool    `json:"vat_registered"`
-	VatRate               string  `json:"vat_rate"`
-	JournalID             *string `json:"journal_id"`
-	ARAccountID           *string `json:"ar_account_id"`
-	OutputVatAccountID    *string `json:"output_vat_account_id"`
-	RevenueAccountID      *string `json:"revenue_account_id"`
-	CogsAccountID         *string `json:"cogs_account_id"`
-	SalesReturnsAccountID *string `json:"sales_returns_account_id"`
+	VatRegistered           bool    `json:"vat_registered"`
+	VatRate                 string  `json:"vat_rate"`
+	JournalID               *string `json:"journal_id"`
+	ARAccountID             *string `json:"ar_account_id"`
+	OutputVatAccountID      *string `json:"output_vat_account_id"`
+	RevenueAccountID        *string `json:"revenue_account_id"`
+	CogsAccountID           *string `json:"cogs_account_id"`
+	SalesReturnsAccountID   *string `json:"sales_returns_account_id"`
+	UndueOutputVatAccountID *string `json:"undue_output_vat_account_id"`
+	DepositAccountID        *string `json:"deposit_account_id"`
 }
 
 func FromSettings(s dto.Settings) Settings {
 	return Settings{
 		VatRegistered: s.VatRegistered, VatRate: str(s.VatRate), JournalID: s.JournalID, ARAccountID: s.ARAccountID,
 		OutputVatAccountID: s.OutputVatAccountID, RevenueAccountID: s.RevenueAccountID, CogsAccountID: s.CogsAccountID,
-		SalesReturnsAccountID: s.SalesReturnsAccountID,
+		SalesReturnsAccountID:   s.SalesReturnsAccountID,
+		UndueOutputVatAccountID: s.UndueOutputVatAccountID, DepositAccountID: s.DepositAccountID,
 	}
 }
 
@@ -254,54 +259,60 @@ func stockInfo(s dto.StockInfo) StockInfo {
 	return StockInfo{WarehouseID: s.WarehouseID, System: s.System, StockDocumentNo: s.StockDocumentNo}
 }
 
-type DeliveryLine struct {
-	OrderLineNo int    `json:"order_line_no"`
-	Item        Ref    `json:"item"`
-	Quantity    string `json:"quantity"`
-	Cost        string `json:"cost"`
-}
-
-type Delivery struct {
+// InvoiceSummary คือหัวเอกสารขาย (ขายสินค้า / ขายบริการ / มัดจำ)
+//
+//	vat_status: output = ภาษีขายเกิดทั้งใบ, undue = ยังไม่ถึงกำหนด (ขายบริการที่ยังไม่รับเงิน), partial = ถึงกำหนดบางส่วน
+//	deposit_remaining / deposit_applied: มัดจำเท่านั้น (ฐานก่อน VAT)
+type InvoiceSummary struct {
 	PostedSummary
-	StockInfo
-	TotalCost   string         `json:"total_cost"`
-	Reference   string         `json:"reference"`
-	Description string         `json:"description"`
-	Lines       []DeliveryLine `json:"lines"`
+	Kind             string      `json:"kind"`
+	DueDate          string      `json:"due_date"`
+	Totals           Totals      `json:"totals"`
+	Received         string      `json:"received_amount"`  // รับชำระ (ใบรับเงินของ finance) — ไม่รวมใบลดหนี้ / มัดจำที่หัก
+	Credited         string      `json:"credited_amount"`  // ใบลดหนี้ที่ยังไม่ยกเลิก (รวม VAT)
+	DepositDeducted  string      `json:"deposit_deducted"` // มัดจำที่หักในใบนี้ (รวม VAT)
+	Outstanding      string      `json:"outstanding"`      // ยอดรวม - มัดจำ - รับชำระ - ลดหนี้
+	VatStatus        string      `json:"vat_status"`
+	VatRecognized    string      `json:"vat_recognized"`
+	VatUndue         string      `json:"vat_undue"`
+	TaxInvoice       *TaxInvoice `json:"tax_invoice"`
+	DepositRemaining *string     `json:"deposit_remaining,omitempty"`
+	DepositApplied   *string     `json:"applied_amount,omitempty"`
+	// มัดจำเท่านั้น: ยอดแบบแบน (ตามสัญญา API ของหน้าเว็บ) — base / vat / gross = totals, remaining_amount = deposit_remaining
+	Base            *string `json:"base,omitempty"`
+	Vat             *string `json:"vat,omitempty"`
+	Gross           *string `json:"gross,omitempty"`
+	RemainingAmount *string `json:"remaining_amount,omitempty"`
 }
 
-func FromDelivery(d dto.Delivery) Delivery {
-	out := Delivery{
-		PostedSummary: FromPostedSummary(d.PostedSummary), StockInfo: stockInfo(d.StockInfo), TotalCost: str(d.TotalCost),
-		Reference: d.Reference, Description: d.Description, Lines: make([]DeliveryLine, len(d.Lines)),
+type TaxInvoice struct {
+	No   string `json:"no"`
+	Date string `json:"date"`
+}
+
+func FromInvoiceSummary(i dto.InvoiceSummary) InvoiceSummary {
+	out := InvoiceSummary{
+		PostedSummary: FromPostedSummary(i.PostedSummary), Kind: i.Kind, DueDate: date(i.DueDate),
+		Totals: totals(i.Totals), Received: str(i.Received), Credited: str(i.Credited), DepositDeducted: str(i.DepositGross),
+		Outstanding: str(i.Outstanding), VatStatus: i.VatStatus, VatRecognized: str(i.VatRecognized), VatUndue: str(i.VatUndue),
+		DepositRemaining: optStr(i.DepositRemaining), DepositApplied: optStr(i.DepositApplied),
 	}
-	for i, l := range d.Lines {
-		out.Lines[i] = DeliveryLine{OrderLineNo: l.OrderLineNo, Item: ref(l.Item), Quantity: str(l.Quantity), Cost: str(l.Cost)}
+	if t := i.TaxInvoice; t != nil {
+		out.TaxInvoice = &TaxInvoice{No: t.No, Date: date(t.Date)}
+	}
+	if i.DepositRemaining != nil {
+		base, vat, gross := out.Totals.Net, out.Totals.Vat, out.Totals.Gross
+		out.Base, out.Vat, out.Gross, out.RemainingAmount = &base, &vat, &gross, out.DepositRemaining
 	}
 	return out
 }
 
-type InvoiceSummary struct {
-	PostedSummary
-	WithDelivery bool   `json:"with_delivery"`
-	DueDate      string `json:"due_date"`
-	Totals       Totals `json:"totals"`
-	Received     string `json:"received_amount"` // รับชำระ (ใบเสร็จ) — ไม่รวมใบลดหนี้
-	Credited     string `json:"credited_amount"` // ใบลดหนี้ที่ยังไม่ยกเลิก (รวม VAT)
-	Outstanding  string `json:"outstanding"`     // ยอดรวม - รับชำระ - ลดหนี้
-}
-
-func FromInvoiceSummary(i dto.InvoiceSummary) InvoiceSummary {
-	return InvoiceSummary{
-		PostedSummary: FromPostedSummary(i.PostedSummary), WithDelivery: i.WithDelivery, DueDate: date(i.DueDate),
-		Totals: totals(i.Totals), Received: str(i.Received), Credited: str(i.Credited), Outstanding: str(i.Outstanding),
-	}
-}
-
 type InvoiceLine struct {
-	LineNo           int    `json:"line_no"` // ใบลดหนี้อ้างด้วย invoice_line_no
-	OrderLineNo      int    `json:"order_line_no"`
+	LineNo           int    `json:"line_no"`       // ใบลดหนี้อ้างด้วย invoice_line_no
+	OrderLineNo      int    `json:"order_line_no"` // 0 = ออกตรง
 	Item             Ref    `json:"item"`
+	Description      string `json:"description"`
+	Service          bool   `json:"service"`
 	Quantity         string `json:"quantity"`
 	UnitPrice        string `json:"unit_price"`
 	Amounts          Totals `json:"amounts"`
@@ -319,31 +330,159 @@ type BillTo struct {
 	Address  string `json:"address"`
 }
 
+type DepositApplied struct {
+	Deposit InvoiceRef `json:"deposit"`
+	Amount  string     `json:"amount"`
+	Vat     string     `json:"vat"`
+}
+
 type Invoice struct {
 	InvoiceSummary
 	StockInfo
-	BillTo           BillTo        `json:"bill_to"`
-	VatRate          string        `json:"vat_rate"`
-	PriceIncludesVat bool          `json:"price_includes_vat"`
-	Reference        string        `json:"reference"`
-	Description      string        `json:"description"`
-	Lines            []InvoiceLine `json:"lines"`
+	BillTo           BillTo           `json:"bill_to"`
+	VatRate          string           `json:"vat_rate"`
+	PriceIncludesVat bool             `json:"price_includes_vat"`
+	Reference        string           `json:"reference"`
+	Description      string           `json:"description"`
+	Lines            []InvoiceLine    `json:"lines"`
+	DepositsApplied  []DepositApplied `json:"deposits_applied"`
+	VatRecognitions  []VatRecognition `json:"vat_recognitions"`
+}
+
+// VatRecognition: ภาษีขายที่ถึงกำหนดแล้ว (ขายบริการ) — kind = receipt (ใบรับเงิน) | tax_invoice
+type VatRecognition struct {
+	Kind     string     `json:"kind"`
+	Document InvoiceRef `json:"document"`
+	Date     string     `json:"date"`
+	Base     string     `json:"base"`
+	Vat      string     `json:"vat"`
+}
+
+type OpenDeposit struct {
+	ID              string `json:"id"`
+	DocumentNo      string `json:"document_no"`
+	Date            string `json:"date"`
+	VatRate         string `json:"vat_rate"`
+	Base            string `json:"base"`
+	Vat             string `json:"vat"`
+	RemainingAmount string `json:"remaining_amount"`
+}
+
+func FromOpenDeposits(rows []dto.OpenDeposit) []OpenDeposit {
+	out := make([]OpenDeposit, len(rows))
+	for i, x := range rows {
+		out[i] = OpenDeposit{ID: x.ID, DocumentNo: x.DocumentNo, Date: date(x.Date), VatRate: str(x.VatRate), Base: str(x.Base), Vat: str(x.Vat),
+			RemainingAmount: str(x.Remaining)}
+	}
+	return out
 }
 
 func FromInvoice(i dto.Invoice) Invoice {
 	out := Invoice{
 		InvoiceSummary: FromInvoiceSummary(i.InvoiceSummary), StockInfo: stockInfo(i.StockInfo), VatRate: str(i.VatRate),
 		PriceIncludesVat: i.PriceIncludesVat, Reference: i.Reference, Description: i.Description, Lines: make([]InvoiceLine, len(i.Lines)),
-		BillTo: BillTo{Name: i.BillTo.Name, TaxID: i.BillTo.TaxID, BranchNo: i.BillTo.BranchNo, Address: i.BillTo.Address},
+		BillTo:          BillTo{Name: i.BillTo.Name, TaxID: i.BillTo.TaxID, BranchNo: i.BillTo.BranchNo, Address: i.BillTo.Address},
+		DepositsApplied: make([]DepositApplied, len(i.DepositsApplied)), VatRecognitions: make([]VatRecognition, len(i.VatRecognitions)),
+	}
+	for n, v := range i.VatRecognitions {
+		out.VatRecognitions[n] = VatRecognition{Kind: v.Kind, Document: InvoiceRef{ID: v.Document.ID, DocumentNo: v.Document.Code}, Date: date(v.Date),
+			Base: str(v.Base), Vat: str(v.Vat)}
 	}
 	for n, l := range i.Lines {
 		out.Lines[n] = InvoiceLine{
-			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: ref(l.Item), Quantity: str(l.Quantity), UnitPrice: str(l.UnitPrice),
-			Amounts: totals(l.Amounts), RevenueAccountID: l.RevenueAccountID, Cost: str(l.Cost),
-			Returned: str(l.Returned), Credited: str(l.Credited),
+			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: ref(l.Item), Description: l.Description, Service: l.Service,
+			Quantity: str(l.Quantity), UnitPrice: str(l.UnitPrice), Amounts: totals(l.Amounts), RevenueAccountID: l.RevenueAccountID,
+			Cost: str(l.Cost), Returned: str(l.Returned), Credited: str(l.Credited),
 		}
 	}
+	for n, d := range i.DepositsApplied {
+		out.DepositsApplied[n] = DepositApplied{Deposit: InvoiceRef{ID: d.Deposit.ID, DocumentNo: d.Deposit.Code}, Amount: str(d.Amount), Vat: str(d.Vat)}
+	}
 	return out
+}
+
+// ---------- ใบวางบิล ----------
+
+type BillingNoteInvoice struct {
+	ID          string `json:"id"`
+	DocumentNo  string `json:"document_no"`
+	Kind        string `json:"kind"`
+	Date        string `json:"date"`
+	DueDate     string `json:"due_date"`
+	Gross       string `json:"gross"`
+	Outstanding string `json:"outstanding"`
+}
+
+type BillingNoteSummary struct {
+	ID          string     `json:"id"`
+	DocumentNo  string     `json:"document_no"`
+	Date        string     `json:"date"`
+	DueDate     string     `json:"due_date"`
+	Customer    Ref        `json:"customer"`
+	Status      string     `json:"status"` // open | paid | cancelled
+	Total       string     `json:"total"`
+	Outstanding string     `json:"outstanding"`
+	CancelledAt *time.Time `json:"cancelled_at"`
+}
+
+type BillingNote struct {
+	BillingNoteSummary
+	Description string               `json:"description"`
+	CreatedBy   string               `json:"created_by"`
+	Invoices    []BillingNoteInvoice `json:"invoices"`
+}
+
+func FromBillingNoteSummary(b dto.BillingNoteSummary) BillingNoteSummary {
+	return BillingNoteSummary{ID: b.ID, DocumentNo: b.DocumentNo, Date: date(b.Date), DueDate: date(b.DueDate), Customer: ref(b.Customer),
+		Status: b.Status, Total: str(b.Total), Outstanding: str(b.Outstanding), CancelledAt: b.CancelledAt}
+}
+
+func FromBillingNote(b dto.BillingNote) BillingNote {
+	out := BillingNote{BillingNoteSummary: FromBillingNoteSummary(b.BillingNoteSummary), Description: b.Description, CreatedBy: b.CreatedBy,
+		Invoices: make([]BillingNoteInvoice, len(b.Invoices))}
+	for i, x := range b.Invoices {
+		out.Invoices[i] = BillingNoteInvoice{ID: x.ID, DocumentNo: x.DocumentNo, Kind: x.Kind, Date: date(x.Date), DueDate: date(x.DueDate),
+			Gross: str(x.Gross), Outstanding: str(x.Outstanding)}
+	}
+	return out
+}
+
+// ---------- รายงานภาษีขายยังไม่ถึงกำหนด ----------
+
+type UndueVatRow struct {
+	Invoice       InvoiceRef `json:"invoice"`
+	Date          string     `json:"date"`
+	Customer      Ref        `json:"customer"`
+	Gross         string     `json:"gross"`
+	VatTotal      string     `json:"vat_total"`
+	VatRecognized string     `json:"vat_recognized"`
+	VatUndue      string     `json:"vat_undue"`
+}
+
+type UndueVatTotals struct {
+	Gross         string `json:"gross"`
+	VatTotal      string `json:"vat_total"`
+	VatRecognized string `json:"vat_recognized"`
+	VatUndue      string `json:"vat_undue"`
+}
+
+type UndueVat struct {
+	Book    string         `json:"book"`
+	EndDate string         `json:"end_date"`
+	Rows    []UndueVatRow  `json:"rows"`
+	Totals  UndueVatTotals `json:"totals"`
+}
+
+func FromUndueVat(book string, r dto.UndueVatReport) ReportBody[UndueVat] {
+	rows := make([]UndueVatRow, len(r.Rows.Items))
+	for i, x := range r.Rows.Items {
+		rows[i] = UndueVatRow{Invoice: InvoiceRef{ID: x.Invoice.ID, DocumentNo: x.Invoice.Code}, Date: date(x.Date), Customer: ref(x.Customer),
+			Gross: str(x.Gross), VatTotal: str(x.VatTotal), VatRecognized: str(x.VatRecognized), VatUndue: str(x.VatUndue)}
+	}
+	t := r.Totals
+	return ReportBody[UndueVat]{Data: UndueVat{Book: book, EndDate: date(r.EndDate), Rows: rows,
+		Totals: UndueVatTotals{Gross: str(t.Gross), VatTotal: str(t.VatTotal), VatRecognized: str(t.VatRecognized), VatUndue: str(t.VatUndue)}},
+		Meta: meta(r.Rows)}
 }
 
 // ---------- ใบลดหนี้ ----------
@@ -351,6 +490,7 @@ func FromInvoice(i dto.Invoice) Invoice {
 type InvoiceRef struct {
 	ID         string `json:"id"`
 	DocumentNo string `json:"document_no"`
+	Kind       string `json:"kind,omitempty"` // ใบลดหนี้: ชนิดเอกสารเดิม (invoice | service_invoice)
 }
 
 type CreditNoteSummary struct {
@@ -360,6 +500,7 @@ type CreditNoteSummary struct {
 	Invoice     InvoiceRef `json:"invoice"`
 	Customer    Ref        `json:"customer"`
 	Kind        string     `json:"kind"`
+	VatKind     string     `json:"vat_kind"` // output = ใบลดหนี้ / ใบกำกับภาษี; undue = ลดภาษีขายยังไม่ถึงกำหนด (ใบลดหนี้ธรรมดา)
 	Reason      string     `json:"reason"`
 	Totals      Totals     `json:"totals"`
 	Status      string     `json:"status"`
@@ -370,8 +511,8 @@ type CreditNoteSummary struct {
 
 func FromCreditNoteSummary(c dto.CreditNoteSummary) CreditNoteSummary {
 	return CreditNoteSummary{
-		ID: c.ID, DocumentNo: c.DocumentNo, Date: date(c.Date), Invoice: InvoiceRef{ID: c.Order.ID, DocumentNo: c.Order.Code},
-		Customer: ref(c.Customer), Kind: c.Kind, Reason: c.Reason, Totals: totals(c.Totals), Status: c.Status,
+		ID: c.ID, DocumentNo: c.DocumentNo, Date: date(c.Date), Invoice: InvoiceRef{ID: c.Order.ID, DocumentNo: c.Order.Code, Kind: c.InvoiceKind},
+		Customer: ref(c.Customer), Kind: c.Kind, VatKind: c.VatKind, Reason: c.Reason, Totals: totals(c.Totals), Status: c.Status,
 		EntryID: c.EntryID, EntryNo: c.EntryNo, CancelledAt: c.CancelledAt,
 	}
 }
@@ -494,10 +635,11 @@ func FromAging(book string, a dto.Aging) ReportBody[Aging] {
 
 type TaxRow struct {
 	Date        string `json:"date"`
-	Kind        string `json:"kind"` // invoice | credit_note (ยอดติดลบ)
+	Kind        string `json:"kind"` // invoice | deposit | tax_invoice | receipt | credit_note (ยอดติดลบ)
 	DocumentID  string `json:"document_id"`
 	DocumentNo  string `json:"document_no"`
-	ReferenceNo string `json:"reference_no"` // ใบลดหนี้: เลขที่ใบกำกับภาษีเดิม
+	ReferenceNo string `json:"reference_no"` // ใบลดหนี้: ใบกำกับเดิม; tax_invoice / receipt: ใบแจ้งหนี้บริการ
+	ReferenceID string `json:"reference_id,omitempty"`
 	Customer    Ref    `json:"customer"`
 	TaxID       string `json:"tax_id"`
 	BranchNo    string `json:"branch_no"`
@@ -518,7 +660,7 @@ type TaxReport struct {
 func FromTax(book string, t dto.TaxReport) ReportBody[TaxReport] {
 	rows := make([]TaxRow, len(t.Rows.Items))
 	for i, r := range t.Rows.Items {
-		rows[i] = TaxRow{Date: date(r.Date), Kind: r.Kind, DocumentID: r.DocumentID, DocumentNo: r.DocumentNo, ReferenceNo: r.ReferenceNo, Customer: ref(r.Customer),
+		rows[i] = TaxRow{Date: date(r.Date), Kind: r.Kind, DocumentID: r.DocumentID, DocumentNo: r.DocumentNo, ReferenceNo: r.ReferenceNo, ReferenceID: r.ReferenceID, Customer: ref(r.Customer),
 			TaxID: r.TaxID, BranchNo: r.BranchNo, TaxType: r.TaxType, Base: str(r.Base), Tax: str(r.Tax)}
 	}
 	return ReportBody[TaxReport]{Data: TaxReport{Book: book, StartDate: date(t.Start), EndDate: date(t.End), Rows: rows,
@@ -556,7 +698,6 @@ type Dashboard struct {
 	} `json:"quotations"`
 	Orders struct {
 		DraftCount     int64 `json:"draft_count"`
-		ToDeliverCount int64 `json:"to_deliver_count"`
 		ToInvoiceCount int64 `json:"to_invoice_count"`
 	} `json:"orders"`
 	Receivables struct {
@@ -599,7 +740,7 @@ func FromDashboard(d dto.Dashboard) Dashboard {
 		out.PreviousYear = append(out.PreviousYear, MonthNet{Month: m.Month, Net: str(m.Net)})
 	}
 	out.Quotations.OpenCount, out.Quotations.OpenAmount = d.QuotationOpenCount, str(d.QuotationOpenAmount)
-	out.Orders.DraftCount, out.Orders.ToDeliverCount, out.Orders.ToInvoiceCount = d.OrderDraftCount, d.OrderToDeliverCount, d.OrderToInvoiceCount
+	out.Orders.DraftCount, out.Orders.ToInvoiceCount = d.OrderDraftCount, d.OrderToInvoiceCount
 	r := d.Receivables
 	out.Receivables.Outstanding, out.Receivables.Overdue = str(r.Outstanding), str(r.Overdue)
 	out.Receivables.Aging = Aging5{NotDue: str(r.NotDue), Days1To30: str(r.Days1To30), Days31To60: str(r.Days31To60), Days61To90: str(r.Days61To90), Over90: str(r.Over90)}

@@ -20,12 +20,12 @@ export function appMetadata(appKey: string): Metadata {
 /** หน้าแรกของแอป = เมนูแรกที่มีสิทธิ์ (ไม่มีสิทธิ์ให้ AppShell แสดงข้อความแทน) */
 export async function redirectToFirstMenu(companyId: string, appKey: string): Promise<null> {
   const ctx = await getCompanyContext(companyId)
-  const app = ctx && visibleApps(ctx.permissions).find((a) => a.key === appKey)
+  const app = ctx && visibleApps(ctx.permissions, ctx.company.business_type).find((a) => a.key === appKey)
   if (app?.menu[0]) redirect(companyPath(companyId, app.key, app.menu[0].path))
   return null
 }
 
 /** เมนูที่ยังไม่มีหน้าจริง */
 export function ComingSoon() {
-  return <MessagePanel icon="soon" title={texts.common.comingSoon} description={texts.common.comingSoonDescription} />
+  return <MessagePanel icon="soon" title={texts.common.comingSoon} />
 }

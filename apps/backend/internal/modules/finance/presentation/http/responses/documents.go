@@ -81,24 +81,48 @@ func FromSummary(d dto.DocumentSummary) DocumentSummary {
 }
 
 type ReceiptLine struct {
-	Invoice     *Ref    `json:"invoice"` // code = เลขที่ใบแจ้งหนี้
+	Invoice     *Ref    `json:"invoice"`      // code = เลขที่ใบแจ้งหนี้
+	InvoiceKind string  `json:"invoice_kind"` // invoice | service_invoice | deposit ("" = รับเงินอื่น)
 	AccountID   *string `json:"account_id"`
 	Description string  `json:"description"`
 	Amount      string  `json:"amount"`
 	Wht         string  `json:"wht"`
+	VatBase     string  `json:"vat_base"` // ภาษีขายที่ถึงกำหนดด้วยใบรับเงินนี้ (ขายบริการ)
+	Vat         string  `json:"vat"`
 }
 
+// VatLine: ภาษีขายของใบแจ้งหนี้บริการที่ถึงกำหนดด้วยใบรับเงินนี้ (ม.78/1)
+type VatLine struct {
+	Invoice InvoiceRef `json:"invoice"`
+	Base    string     `json:"base"`
+	Vat     string     `json:"vat"`
+}
+
+type InvoiceRef struct {
+	ID         string `json:"id"`
+	DocumentNo string `json:"document_no"`
+}
+
+// Receipt: tax_invoice = มีภาษีขายถึงกำหนด (พิมพ์เป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี")
 type Receipt struct {
 	DocumentSummary
-	CreatedBy string        `json:"created_by"`
-	Lines     []ReceiptLine `json:"lines"`
-	Methods   []Method      `json:"methods"`
+	CreatedBy  string        `json:"created_by"`
+	Lines      []ReceiptLine `json:"lines"`
+	Methods    []Method      `json:"methods"`
+	TaxInvoice bool          `json:"tax_invoice"`
+	VatLines   []VatLine     `json:"vat_lines"`
 }
 
 func FromReceipt(r dto.Receipt) Receipt {
-	out := Receipt{DocumentSummary: FromSummary(r.DocumentSummary), CreatedBy: r.CreatedBy, Lines: make([]ReceiptLine, len(r.Lines)), Methods: methods(r.Methods)}
+	out := Receipt{DocumentSummary: FromSummary(r.DocumentSummary), CreatedBy: r.CreatedBy, Lines: make([]ReceiptLine, len(r.Lines)),
+		Methods: methods(r.Methods), VatLines: []VatLine{}}
 	for i, l := range r.Lines {
-		out.Lines[i] = ReceiptLine{Invoice: optRef(l.Invoice), AccountID: l.AccountID, Description: l.Description, Amount: str(l.Amount), Wht: str(l.Wht)}
+		out.Lines[i] = ReceiptLine{Invoice: optRef(l.Invoice), InvoiceKind: l.InvoiceKind, AccountID: l.AccountID, Description: l.Description,
+			Amount: str(l.Amount), Wht: str(l.Wht), VatBase: str(l.VatBase), Vat: str(l.Vat)}
+		if l.Vat.IsPositive() && l.Invoice != nil {
+			out.TaxInvoice = true
+			out.VatLines = append(out.VatLines, VatLine{Invoice: InvoiceRef{ID: l.Invoice.ID, DocumentNo: l.Invoice.Code}, Base: str(l.VatBase), Vat: str(l.Vat)})
+		}
 	}
 	return out
 }
@@ -208,13 +232,16 @@ type OpenInvoice struct {
 	Net         string `json:"net"` // ยอดก่อน VAT
 	Gross       string `json:"gross"`
 	Outstanding string `json:"outstanding"`
+	Kind        string `json:"kind"`        // ขาย: invoice | service_invoice | deposit ("" = จัดซื้อ)
+	VatUndue    string `json:"vat_undue"`   // ขายบริการ: ภาษีขายยังไม่ถึงกำหนด
+	TaxInvoice  bool   `json:"tax_invoice"` // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }
 
 func FromOpenInvoices(rows []dto.OpenInvoice) []OpenInvoice {
 	out := make([]OpenInvoice, len(rows))
 	for i, r := range rows {
 		out[i] = OpenInvoice{ID: r.ID, DocumentNo: r.DocumentNo, PartnerRef: r.PartnerRef, Date: date(r.Date), DueDate: date(r.DueDate),
-			Net: str(r.Net), Gross: str(r.Gross), Outstanding: str(r.Outstanding)}
+			Net: str(r.Net), Gross: str(r.Gross), Outstanding: str(r.Outstanding), Kind: r.Kind, VatUndue: str(r.VatUndue), TaxInvoice: r.TaxInvoice}
 	}
 	return out
 }

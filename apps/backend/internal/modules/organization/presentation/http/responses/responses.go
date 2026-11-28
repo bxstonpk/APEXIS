@@ -63,6 +63,7 @@ type Company struct {
 	FiscalYearStartMonth int     `json:"fiscal_year_start_month"`
 	AmountDecimals       int     `json:"amount_decimals"`
 	QuantityDecimals     int     `json:"quantity_decimals"`
+	BusinessType         string  `json:"business_type"`
 	Status               string  `json:"status"`
 }
 
@@ -72,16 +73,18 @@ func FromCompany(c dto.Company) Company {
 		LegalNameTH: c.LegalNameTH, LegalNameEN: c.LegalNameEN, Address: address(c.Address),
 		Phone: c.Phone, Email: c.Email, Website: c.Website,
 		BaseCurrency: c.BaseCurrency, FiscalYearStartMonth: c.FiscalYearStartMonth,
-		AmountDecimals: c.AmountDecimals, QuantityDecimals: c.QuantityDecimals, Status: c.Status,
+		AmountDecimals: c.AmountDecimals, QuantityDecimals: c.QuantityDecimals,
+		BusinessType: c.BusinessType, Status: c.Status,
 	}
 }
 
 type CompanySummary struct {
-	ID     string `json:"id"`
-	Code   string `json:"code"`
-	Name   string `json:"name"`
-	TaxID  string `json:"tax_id"`
-	Status string `json:"status"`
+	ID           string `json:"id"`
+	Code         string `json:"code"`
+	Name         string `json:"name"`
+	TaxID        string `json:"tax_id"`
+	BusinessType string `json:"business_type"`
+	Status       string `json:"status"`
 }
 
 // Letterhead คือข้อมูลหัวเอกสารที่พิมพ์บนใบเสนอราคา / ใบกำกับภาษี
@@ -102,7 +105,7 @@ func FromLetterhead(c dto.Company) Letterhead {
 }
 
 func FromCompanySummary(c dto.CompanySummary) CompanySummary {
-	return CompanySummary{ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, Status: c.Status}
+	return CompanySummary{ID: c.ID, Code: c.Code, Name: c.Name, TaxID: c.TaxID, BusinessType: c.BusinessType, Status: c.Status}
 }
 
 type Branch struct {

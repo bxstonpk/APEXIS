@@ -66,7 +66,7 @@ export default async function Page({ params, searchParams }: Props) {
   ]
   return (
     <>
-      <ListHeader title={texts.finance.payments.heading} description={texts.finance.payments.description} createHref={createHref} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={texts.finance.payments.heading} createHref={createHref} count={list.error ? undefined : list.meta.total} />
       <ListToolbar q={param(sp, 'q')} keep={{ sort: param(sp, 'sort'), page_size: param(sp, 'page_size') }}>
         <SelectField
           name="kind"

@@ -8,6 +8,7 @@
 package integration
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -56,11 +57,28 @@ type Item struct {
 	ID                 uuid.UUID
 	Code               string
 	Name               string
-	Stock              bool // ชนิด stock (นับสต็อก / มีใบรับเข้า)
+	Uom                string // รหัสหน่วยนับ
+	Stock              bool   // ชนิด stock (นับสต็อก / มีใบรับเข้า)
+	Service            bool   // ชนิดบริการ (ขาย: ภาษีเกิดเมื่อรับชำระ ม.78/1)
 	Active             bool
 	PurchaseAccountID  uuid.UUID
 	InventoryAccountID uuid.UUID
 	RevenueAccountID   uuid.UUID // uuid.Nil = ไม่ได้ตั้งที่สินค้า / หมวด (ใช้ค่าเริ่มต้นของค่าตั้งขาย)
+}
+
+// Ref คือรหัส / ชื่อของข้อมูลหลักใน module อื่น (เช่นบัญชี / สมุดรายวันของ ledger) สำหรับแสดงในเอกสาร
+type Ref struct {
+	ID   uuid.UUID
+	Code string
+	Name string
+}
+
+// Warehouse คือคลังสินค้าของ inventory (ใช้แสดงชื่อ / ตรวจสถานะในเอกสารของ module อื่น)
+type Warehouse struct {
+	ID     uuid.UUID
+	Code   string
+	Name   string
+	Active bool
 }
 
 // PurchaseContext คือข้อมูลที่จัดซื้อต้องใช้ ณ วันที่เอกสาร
@@ -136,8 +154,11 @@ type SettledInvoice struct {
 	InvoiceID  uuid.UUID
 	DocumentNo string
 	PartnerRef string // เลขที่ใบแจ้งหนี้ของผู้ขาย (จัดซื้อ)
+	Kind       string // ขาย: invoice | service_invoice | deposit
 	Net        decimal.Decimal
 	Gross      decimal.Decimal
+	VatBase    decimal.Decimal // ขายบริการ: ฐานของภาษีขายที่ถึงกำหนดจากการรับเงินครั้งนี้ (ม.78/1)
+	Vat        decimal.Decimal // ขายบริการ: ภาษีขายที่ถึงกำหนด (0 = ไม่มี)
 }
 
 // SettlementResult คือผลการตัดยอด: คู่ค้า + บัญชีคุม (ลูกหนี้ / เจ้าหนี้) ที่ต้องลงบัญชี + ใบแจ้งหนี้ตามลำดับที่ส่งมา
@@ -145,6 +166,8 @@ type SettlementResult struct {
 	Party            Counterparty
 	ControlAccountID uuid.UUID
 	Invoices         []SettledInvoice
+	// ExtraJournal: บรรทัดที่ผู้เรียกต้องลงเพิ่มในรายการเดียวกัน (ขาย: Dr ภาษีขายยังไม่ถึงกำหนด / Cr ภาษีขาย)
+	ExtraJournal []JournalLine
 }
 
 // OpenInvoice คือใบแจ้งหนี้ที่ยังค้างชำระ (ให้หน้ารับ / จ่ายเงินเลือก)
@@ -157,6 +180,9 @@ type OpenInvoice struct {
 	Net         decimal.Decimal // ยอดก่อน VAT (ใช้คำนวณฐานภาษีหัก ณ ที่จ่าย)
 	Gross       decimal.Decimal
 	Outstanding decimal.Decimal
+	Kind        string          // ขาย: invoice | service_invoice | deposit
+	VatUndue    decimal.Decimal // ขายบริการ: ภาษีขายที่ยังไม่ถึงกำหนด
+	TaxInvoice  bool            // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }
 
 // PartyMerge คือคู่ค้ารหัสซ้ำ (เลขผู้เสียภาษีเดียวกัน) ที่ถูกรวมตอน migrate — From ถูกลบ, เอกสารย้ายไป To
@@ -175,3 +201,25 @@ type VatTotals struct {
 	Tax       decimal.Decimal // ภาษีมูลค่าเพิ่ม
 	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
 }
+
+// ---------- ประเภทธุรกิจ / ตั้งค่าบริษัทใหม่ ----------
+
+// BusinessType คือประเภทธุรกิจของบริษัท (organization เป็นเจ้าของ) — กำหนดผังบัญชีมาตรฐานและค่าตั้งเริ่มต้น
+type BusinessType string
+
+const (
+	BusinessService       BusinessType = "service"       // ธุรกิจบริการทั่วไป
+	BusinessTrading       BusinessType = "trading"       // ธุรกิจซื้อขายสินค้า
+	BusinessManufacturing BusinessType = "manufacturing" // ธุรกิจผลิตสินค้า
+	BusinessConstruction  BusinessType = "construction"  // ธุรกิจก่อสร้าง
+)
+
+// NewCompany คือบริษัทที่เพิ่งสร้าง — ส่งให้ hook ของ module อื่น (organization.Module.OnCompanyCreated)
+type NewCompany struct {
+	ID           uuid.UUID
+	BusinessType BusinessType
+}
+
+// CompanyCreatedHook ตั้งค่าเริ่มต้นของ module ให้บริษัทใหม่ — ทำงานใน transaction เดียวกับการสร้างบริษัท (ctx)
+// คืน error = rollback การสร้างบริษัททั้งหมด
+type CompanyCreatedHook func(ctx context.Context, c NewCompany) error

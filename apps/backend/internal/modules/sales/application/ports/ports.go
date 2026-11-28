@@ -7,6 +7,7 @@ import (
 
 	"apexis/backend/internal/modules/sales/domain/services"
 	vo "apexis/backend/internal/modules/sales/domain/value_objects"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/numbering"
 )
 
@@ -36,6 +37,8 @@ type Organization interface {
 	CompanySettings(ctx context.Context, companyID vo.CompanyID) (CompanySettings, error)
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (Period, error)
 	DocumentFormat(ctx context.Context, companyID vo.CompanyID, docType vo.DocType) (numbering.Format, error)
+	// BusinessType: ประเภทธุรกิจของบริษัท (กำหนดว่าออกขายสินค้า หรือขายบริการ)
+	BusinessType(ctx context.Context, companyID vo.CompanyID) (integration.BusinessType, error)
 }
 
 // Item คือสินค้าจาก inventory พร้อมบัญชีที่ใช้จริง (nil = ไม่ได้ตั้ง)
@@ -44,6 +47,7 @@ type Item struct {
 	Code               string
 	Name               string
 	Stock              bool
+	Service            bool // ชนิดบริการ (ภาษีเกิดเมื่อรับชำระ ม.78/1)
 	Active             bool
 	InventoryAccountID *vo.AccountID
 	RevenueAccountID   *vo.AccountID
@@ -92,6 +96,9 @@ type LedgerEntry struct {
 type Ledger interface {
 	InvalidAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) ([]vo.AccountID, error)
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
+	// AccountsByCode / JournalsByCode: id ตามรหัสในผังบัญชีมาตรฐาน (ตั้งค่าเริ่มต้นตอนสร้างบริษัท) — รหัสที่ไม่พบ / ลงรายการไม่ได้ไม่อยู่ในผล
+	AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error)
+	JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
 }

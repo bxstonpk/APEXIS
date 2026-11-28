@@ -122,6 +122,22 @@ func ParseEntryStatus(raw string) (EntryStatus, error) {
 // Affects: รายการที่มีผลต่อยอดบัญชี (posted และ reversed — การกลับรายการเป็นรายการใหม่อีกใบ)
 func (s EntryStatus) Affects() bool { return s == EntryPosted || s == EntryReversed }
 
+// BusinessType คือประเภทธุรกิจของบริษัท (organization เป็นเจ้าของ) — เลือกชุดบัญชีของผังบัญชีมาตรฐาน
+type BusinessType string
+
+const (
+	BusinessService       BusinessType = "service"
+	BusinessTrading       BusinessType = "trading"
+	BusinessManufacturing BusinessType = "manufacturing"
+	BusinessConstruction  BusinessType = "construction"
+)
+
+var BusinessTypes = []BusinessType{BusinessService, BusinessTrading, BusinessManufacturing, BusinessConstruction}
+
+func ParseBusinessType(raw string) (BusinessType, error) {
+	return parseEnum(raw, BusinessTypes, domain.ErrInvalidBusinessType)
+}
+
 func parseEnum[T ~string](raw string, allowed []T, invalid error) (T, error) {
 	if slices.Contains(allowed, T(raw)) {
 		return T(raw), nil

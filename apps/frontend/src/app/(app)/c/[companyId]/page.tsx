@@ -43,15 +43,13 @@ async function Launcher({ companyId, user }: { companyId: string; user: { name: 
       <div className="flex min-h-full flex-col">
         <TopBar userName={user.name} />
         <MessagePanel
-          title={texts.companies.unavailable}
-          description={texts.companies.unavailableDescription}
-          action={<ButtonLink href={appConfig.routes.companies}>{texts.companies.heading}</ButtonLink>}
+          title={texts.companies.unavailable}          action={<ButtonLink href={appConfig.routes.companies}>{texts.companies.heading}</ButtonLink>}
         />
       </div>
     )
   }
 
-  const available = visibleApps(ctx.permissions)
+  const available = visibleApps(ctx.permissions, ctx.company.business_type)
   const today = new Intl.DateTimeFormat('th-TH', { dateStyle: 'full' }).format(new Date())
   return (
     <div className="flex min-h-full flex-col bg-[radial-gradient(70rem_28rem_at_50%_-6rem,var(--color-primary-soft),transparent)]">

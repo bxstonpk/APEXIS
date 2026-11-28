@@ -12,7 +12,7 @@ import (
 // เลขผู้เสียภาษี 1 เลข = ลูกค้า 1 รหัส, สาขาเพิ่มเติม, เลือกสาขาในใบสั่งขาย, ผู้ซื้อ ณ วันออกใบกำกับภาษี, รวมรหัสซ้ำตอน migrate
 func TestCustomerBranches(t *testing.T) {
 	a, owner := setup(t)
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "br", "name": "BR"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "br", "name": "BR", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 	acc := map[string]string{}
@@ -55,7 +55,7 @@ func TestCustomerBranches(t *testing.T) {
 	}
 	orderID := order["id"].(string)
 	a.expect(a.do("PATCH", base+"/sales-orders/"+orderID, owner, obj{"status": "approved"}), 200, "approve")
-	inv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": "2026-03-03", "with_delivery": true,
+	inv := a.expect(a.do("POST", base+"/sales-invoices", owner, obj{"order_id": orderID, "date": "2026-03-03",
 		"lines": []obj{{"order_line_no": 1, "quantity": "1"}}}), 201, "invoice").data()
 	bill := inv["bill_to"].(obj)
 	if bill["name"] != "บริษัท หนึ่ง จำกัด" || bill["tax_id"] != tax || bill["branch_no"] != "00001" || !strings.Contains(bill["address"].(string), "บางนา-ตราด") {

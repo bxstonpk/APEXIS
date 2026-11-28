@@ -14,8 +14,8 @@ export default async function NewCompanyPage() {
   return (
     <div className="flex min-h-full flex-col">
       <TopBar userName={user.name} />
-      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
-        <Card title={t.heading} description={t.description}>
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
+        <Card title={t.heading}>
           <CompanyForm />
         </Card>
       </main>

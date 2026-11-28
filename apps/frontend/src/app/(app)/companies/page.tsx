@@ -135,10 +135,7 @@ async function Companies({ params, user }: { params: SearchParams; user: { name:
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-current">
                     <Plus aria-hidden className="size-5" />
                   </span>
-                  <span>
-                    <span className="block text-sm font-medium">{t.create}</span>
-                    <span className="text-[13px] text-ink-subtle">{t.createHint}</span>
-                  </span>
+                  <span className="block text-sm font-medium">{t.create}</span>
                 </Link>
               </li>
             </ul>

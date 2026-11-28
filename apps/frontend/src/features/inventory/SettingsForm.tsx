@@ -89,13 +89,13 @@ export function InventorySettingsForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={error} readOnly={readOnly} />
-      <FormSection title={t.accounts} description={t.accountsHint}>
+      <FormSection title={t.accounts}>
         {account('default_purchase_account_id', f.purchase, 'expense')}
         {account('default_inventory_account_id', f.inventory, 'asset')}
         {account('cogs_account_id', f.cogs, 'expense')}
         <ReferenceSelect label={f.journal} source={journalsApi} params={{ status: 'active' }} value={v.journal_id} onChange={set('journal_id')} disabled={readOnly} texts={texts.reference} />
       </FormSection>
-      <FormSection title={t.systems} description={t.systemsHint}>
+      <FormSection title={t.systems}>
         <ul className="flex flex-col gap-1 text-sm sm:col-span-2">
           {systems.length === 0 ? (
             <li className="text-ink-muted">{t.noSystems}</li>

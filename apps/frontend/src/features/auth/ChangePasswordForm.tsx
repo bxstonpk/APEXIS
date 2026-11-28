@@ -61,9 +61,7 @@ export function ChangePasswordForm({ redirectTo, email }: { redirectTo: string; 
       />
       <PasswordField
         label={t.newPassword}
-        required
-        hint={t.newPasswordHint}
-        autoComplete="new-password"
+        required        autoComplete="new-password"
         value={v.next}
         error={errors.next}
         onChange={(e) => setV((s) => ({ ...s, next: e.target.value }))}

@@ -89,6 +89,9 @@ type LedgerEntry struct {
 type Ledger interface {
 	InvalidAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) ([]vo.AccountID, error)
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
+	// AccountsByCode / JournalsByCode: id ตามรหัสในผังบัญชีมาตรฐาน (ตั้งค่าเริ่มต้นตอนสร้างบริษัท) — รหัสที่ไม่พบ / ลงรายการไม่ได้ไม่อยู่ในผล
+	AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error)
+	JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, type FormEvent } from 'react'
-import { Alert, Badge, TextField } from '@/components'
+import { Badge, TextField } from '@/components'
 import { format, texts } from '@/config'
 import { FormActions, FormNotices, FormSection } from '@/features/forms/FormParts'
 import { useResourceForm } from '@/features/forms/useResourceForm'
@@ -61,15 +61,12 @@ export function RoleForm({
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
-      <FormNotices formError={form.formError} readOnly={!canManage}>
-        {system && <Alert>{t.systemHint}</Alert>}
-      </FormNotices>
+      <FormNotices formError={form.formError} readOnly={!canManage} />
 
-      <FormSection title={t.sections.general} description={t.sections.generalHint} aside={system ? <Badge tone="info">{t.system}</Badge> : undefined}>
+      <FormSection title={t.sections.general} aside={system ? <Badge tone="info">{t.system}</Badge> : undefined}>
         <TextField
           label={t.fields.code}
           required={!role}
-          hint={role ? undefined : t.fields.codeHint}
           value={v.code}
           maxLength={50}
           autoComplete="off"
@@ -90,9 +87,7 @@ export function RoleForm({
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-10">
         <div>
-          <h2 className="text-[15px] font-semibold">{t.sections.permissions}</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{t.sections.permissionsHint}</p>
-          <p className="mt-3 text-[13px] font-medium text-ink tabular-nums" aria-live="polite">
+          <h2 className="text-[15px] font-semibold">{t.sections.permissions}</h2>          <p className="mt-3 text-[13px] font-medium text-ink tabular-nums" aria-live="polite">
             {format(t.permissionCount, { n: selected.size })}
           </p>
           {errors.permissions && (

@@ -56,13 +56,11 @@ export function FiscalYearForm({ apiPath, listHref, defaultYear }: { apiPath: st
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={formError} readOnly={false} />
-      <FormSection title={texts.fiscalYears.heading} description={texts.fiscalYears.description}>
-        <TextField label={t.year} required hint={t.yearHint} inputMode="numeric" maxLength={4} value={year} error={errors.year} onChange={(e) => changeYear(e.target.value.replace(/\D/g, ''))} />
+      <FormSection title={texts.fiscalYears.heading}>
+        <TextField label={t.year} required inputMode="numeric" maxLength={4} value={year} error={errors.year} onChange={(e) => changeYear(e.target.value.replace(/\D/g, ''))} />
         <TextField
           label={t.startDate}
-          required
-          hint={t.startDateHint}
-          type="date"
+          required          type="date"
           value={startDate}
           error={errors.start_date}
           onChange={(e) => {

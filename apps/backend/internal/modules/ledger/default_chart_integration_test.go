@@ -11,7 +11,7 @@ import (
 func TestDefaultChart(t *testing.T) {
 	a := setup(t)
 	owner := a.user("owner@example.com")
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "fiscal year")
 
@@ -19,14 +19,14 @@ func TestDefaultChart(t *testing.T) {
 	a.expect(a.do("POST", base+"/journals", owner, obj{"code": "GEN", "name": "สมุดของฉัน"}), 201, "existing GEN")
 
 	res := a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 201, "create defaults").data()
-	if res["accounts"] != float64(262) || res["journals"] != float64(2) {
+	if res["accounts"] != float64(259) || res["journals"] != float64(2) {
 		t.Fatalf("defaults = %v", res)
 	}
 	a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 409, "defaults twice")
 
 	tree := a.expect(a.do("GET", base+"/accounts/tree", owner, nil), 200, "tree").list()
 	codes := field(tree, "code")
-	if len(tree) != 262 || !slices.IsSorted(codes) || codes[0] != "1000000000" {
+	if len(tree) != 259 || !slices.IsSorted(codes) || codes[0] != "1000000000" {
 		t.Fatalf("tree: %d accounts, first %v, sorted %v", len(tree), codes[0], slices.IsSorted(codes))
 	}
 	byCode := map[string]obj{}
@@ -88,7 +88,7 @@ func TestDefaultChart(t *testing.T) {
 	}
 
 	// บริษัทที่ตั้งผังเองแล้วใช้ผังมาตรฐานไม่ได้
-	other := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "beta", "name": "Beta"}), 201, "company B").id()
+	other := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "beta", "name": "Beta", "business_type": "trading"}), 201, "company B").id()
 	a.expect(a.do("POST", "/api/v1/companies/"+other+"/accounts", owner, obj{"code": "1000", "name": "สินทรัพย์", "type": "asset", "description": "หมวดสินทรัพย์"}), 201, "own account")
 	a.expect(a.do("POST", "/api/v1/companies/"+other+"/accounts/defaults", owner, nil), 409, "defaults on existing chart")
 	if d := a.expect(a.do("GET", "/api/v1/companies/"+other+"/accounts/tree", owner, nil), 200, "tree B").list(); len(d) != 1 || d[0]["description"] != "หมวดสินทรัพย์" {
@@ -100,7 +100,7 @@ func TestDefaultChart(t *testing.T) {
 func TestDefaultChartTopUp(t *testing.T) {
 	a := setup(t)
 	owner := a.user("owner@example.com")
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/accounts/defaults", owner, nil), 201, "create defaults")
 	count := func() int {
@@ -121,7 +121,7 @@ func TestDefaultChartTopUp(t *testing.T) {
 	if err := ledger.Migrate(a.db); err != nil {
 		t.Fatal(err)
 	}
-	if n := count(); n != 262 {
+	if n := count(); n != 259 {
 		t.Fatalf("after top-up = %d", n)
 	}
 	tree := a.expect(a.do("GET", base+"/accounts/tree", owner, nil), 200, "tree").list()
@@ -141,7 +141,22 @@ func TestDefaultChartTopUp(t *testing.T) {
 	if err := ledger.Migrate(a.db); err != nil {
 		t.Fatal(err)
 	}
-	if n := count(); n != 261 {
+	if n := count(); n != 258 {
 		t.Fatalf("after delete + migrate = %d", n)
+	}
+
+	// บริษัทบริการ / ก่อสร้างไม่ได้รับบัญชีสินค้าตอน migrate (ผังของประเภทนั้นไม่มีบัญชีชุดนี้)
+	for bt, want := range map[string]int{"service": 245, "construction": 261} {
+		other := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": bt[:4], "name": bt, "business_type": bt}), 201, "company "+bt).id()
+		res := a.expect(a.do("POST", "/api/v1/companies/"+other+"/accounts/defaults", owner, nil), 201, "defaults "+bt).data()
+		if res["accounts"] != float64(want) {
+			t.Fatalf("%s defaults = %v", bt, res)
+		}
+		if err := ledger.Migrate(a.db); err != nil {
+			t.Fatal(err)
+		}
+		if n := len(a.expect(a.do("GET", "/api/v1/companies/"+other+"/accounts/tree", owner, nil), 200, "tree").list()); n != want {
+			t.Fatalf("%s after migrate = %d, want %d", bt, n, want)
+		}
 	}
 }

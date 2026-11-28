@@ -416,7 +416,8 @@ func (r *ReceiptRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 	}
 	out.Lines = make([]dto.ReceiptLine, len(lines))
 	for i, l := range lines {
-		line := dto.ReceiptLine{AccountID: optString(l.AccountID), Description: l.Description, Amount: l.Amount, Wht: l.Wht}
+		line := dto.ReceiptLine{AccountID: optString(l.AccountID), Description: l.Description, Amount: l.Amount, Wht: l.Wht,
+			InvoiceKind: l.InvoiceKind, VatBase: l.VatBase, Vat: l.Vat}
 		if l.InvoiceID != nil {
 			line.Invoice = &dto.Ref{ID: l.InvoiceID.String(), Code: l.InvoiceNo}
 		}

@@ -26,13 +26,13 @@ var (
 
 // ไม่พบ (404)
 var (
-	ErrCustomerNotFound   = errors.New("customer not found")
-	ErrQuotationNotFound  = errors.New("quotation not found")
-	ErrOrderNotFound      = errors.New("sales order not found")
-	ErrDeliveryNotFound   = errors.New("delivery not found")
-	ErrInvoiceNotFound    = errors.New("sales invoice not found") // detailed
-	ErrItemNotFound       = errors.New("item not found")          // detailed
-	ErrCreditNoteNotFound = errors.New("credit note not found")
+	ErrCustomerNotFound    = errors.New("customer not found")
+	ErrQuotationNotFound   = errors.New("quotation not found")
+	ErrOrderNotFound       = errors.New("sales order not found")
+	ErrBillingNoteNotFound = errors.New("billing note not found")
+	ErrInvoiceNotFound     = errors.New("sales invoice not found") // detailed
+	ErrItemNotFound        = errors.New("item not found")          // detailed
+	ErrCreditNoteNotFound  = errors.New("credit note not found")
 )
 
 // ขัดแย้ง (409)
@@ -55,8 +55,8 @@ var (
 	ErrQuotationExpired  = errors.New("quotation has expired")
 	ErrOrderNotApproved  = errors.New("sales order is not approved")
 	ErrOrderNotOpen      = errors.New("sales order is not approved or closed")
-	ErrOrderHasActivity  = errors.New("sales order already has deliveries or invoices")
-	ErrOverDelivery      = errors.New("quantity exceeds what is left to deliver")                          // detailed
+	ErrOrderHasActivity  = errors.New("sales order already has invoices")
+	ErrOverDelivery      = errors.New("quantity exceeds what is left to invoice")                          // detailed
 	ErrOverInvoice       = errors.New("quantity exceeds delivered but not invoiced quantity")              // detailed
 	ErrDeliveryInvoiced  = errors.New("delivered quantity is already invoiced (cancel the invoice first)") // detailed
 	ErrAlreadyCancelled  = errors.New("document is already cancelled")
@@ -77,6 +77,19 @@ var (
 	ErrCreditBeforeInvoice = errors.New("credit note date must not be before the invoice date")
 	ErrInvoiceHasCredits   = errors.New("invoice has credit notes (cancel the credit notes first)")
 	ErrCostUnknown         = errors.New("original cost of the returned item is unknown (no posted delivery)") // detailed
+	// ขายบริการ / ใบกำกับภาษี / มัดจำ / ใบวางบิล
+	ErrServiceInvoiceGoodsLine = errors.New("service invoice goods line")                                                   // detailed: ขายบริการรับเฉพาะสินค้าชนิดบริการ
+	ErrNotServiceInvoice       = errors.New("document is not a service invoice")                                            //
+	ErrTaxInvoiceIssued        = errors.New("tax invoice is already issued for this service invoice")                       //
+	ErrNoUndueVat              = errors.New("service invoice has no undue output vat left")                                 //
+	ErrDepositNotUsable        = errors.New("deposit is not a posted deposit of this customer")                             // detailed
+	ErrDepositOverApplied      = errors.New("deposit amount exceeds the remaining deposit")                                 // detailed
+	ErrDepositApplied          = errors.New("deposit is already applied to sales documents (cancel those documents first)") //
+	ErrDepositExceedsSale      = errors.New("applied deposits exceed the document amount")                                  //
+	ErrDocumentNotAvailable    = errors.New("document not available for business type")                                     // detailed: ซื้อขาย / ผลิต = ขายสินค้า; บริการ / ก่อสร้าง = ขายบริการ
+	ErrDepositNotPaid          = errors.New("deposit not paid")                                                             // detailed: รับเงินมัดจำที่ finance ให้ครบก่อนหัก
+	ErrBillingInvoice          = errors.New("invoice cannot be put on this billing note")                                   // detailed
+	ErrBillingNoteCancelled    = errors.New("billing note is already cancelled")                                            //
 )
 
 var ErrForbidden = errors.New("permission denied")
@@ -86,7 +99,9 @@ var all = []error{
 	ErrInvalidBranchNo, ErrDuplicateBranch, ErrInvalidTerm, ErrInvalidTaxType, ErrInvalidVatRate, ErrInvalidAmount, ErrInvalidLine,
 	ErrInvalidCreditKind, ErrReasonRequired, ErrCreditNoteNotFound,
 	ErrOverCredit, ErrOverReturn, ErrCreditPrice, ErrCreditBeforeInvoice, ErrInvoiceHasCredits, ErrCostUnknown,
-	ErrCustomerNotFound, ErrQuotationNotFound, ErrOrderNotFound, ErrDeliveryNotFound, ErrInvoiceNotFound,
+	ErrCustomerNotFound, ErrQuotationNotFound, ErrOrderNotFound, ErrBillingNoteNotFound, ErrInvoiceNotFound,
+	ErrServiceInvoiceGoodsLine, ErrNotServiceInvoice, ErrTaxInvoiceIssued, ErrNoUndueVat, ErrDepositNotUsable, ErrDepositOverApplied,
+	ErrDepositApplied, ErrDepositExceedsSale, ErrDocumentNotAvailable, ErrDepositNotPaid, ErrBillingInvoice, ErrBillingNoteCancelled,
 	ErrItemNotFound,
 	ErrCodeExists, ErrInUse, ErrDocumentNoUsed, ErrQuotationUsed, ErrTaxIDExists,
 	ErrCompanyInactive, ErrCustomerInactive, ErrItemInactive, ErrVatNotApplicable, ErrNotDraft, ErrQuotationState,

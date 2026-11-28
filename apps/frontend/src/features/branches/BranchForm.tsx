@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type FormEvent } from 'react'
-import { Alert, Badge, TextField } from '@/components'
+import { Badge, TextField } from '@/components'
 import { format, texts } from '@/config'
 import { AddressFields, emptyAddress, FormActions, FormNotices, FormSection, StatusSelect } from '@/features/forms/FormParts'
 import { useResourceForm } from '@/features/forms/useResourceForm'
@@ -63,16 +63,12 @@ export function BranchForm({ companyId, branch, canManage, listHref }: BranchFor
 
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <FormNotices formError={form.formError} readOnly={readOnly}>
-        {headOffice && <Alert>{texts.branches.headOfficeHint}</Alert>}
-      </FormNotices>
+      <FormNotices formError={form.formError} readOnly={readOnly} />
 
-      <FormSection title={t.general} description={texts.branches.headOfficeHint} aside={headOffice ? <Badge tone="info">{texts.branches.headOffice}</Badge> : undefined}>
+      <FormSection title={t.general} aside={headOffice ? <Badge tone="info">{texts.branches.headOffice}</Badge> : undefined}>
         <TextField
           label={t.code}
-          required
-          hint={t.codeHint}
-          value={values.code}
+          required          value={values.code}
           maxLength={20}
           autoComplete="off"
           disabled={readOnly}
@@ -82,9 +78,7 @@ export function BranchForm({ companyId, branch, canManage, listHref }: BranchFor
         <TextField label={t.name} required value={values.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField
           label={t.taxBranchNo}
-          required
-          hint={t.taxBranchNoHint}
-          value={values.tax_branch_no}
+          required          value={values.tax_branch_no}
           maxLength={5}
           inputMode="numeric"
           disabled={readOnly || headOffice}
@@ -97,7 +91,7 @@ export function BranchForm({ companyId, branch, canManage, listHref }: BranchFor
         )}
       </FormSection>
 
-      <FormSection title={t.address} description={texts.common.sections.addressHint}>
+      <FormSection title={t.address}>
         <AddressFields value={values.address} onChange={(a) => set('address', a)} disabled={readOnly} errors={errors} />
       </FormSection>
 

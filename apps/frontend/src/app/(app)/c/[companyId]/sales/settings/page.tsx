@@ -12,7 +12,7 @@ import { loadRef } from '@/lib/server/list'
 
 export const metadata: Metadata = { title: texts.sales.settings.pageTitle }
 
-/** ค่าตั้งการขาย — ชื่อสมุด / บัญชีที่ตั้งไว้โหลดพร้อมกัน (5 คำขอขนานกัน) */
+/** ค่าตั้งการขาย — ชื่อสมุด / บัญชีที่ตั้งไว้โหลดพร้อมกัน (คำขอขนานกัน) */
 export default async function Page({ params }: { params: Promise<{ companyId: string }> }) {
   const { companyId } = await params
   const ctx = await getCompanyContext(companyId)
@@ -25,23 +25,34 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   if (!res || typeof res !== 'object' || !('vat_registered' in res)) return <Alert tone="error">{errorMessage(res)}</Alert>
   const s = res as SalesSettings
   const accounts = salesApi.accounts(companyId)
-  const [journal, ar, outputVat, revenue, cogs, returns] = await Promise.all([
+  const [journal, ar, outputVat, undueVat, deposit, revenue, cogs, returns] = await Promise.all([
     loadRef(salesApi.journals(companyId), s.journal_id ?? ''),
     loadRef(accounts, s.ar_account_id ?? ''),
     loadRef(accounts, s.output_vat_account_id ?? ''),
+    loadRef(accounts, s.undue_output_vat_account_id ?? ''),
+    loadRef(accounts, s.deposit_account_id ?? ''),
     loadRef(accounts, s.revenue_account_id ?? ''),
     loadRef(accounts, s.cogs_account_id ?? ''),
     loadRef(accounts, s.sales_returns_account_id ?? ''),
   ])
   return (
-    <FormPage title={t.heading} description={t.description}>
+    <FormPage title={t.heading}>
       <SalesSettingsForm
         apiPath={salesApi.settings(companyId)}
         journalsApi={salesApi.journals(companyId)}
         accountsApi={accounts}
         canManage={can(ctx.permissions, perms.settingsManage)}
         settings={s}
-        refs={{ journal_id: journal, ar_account_id: ar, output_vat_account_id: outputVat, revenue_account_id: revenue, cogs_account_id: cogs, sales_returns_account_id: returns }}
+        refs={{
+          journal_id: journal,
+          ar_account_id: ar,
+          output_vat_account_id: outputVat,
+          undue_output_vat_account_id: undueVat,
+          deposit_account_id: deposit,
+          revenue_account_id: revenue,
+          cogs_account_id: cogs,
+          sales_returns_account_id: returns,
+        }}
       />
     </FormPage>
   )

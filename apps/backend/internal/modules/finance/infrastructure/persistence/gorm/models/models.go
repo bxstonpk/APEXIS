@@ -124,6 +124,9 @@ type ReceiptLineModel struct {
 	Description string          `gorm:"size:500;not null;default:''"`
 	Amount      decimal.Decimal `gorm:"type:numeric(24,6);not null;check:amount > 0"`
 	Wht         decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:wht >= 0 AND wht <= amount"`
+	InvoiceKind string          `gorm:"size:20;not null;default:''"`           // ขาย: invoice | service_invoice | deposit
+	VatBase     decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"` // ขายบริการ: ฐานของภาษีขายที่ถึงกำหนด
+	Vat         decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0;check:chk_fin_receipt_lines_vat,vat >= 0"`
 }
 
 func (ReceiptLineModel) TableName() string { return "finance_receipt_lines" }

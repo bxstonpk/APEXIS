@@ -109,3 +109,10 @@ func (SequenceRepository) NextNumber(ctx context.Context, companyID vo.CompanyID
 		RETURNING last_no`, uuidOf(companyID), string(docType), periodKey).Scan(&n).Error
 	return n, err
 }
+
+func strOrEmpty(u *uuid.UUID) string {
+	if u == nil {
+		return ""
+	}
+	return u.String()
+}

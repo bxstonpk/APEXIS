@@ -95,7 +95,7 @@ export function UomForm({ apiPath, listHref, canManage, item }: FormProps<Uom>) 
   }
   return (
     <MasterShell form={form} readOnly={readOnly} canManage={canManage} listHref={listHref} canDelete={!!item} onDelete={() => remove(form, t, item)} onSubmit={submit}>
-      <FormSection title={texts.inventory.sections.general} description={t.description}>
+      <FormSection title={texts.inventory.sections.general}>
         <MasterFields m={m} readOnly={readOnly} isEdit={!!item} />
       </FormSection>
     </MasterShell>
@@ -124,7 +124,7 @@ function AccountFields({ accountsApi, value, onChange, disabled }: { accountsApi
     />
   )
   return (
-    <FormSection title={texts.inventory.sections.accounts} description={f.accountsHint}>
+    <FormSection title={texts.inventory.sections.accounts}>
       {pick('purchase', f.purchaseAccount, 'expense')}
       {pick('inventory', f.inventoryAccount, 'asset')}
       {pick('revenue', f.revenueAccount, 'revenue')}
@@ -155,7 +155,7 @@ export function CategoryForm({ apiPath, accountsApi, listHref, canManage, item, 
   }
   return (
     <MasterShell form={form} readOnly={readOnly} canManage={canManage} listHref={listHref} canDelete={!!item} onDelete={() => remove(form, t, item)} onSubmit={submit}>
-      <FormSection title={texts.inventory.sections.general} description={t.description}>
+      <FormSection title={texts.inventory.sections.general}>
         <MasterFields m={m} readOnly={readOnly} isEdit={!!item} />
       </FormSection>
       <AccountFields accountsApi={accountsApi} value={acc} onChange={setAcc} disabled={readOnly} />
@@ -180,7 +180,7 @@ export function WarehouseForm({ apiPath, branchesApi, listHref, canManage, item,
   }
   return (
     <MasterShell form={form} readOnly={readOnly} canManage={canManage} listHref={listHref} canDelete={!!item} onDelete={() => remove(form, t, item)} onSubmit={submit}>
-      <FormSection title={texts.inventory.sections.general} description={t.description}>
+      <FormSection title={texts.inventory.sections.general}>
         <MasterFields m={m} readOnly={readOnly} isEdit={!!item} />
         <ReferenceSelect
           label={texts.inventory.fields.branch}
@@ -245,7 +245,7 @@ export function ItemForm({
 
   return (
     <MasterShell form={form} readOnly={readOnly} canManage={canManage} listHref={listHref} canDelete={!!item} onDelete={() => remove(form, t, item)} onSubmit={submit}>
-      <FormSection title={texts.inventory.sections.general} description={t.description}>
+      <FormSection title={texts.inventory.sections.general}>
         <MasterFields m={m} readOnly={readOnly} isEdit={!!item} />
         <TextField label={f.nameEn} value={extra.name_en} maxLength={200} disabled={readOnly} onChange={(e) => setExtra((s) => ({ ...s, name_en: e.target.value }))} />
         <SelectField
@@ -271,9 +271,7 @@ export function ItemForm({
       {stock && (
         <FormSection title={texts.inventory.sections.stock}>
           <TextField
-            label={f.reorderPoint}
-            hint={f.reorderHint}
-            inputMode="decimal"
+            label={f.reorderPoint}            inputMode="decimal"
             value={extra.reorder}
             disabled={readOnly}
             error={errors.reorder}

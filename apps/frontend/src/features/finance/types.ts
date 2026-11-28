@@ -45,7 +45,11 @@ export type PaymentLine = {
   wht: string
 }
 
-export type Receipt = DocumentSummary & { created_by: string; lines: ReceiptLine[]; methods: Method[] }
+/** ภาษีขายที่ใบรับเงินทำให้เกิด (รับเงินค่าบริการที่ภาษียังไม่ถึงกำหนด) — ต่อใบขายบริการ */
+export type ReceiptVatLine = { invoice: { id: string; document_no: string }; base: string; vat: string }
+
+/** tax_invoice = ใบนี้เป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" ด้วย (มี vat_lines) */
+export type Receipt = DocumentSummary & { created_by: string; lines: ReceiptLine[]; methods: Method[]; tax_invoice?: boolean; vat_lines?: ReceiptVatLine[] }
 export type Payment = DocumentSummary & { created_by: string; lines: PaymentLine[]; methods: Method[]; wht_certificate_no: string | null }
 
 export type Transfer = {
@@ -99,6 +103,12 @@ export type OpenInvoice = {
   net: string
   gross: string
   outstanding: string
+  /** เอกสารขาย: invoice = ขายสินค้า, service_invoice = ใบแจ้งหนี้ค่าบริการ, deposit = ใบรับเงินมัดจำ */
+  kind?: 'invoice' | 'service_invoice' | 'deposit'
+  /** ภาษีขายยังไม่ถึงกำหนด — รับเงินครั้งนี้จะออกใบเสร็จรับเงิน / ใบกำกับภาษี */
+  vat_undue?: string
+  /** ออกใบกำกับภาษีก่อนรับเงินแล้ว */
+  tax_invoice?: boolean
 }
 
 export type WithholdingReport = {

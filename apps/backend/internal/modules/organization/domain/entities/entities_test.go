@@ -143,7 +143,7 @@ func TestFiscalPeriodCloseOrder(t *testing.T) {
 }
 
 func TestCompanyRules(t *testing.T) {
-	base := CompanyData{Code: "acme", Name: "ACME", BaseCurrency: "thb", FiscalYearStartMonth: 1, AmountDecimals: 2, QuantityDecimals: 2, Status: vo.StatusActive}
+	base := CompanyData{Code: "acme", Name: "ACME", BaseCurrency: "thb", FiscalYearStartMonth: 1, AmountDecimals: 2, QuantityDecimals: 2, BusinessType: vo.BusinessTrading, Status: vo.StatusActive}
 	c, err := NewCompany(base)
 	if err != nil {
 		t.Fatal(err)
@@ -154,8 +154,9 @@ func TestCompanyRules(t *testing.T) {
 
 	// รหัสบริษัทแก้ไม่ได้ — Update คงรหัสเดิม
 	upd := base
-	upd.Code, upd.Name, upd.Status = "OTHER", "ACME Thailand", vo.StatusInactive
-	if err := c.Update(upd); err != nil || c.Data().Code != "ACME" || c.Data().Name != "ACME Thailand" || c.IsActive() {
+	upd.Code, upd.Name, upd.Status, upd.BusinessType = "OTHER", "ACME Thailand", vo.StatusInactive, vo.BusinessService
+	if err := c.Update(upd); err != nil || c.Data().Code != "ACME" || c.Data().Name != "ACME Thailand" || c.IsActive() ||
+		c.Data().BusinessType != vo.BusinessTrading { // ประเภทธุรกิจแก้ไม่ได้เช่นเดียวกับรหัส
 		t.Fatalf("update: %+v %v", c.Data(), err)
 	}
 
@@ -175,16 +176,18 @@ func TestCompanyRules(t *testing.T) {
 		mutate func(*CompanyData)
 		want   error
 	}{
-		"bad code":    {func(d *CompanyData) { d.Code = "a b" }, domain.ErrInvalidCode},
-		"no name":     {func(d *CompanyData) { d.Name = " " }, domain.ErrInvalidName},
-		"bad tax id":  {func(d *CompanyData) { d.TaxID = "01/05" }, domain.ErrInvalidTaxID},
-		"month 13":    {func(d *CompanyData) { d.FiscalYearStartMonth = 13 }, domain.ErrInvalidFiscalMonth},
-		"bad email":   {func(d *CompanyData) { d.Email = "nope" }, domain.ErrInvalidEmail},
-		"bad website": {func(d *CompanyData) { d.Website = "javascript:alert(1)" }, domain.ErrInvalidWebsite},
-		"currency":    {func(d *CompanyData) { d.BaseCurrency = "BAHT" }, domain.ErrInvalidCurrency},
-		"status":      {func(d *CompanyData) { d.Status = "deleted" }, domain.ErrInvalidStatus},
-		"decimals 7":  {func(d *CompanyData) { d.AmountDecimals = 7 }, domain.ErrInvalidDecimals},
-		"decimals -1": {func(d *CompanyData) { d.QuantityDecimals = -1 }, domain.ErrInvalidDecimals},
+		"bad code":     {func(d *CompanyData) { d.Code = "a b" }, domain.ErrInvalidCode},
+		"no name":      {func(d *CompanyData) { d.Name = " " }, domain.ErrInvalidName},
+		"bad tax id":   {func(d *CompanyData) { d.TaxID = "01/05" }, domain.ErrInvalidTaxID},
+		"month 13":     {func(d *CompanyData) { d.FiscalYearStartMonth = 13 }, domain.ErrInvalidFiscalMonth},
+		"bad email":    {func(d *CompanyData) { d.Email = "nope" }, domain.ErrInvalidEmail},
+		"bad website":  {func(d *CompanyData) { d.Website = "javascript:alert(1)" }, domain.ErrInvalidWebsite},
+		"currency":     {func(d *CompanyData) { d.BaseCurrency = "BAHT" }, domain.ErrInvalidCurrency},
+		"status":       {func(d *CompanyData) { d.Status = "deleted" }, domain.ErrInvalidStatus},
+		"decimals 7":   {func(d *CompanyData) { d.AmountDecimals = 7 }, domain.ErrInvalidDecimals},
+		"decimals -1":  {func(d *CompanyData) { d.QuantityDecimals = -1 }, domain.ErrInvalidDecimals},
+		"no business":  {func(d *CompanyData) { d.BusinessType = "" }, domain.ErrInvalidBusinessType},
+		"bad business": {func(d *CompanyData) { d.BusinessType = "retail" }, domain.ErrInvalidBusinessType},
 	}
 	for name, tc := range cases {
 		d := base

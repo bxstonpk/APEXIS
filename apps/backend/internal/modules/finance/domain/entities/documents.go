@@ -110,13 +110,18 @@ func normalizeParty(p *Party) error {
 
 // ReceiptLine: รับชำระหนี้ = InvoiceID (ตัดยอดใบแจ้งหนี้ขาย, Wht = ภาษีที่ลูกค้าหักไว้)
 // รับเงินอื่น = AccountID (เครดิตบัญชีนั้น, ไม่มีภาษีถูกหัก)
+// ReceiptLine: InvoiceKind / VatBase / Vat มาจาก sales ตอนตัดยอด — Vat > 0 = ภาษีขายของใบแจ้งหนี้บริการถึงกำหนดด้วยใบรับเงินนี้
+// (ใบรับเงินเป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี")
 type ReceiptLine struct {
 	InvoiceID   *vo.InvoiceID
 	InvoiceNo   string
+	InvoiceKind string
 	AccountID   *vo.GLAccountID
 	Description string
 	Amount      vo.Money
 	Wht         vo.Money
+	VatBase     vo.Money
+	Vat         vo.Money
 }
 
 type ReceiptTotals struct {

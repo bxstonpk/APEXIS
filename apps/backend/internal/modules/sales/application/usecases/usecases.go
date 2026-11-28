@@ -2,7 +2,7 @@
 //
 // กติกา:
 //   - เขียนทุกอย่างใน transaction พร้อมตรวจสิทธิ์ + สถานะบริษัท (inactive = อ่านอย่างเดียว)
-//   - ส่งของ / ออกบิล / รับเงิน: เอกสารขาย + ใบเบิกของ inventory + รายการบัญชีของ ledger อยู่ใน transaction เดียว
+//   - ขายสินค้า / ขายบริการ / มัดจำ: เอกสารขาย + ใบเบิกของ inventory + รายการบัญชีของ ledger อยู่ใน transaction เดียว (เงินเข้ารับที่ finance)
 //   - เอกสารที่ตามใบเสนอราคา / ใบสั่งขายใช้เงื่อนไข VAT / เครดิตเทอมที่เก็บในใบ ไม่กลับไปดูค่าตั้ง / ลูกค้า
 //   - ข้อมูลของ module อื่น (ชื่อสินค้า) เติมผ่าน public API 1 ครั้งต่อ request — ไม่ JOIN ข้าม module
 package usecases
@@ -21,34 +21,35 @@ import (
 )
 
 type Deps struct {
-	Tx          ports.TransactionManager
-	Auth        ports.Authorizer
-	Org         ports.Organization
-	Ledger      ports.Ledger
-	Inventory   ports.Inventory
-	Settings    repositories.SettingsRepository
-	Customers   repositories.CustomerRepository
-	Sequence    repositories.Sequence
-	Quotations  repositories.QuotationRepository
-	Orders      repositories.OrderRepository
-	Deliveries  repositories.DeliveryRepository
-	Invoices    repositories.InvoiceRepository
-	CreditNotes repositories.CreditNoteRepository
-	Settlements repositories.SettlementRepository
-	Reports     repositories.ReportRepository
-	Clock       func() time.Time
+	Tx           ports.TransactionManager
+	Auth         ports.Authorizer
+	Org          ports.Organization
+	Ledger       ports.Ledger
+	Inventory    ports.Inventory
+	Settings     repositories.SettingsRepository
+	Customers    repositories.CustomerRepository
+	Sequence     repositories.Sequence
+	Quotations   repositories.QuotationRepository
+	Orders       repositories.OrderRepository
+	Invoices     repositories.InvoiceRepository
+	Recognitions repositories.VatRecognitionRepository
+	BillingNotes repositories.BillingNoteRepository
+	CreditNotes  repositories.CreditNoteRepository
+	Settlements  repositories.SettlementRepository
+	Reports      repositories.ReportRepository
+	Clock        func() time.Time
 }
 
 type UseCases struct {
-	Settings    *SettingsUseCases
-	Customers   *CustomerUseCases
-	Quotations  *QuotationUseCases
-	Orders      *OrderUseCases
-	Deliveries  *DeliveryUseCases
-	Invoices    *InvoiceUseCases
-	CreditNotes *CreditNoteUseCases
-	Settlements *SettlementUseCases
-	Reports     *ReportUseCases
+	Settings     *SettingsUseCases
+	Customers    *CustomerUseCases
+	Quotations   *QuotationUseCases
+	Orders       *OrderUseCases
+	Invoices     *InvoiceUseCases
+	BillingNotes *BillingNoteUseCases
+	CreditNotes  *CreditNoteUseCases
+	Settlements  *SettlementUseCases
+	Reports      *ReportUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -57,15 +58,16 @@ func New(d Deps) *UseCases {
 	}
 	b := base{tx: d.Tx, auth: d.Auth, org: d.Org, ledger: d.Ledger, inventory: d.Inventory, settings: d.Settings, seq: d.Sequence, now: d.Clock}
 	return &UseCases{
-		Settings:    &SettingsUseCases{base: b},
-		Customers:   &CustomerUseCases{base: b, repo: d.Customers},
-		Quotations:  &QuotationUseCases{base: b, quotations: d.Quotations, customers: d.Customers},
-		Orders:      &OrderUseCases{base: b, orders: d.Orders, quotations: d.Quotations, customers: d.Customers},
-		Deliveries:  &DeliveryUseCases{base: b, deliveries: d.Deliveries, orders: d.Orders},
-		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, customers: d.Customers, creditNotes: d.CreditNotes},
-		CreditNotes: &CreditNoteUseCases{base: b, notes: d.CreditNotes, invoices: d.Invoices, deliveries: d.Deliveries, settlements: d.Settlements},
-		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, customers: d.Customers, settlements: d.Settlements},
-		Reports:     &ReportUseCases{base: b, reports: d.Reports},
+		Settings:   &SettingsUseCases{base: b},
+		Customers:  &CustomerUseCases{base: b, repo: d.Customers},
+		Quotations: &QuotationUseCases{base: b, quotations: d.Quotations, customers: d.Customers},
+		Orders:     &OrderUseCases{base: b, orders: d.Orders, quotations: d.Quotations, customers: d.Customers},
+		Invoices: &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, customers: d.Customers, creditNotes: d.CreditNotes,
+			settlements: d.Settlements, recognitions: d.Recognitions},
+		BillingNotes: &BillingNoteUseCases{base: b, notes: d.BillingNotes, invoices: d.Invoices, customers: d.Customers},
+		CreditNotes:  &CreditNoteUseCases{base: b, notes: d.CreditNotes, invoices: d.Invoices, settlements: d.Settlements, recognitions: d.Recognitions},
+		Settlements:  &SettlementUseCases{base: b, invoices: d.Invoices, customers: d.Customers, settlements: d.Settlements, recognitions: d.Recognitions},
+		Reports:      &ReportUseCases{base: b, reports: d.Reports},
 	}
 }
 
@@ -176,6 +178,14 @@ func (b base) itemRefs(ctx context.Context, companyID vo.CompanyID, refs []*dto.
 		if id, err := vo.ParseID[vo.ItemID](r.ID); err == nil {
 			if i, ok := found[id]; ok {
 				r.Code, r.Name = i.Code, i.Name
+				switch {
+				case i.Service:
+					r.Type = "service"
+				case i.Stock:
+					r.Type = "stock"
+				default:
+					r.Type = "non_stock"
+				}
 			}
 		}
 	}

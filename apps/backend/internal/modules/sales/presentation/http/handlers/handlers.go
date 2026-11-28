@@ -51,7 +51,7 @@ var errorMapper = func() *httpx.ErrorMapper {
 			domain.ErrInvalidDate, domain.ErrInvalidTaxID, domain.ErrInvalidBranchNo, domain.ErrDuplicateBranch, domain.ErrInvalidTerm, domain.ErrInvalidTaxType,
 			domain.ErrInvalidVatRate, domain.ErrInvalidAmount, domain.ErrInvalidLine, thaiaddress.ErrInvalidAddress,
 			domain.ErrInvalidCreditKind, domain.ErrReasonRequired},
-		notFound: {domain.ErrCustomerNotFound, domain.ErrQuotationNotFound, domain.ErrOrderNotFound, domain.ErrDeliveryNotFound,
+		notFound: {domain.ErrCustomerNotFound, domain.ErrQuotationNotFound, domain.ErrOrderNotFound, domain.ErrBillingNoteNotFound,
 			domain.ErrInvoiceNotFound, domain.ErrItemNotFound, domain.ErrCreditNoteNotFound},
 		conflict: {domain.ErrCodeExists, domain.ErrTaxIDExists, domain.ErrInUse, domain.ErrDocumentNoUsed, domain.ErrQuotationUsed},
 		rejected: {domain.ErrCompanyInactive, domain.ErrCustomerInactive, domain.ErrItemInactive, domain.ErrVatNotApplicable,
@@ -59,7 +59,10 @@ var errorMapper = func() *httpx.ErrorMapper {
 			domain.ErrOrderHasActivity, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrAlreadyCancelled,
 			domain.ErrInvoicePaid, domain.ErrOverReceipt, domain.ErrInvoiceNotPayable, domain.ErrNoFiscalPeriod,
 			domain.ErrPeriodClosed, domain.ErrSettingsMissing, domain.ErrAccountInvalid, domain.ErrJournalInvalid, domain.ErrWarehouseRequired, domain.ErrBranchNotFound,
-			domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCreditBeforeInvoice, domain.ErrInvoiceHasCredits, domain.ErrCostUnknown},
+			domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCreditBeforeInvoice, domain.ErrInvoiceHasCredits, domain.ErrCostUnknown,
+			domain.ErrServiceInvoiceGoodsLine, domain.ErrNotServiceInvoice, domain.ErrTaxInvoiceIssued, domain.ErrNoUndueVat, domain.ErrDepositNotUsable,
+			domain.ErrDepositOverApplied, domain.ErrDepositApplied, domain.ErrDepositExceedsSale, domain.ErrDepositNotPaid, domain.ErrDocumentNotAvailable,
+			domain.ErrBillingInvoice, domain.ErrBillingNoteCancelled},
 	} {
 		for _, e := range errs {
 			rules = append(rules, httpx.ErrorRule{Err: e, Status: status})
@@ -70,7 +73,9 @@ var errorMapper = func() *httpx.ErrorMapper {
 		domain.ErrInvoiceNotFound, domain.ErrItemNotFound, domain.ErrItemInactive,
 		domain.ErrQuotationState, domain.ErrOverDelivery, domain.ErrOverInvoice, domain.ErrDeliveryInvoiced, domain.ErrOverReceipt,
 		domain.ErrInvoiceNotPayable, domain.ErrSettingsMissing, domain.ErrAccountInvalid,
-		domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCostUnknown)
+		domain.ErrOverCredit, domain.ErrOverReturn, domain.ErrCreditPrice, domain.ErrCostUnknown,
+		domain.ErrServiceInvoiceGoodsLine, domain.ErrDepositNotUsable, domain.ErrDepositOverApplied, domain.ErrDepositNotPaid,
+		domain.ErrDocumentNotAvailable, domain.ErrBillingInvoice)
 }()
 
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, status int, fn func(a dto.Actor) (any, error)) {
@@ -367,7 +372,106 @@ func (h *Handler) DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ---------- ใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จ ----------
+// ---------- เอกสารขาย ----------
+
+// createSale: POST /sales-invoices (ขายสินค้า) / POST /service-invoices (ขายบริการ)
+func (h *Handler) createSale(kind vo.InvoiceKind) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.serve(w, r, http.StatusCreated, func(a dto.Actor) (any, error) {
+			req, err := decode[requests.Sale](w, r)
+			if err != nil {
+				return nil, err
+			}
+			in, err := req.ToInput(kind)
+			if err != nil {
+				return nil, err
+			}
+			d, err := h.uc.Invoices.Create(r.Context(), dto.Create[dto.SaleInput]{Actor: a, Data: in})
+			return one(responses.FromInvoice(d), err)
+		})
+	}
+}
+
+// saleList / saleGet / saleCancel: endpoint ของชนิดเอกสาร (ชนิดอื่นใน path = ไม่พบ)
+func saleList(h *Handler, kind vo.InvoiceKind) http.HandlerFunc {
+	return list(h, func(r *http.Request) (dto.DocumentFilter, error) {
+		f, err := requests.ParseDocumentFilter(r.URL.Query(), requests.KindPosted)
+		f.Kind = kind
+		return f, err
+	}, h.uc.Invoices.List, responses.FromInvoiceSummary)
+}
+
+func saleGet(h *Handler, kind vo.InvoiceKind) http.HandlerFunc {
+	return getOne(h, "invoiceID", func(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
+		return h.uc.Invoices.GetKind(ctx, in, kind)
+	}, responses.FromInvoice)
+}
+
+func saleCancel(h *Handler, kind vo.InvoiceKind) http.HandlerFunc {
+	return cancelOne(h, "invoiceID", func(ctx context.Context, in dto.ByID[vo.InvoiceID]) (dto.Invoice, error) {
+		return h.uc.Invoices.Cancel(ctx, in, kind)
+	}, responses.FromInvoice)
+}
+
+// IssueTaxInvoice: POST /service-invoices/{invoiceID}/tax-invoice {"date"}
+func (h *Handler) IssueTaxInvoice(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		id, err := vo.ParseID[vo.InvoiceID](r.PathValue("invoiceID"))
+		if err != nil {
+			return nil, err
+		}
+		req, err := decode[requests.TaxInvoice](w, r)
+		if err != nil {
+			return nil, err
+		}
+		in, err := req.ToInput(id)
+		if err != nil {
+			return nil, err
+		}
+		d, err := h.uc.Invoices.IssueTaxInvoice(r.Context(), dto.Create[dto.TaxInvoiceInput]{Actor: a, Data: in})
+		return one(responses.FromInvoice(d), err)
+	})
+}
+
+// OpenDeposits: GET /sales-deposits/open?customer_id= — มัดจำที่รับเงินครบแล้วและยังหักได้
+func (h *Handler) OpenDeposits(w http.ResponseWriter, r *http.Request) {
+	h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+		raw := r.URL.Query().Get("customer_id")
+		if raw == "" {
+			return nil, requests.Invalid("customer_id is required")
+		}
+		customerID, err := vo.ParseID[vo.CustomerID](raw)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := h.uc.Invoices.OpenDeposits(r.Context(), a, customerID)
+		if err != nil {
+			return nil, err
+		}
+		return httpx.Data[[]responses.OpenDeposit]{Data: responses.FromOpenDeposits(rows)}, nil
+	})
+}
+
+// cancelBilling: PATCH /billing-notes/{id} {"status":"cancelled"}
+func cancelBilling(h *Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
+			in, err := byID[vo.BillingNoteID](r, a, "billingNoteID")
+			if err != nil {
+				return nil, err
+			}
+			req, err := decode[requests.Status](w, r)
+			if err != nil {
+				return nil, err
+			}
+			if req.Status != string(vo.BillingCancelled) {
+				return nil, requests.Invalid("status must be cancelled")
+			}
+			d, err := h.uc.BillingNotes.Cancel(r.Context(), in)
+			return one(responses.FromBillingNote(d), err)
+		})
+	}
+}
 
 func create[Req interface{ ToInput() (In, error) }, In any, D any, R any](h *Handler, run func(context.Context, dto.Create[In]) (D, error), to func(D) R) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -392,6 +496,7 @@ const (
 	BookOutstanding = "outstanding-sales-orders"
 	BookARAging     = "ar-aging"
 	BookOutputVat   = "output-vat"
+	BookUndueVat    = "undue-output-vat"
 )
 
 func report[F any, D any, B any](h *Handler, parse func(*http.Request) (F, error), run func(context.Context, dto.List[F]) (D, error), to func(D) B) http.Handler {
@@ -455,23 +560,35 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 	handle("DELETE "+base+"/sales-orders/{orderID}", h.DeleteOrder)
 
 	// เอกสารที่ลงบัญชีทันที: POST = posted -> PATCH {"status":"cancelled"}
-	handle("GET "+base+"/deliveries", list(h, docFilter(requests.KindPosted), uc.Deliveries.List, responses.FromPostedSummary))
-	handle("POST "+base+"/deliveries", create[requests.Delivery](h, uc.Deliveries.Create, responses.FromDelivery))
-	handle("GET "+base+"/deliveries/{deliveryID}", getOne(h, "deliveryID", uc.Deliveries.Get, responses.FromDelivery))
-	handle("PATCH "+base+"/deliveries/{deliveryID}", cancelOne(h, "deliveryID", uc.Deliveries.Cancel, responses.FromDelivery))
+	// เอกสารขาย: ขายสินค้า (IV) / ขายบริการ (SV) / ใบรับเงินมัดจำ (DP) — ไม่มี draft; PATCH รับเฉพาะ cancelled
+	handle("GET "+base+"/sales-invoices", saleList(h, vo.KindInvoice))
+	handle("POST "+base+"/sales-invoices", h.createSale(vo.KindInvoice))
+	handle("GET "+base+"/sales-invoices/{invoiceID}", saleGet(h, vo.KindInvoice))
+	handle("PATCH "+base+"/sales-invoices/{invoiceID}", saleCancel(h, vo.KindInvoice))
 
-	handle("GET "+base+"/sales-invoices", list(h, docFilter(requests.KindPosted), uc.Invoices.List, responses.FromInvoiceSummary))
-	handle("POST "+base+"/sales-invoices", create[requests.Invoice](h, uc.Invoices.Create, responses.FromInvoice))
-	handle("GET "+base+"/sales-invoices/{invoiceID}", getOne(h, "invoiceID", uc.Invoices.Get, responses.FromInvoice))
-	handle("PATCH "+base+"/sales-invoices/{invoiceID}", cancelOne(h, "invoiceID", uc.Invoices.Cancel, responses.FromInvoice))
+	handle("GET "+base+"/service-invoices", saleList(h, vo.KindServiceInvoice))
+	handle("POST "+base+"/service-invoices", h.createSale(vo.KindServiceInvoice))
+	handle("GET "+base+"/service-invoices/{invoiceID}", saleGet(h, vo.KindServiceInvoice))
+	handle("PATCH "+base+"/service-invoices/{invoiceID}", saleCancel(h, vo.KindServiceInvoice))
+	handle("POST "+base+"/service-invoices/{invoiceID}/tax-invoice", h.IssueTaxInvoice)
 
-	// ใบลดหนี้: อ้างใบแจ้งหนี้ (รับคืนสินค้า / ลดราคา) — POST = posted, PATCH {"status":"cancelled"} ยกเลิก; ?invoice_id= กรองตามใบแจ้งหนี้
+	handle("GET "+base+"/sales-deposits", saleList(h, vo.KindDeposit))
+	handle("GET "+base+"/sales-deposits/open", h.OpenDeposits)
+	handle("POST "+base+"/sales-deposits", create[requests.Deposit](h, uc.Invoices.CreateDeposit, responses.FromInvoice))
+	handle("GET "+base+"/sales-deposits/{invoiceID}", saleGet(h, vo.KindDeposit))
+	handle("PATCH "+base+"/sales-deposits/{invoiceID}", saleCancel(h, vo.KindDeposit))
+
+	handle("GET "+base+"/billing-notes", list(h, docFilter(requests.KindBilling), uc.BillingNotes.List, responses.FromBillingNoteSummary))
+	handle("POST "+base+"/billing-notes", create[requests.BillingNote](h, uc.BillingNotes.Create, responses.FromBillingNote))
+	handle("GET "+base+"/billing-notes/{billingNoteID}", getOne(h, "billingNoteID", uc.BillingNotes.Get, responses.FromBillingNote))
+	handle("PATCH "+base+"/billing-notes/{billingNoteID}", cancelBilling(h))
+
 	handle("GET "+base+"/sales-credit-notes", list(h, docFilter(requests.KindPosted), uc.CreditNotes.List, responses.FromCreditNoteSummary))
 	handle("POST "+base+"/sales-credit-notes", create[requests.CreditNote](h, uc.CreditNotes.Create, responses.FromCreditNote))
 	handle("GET "+base+"/sales-credit-notes/{creditNoteID}", getOne(h, "creditNoteID", uc.CreditNotes.Get, responses.FromCreditNote))
 	handle("PATCH "+base+"/sales-credit-notes/{creditNoteID}", cancelOne(h, "creditNoteID", uc.CreditNotes.Cancel, responses.FromCreditNote))
 
-	// ใบเสร็จรับเงินอยู่ที่ finance (POST /customer-receipts) — ตัดยอดใบแจ้งหนี้ผ่าน Module.SettleReceivables
+	// เงินเข้าทั้งหมดรับที่ finance (POST /receipts) — ตัดยอดเอกสารขาย + ภาษีขายถึงกำหนดผ่าน Module.SettleReceivables
 }
 
 // RegisterReports ลงทะเบียนรายงานของ sales กับ GET /reports?book=
@@ -483,4 +600,6 @@ func RegisterReports(reg *reports.Registry, h *Handler) {
 		uc.Reports.Aging, func(d dto.Aging) any { return responses.FromAging(BookARAging, d) }))
 	reg.Register(BookOutputVat, report(h, func(r *http.Request) (dto.TaxFilter, error) { return requests.ParseTax(r.URL.Query()) },
 		uc.Reports.OutputVat, func(d dto.TaxReport) any { return responses.FromTax(BookOutputVat, d) }))
+	reg.Register(BookUndueVat, report(h, func(r *http.Request) (dto.UndueVatFilter, error) { return requests.ParseUndueVatFilter(r.URL.Query()) },
+		uc.Reports.UndueVat, func(d dto.UndueVatReport) any { return responses.FromUndueVat(BookUndueVat, d) }))
 }

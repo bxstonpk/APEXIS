@@ -347,6 +347,7 @@ func (r *StockRepository) ValueByItem(ctx context.Context, companyID vo.CompanyI
 		         GROUP BY item_id HAVING SUM(value) <> 0) AS v
 		  JOIN inventory_items AS i ON i.id = v.item_id
 		  LEFT JOIN inventory_item_categories AS c ON c.id = i.category_id AND c.deleted_at IS NULL
+		  LEFT JOIN inventory_uoms AS u ON u.id = i.uom_id
 		 ORDER BY i.code`, uuidOf(companyID), asOf).Scan(&rows).Error
 	out := make([]dto.ItemStockValue, len(rows))
 	for i, row := range rows {

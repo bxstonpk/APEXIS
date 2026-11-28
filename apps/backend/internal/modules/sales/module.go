@@ -1,13 +1,16 @@
 // Package sales คือขาย: ลูกค้า (วงเงินเครดิต), ใบเสนอราคา, ใบสั่งขาย (อนุมัติ + เตือนวงเงิน),
-// ใบส่งของ / ใบแจ้งหนี้-ใบกำกับภาษี (แยกใบหรือรวมใบ) และรายงานค้างส่ง / อายุลูกหนี้ / ภาษีขาย
+// ขายสินค้า / ขายบริการ / ใบรับเงินมัดจำ / ใบกำกับภาษี / ใบวางบิล / ใบลดหนี้ และรายงานค้างส่ง / อายุลูกหนี้ / ภาษีขาย
 //
-// VAT ตามค่าตั้งขาย (บริษัทจด / ไม่จด VAT) เก็บในใบเสนอราคา / ใบสั่งขายตอนสร้าง — เอกสารที่ตามมาใช้ค่าในใบ
+// จุดเกิดภาษีขาย (ประมวลรัษฎากร): ขายสินค้า ม.78 = ส่งมอบ (ออกใบส่งของ / ใบแจ้งหนี้ / ใบกำกับภาษีพร้อมตัดสต็อก),
+// ขายบริการ ม.78/1 = รับชำระ (ใบแจ้งหนี้ลงภาษีขายยังไม่ถึงกำหนด แล้วถึงกำหนดตอน finance รับเงิน / ออกใบกำกับก่อนรับเงิน),
+// มัดจำ = วันที่ใบรับเงินมัดจำ / ใบกำกับภาษี; ประเภทธุรกิจกำหนดว่าออกขายสินค้า (ซื้อขาย / ผลิต) หรือขายบริการ (บริการ / ก่อสร้าง)
 //
 // การลงบัญชี (ระบบบัญชีตามปีบัญชีที่ inventory กำหนด) — 1 ผังบัญชี = 1 บรรทัด:
-//   - ส่งของ: perpetual + สินค้า stock = Dr ต้นทุนขาย / Cr สินค้าคงเหลือ (ต้นทุน FIFO); periodic ไม่มีรายการ
-//   - ออกบิล: Dr ลูกหนี้ / Cr รายได้ (สินค้า -> หมวด -> ค่าตั้ง) + Cr ภาษีขาย [+ ต้นทุนขายเมื่อรวมใบ]
+//   - ขายสินค้า: Dr ลูกหนี้ / Cr รายได้ + Cr ภาษีขาย [+ Dr ต้นทุนขาย / Cr สินค้าคงเหลือ เมื่อ perpetual]
+//   - ขายบริการ: Dr ลูกหนี้ / Cr รายได้ + Cr ภาษีขายยังไม่ถึงกำหนด
+//   - มัดจำ: Dr ลูกหนี้ / Cr เงินมัดจำรับ + Cr ภาษีขาย; หักในเอกสารขายภายหลัง (Dr เงินมัดจำรับ, ภาษีของเอกสารลดลง)
 //
-// ใบเสร็จรับเงินเป็นของ finance: ตัดยอดใบแจ้งหนี้ผ่าน SettleReceivables / UnsettleReceivables ใน transaction เดียวกัน
+// เงินเข้าทั้งหมดรับที่ finance: ตัดยอดผ่าน SettleReceivables / UnsettleReceivables ใน transaction เดียวกัน
 package sales
 
 import (
@@ -51,21 +54,22 @@ type Module struct {
 func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, inventory Inventory) *Module {
 	org.RegisterDocumentTypes(DocumentTypes()...)
 	uc := usecases.New(usecases.Deps{
-		Tx:          gp.NewTransactionManager(db),
-		Auth:        services.NewAuthorizer(identity),
-		Org:         services.NewOrganization(org),
-		Ledger:      services.NewLedger(ledger),
-		Inventory:   services.NewInventory(inventory),
-		Settings:    gormrepo.NewSettingsRepository(db),
-		Customers:   gormrepo.NewCustomerRepository(db),
-		Sequence:    gormrepo.NewSequenceRepository(),
-		Quotations:  gormrepo.NewQuotationRepository(db),
-		Orders:      gormrepo.NewOrderRepository(db),
-		Deliveries:  gormrepo.NewDeliveryRepository(db),
-		Invoices:    gormrepo.NewInvoiceRepository(db),
-		CreditNotes: gormrepo.NewCreditNoteRepository(db),
-		Settlements: gormrepo.NewSettlementRepository(db),
-		Reports:     gormrepo.NewReportRepository(db),
+		Tx:           gp.NewTransactionManager(db),
+		Auth:         services.NewAuthorizer(identity),
+		Org:          services.NewOrganization(org),
+		Ledger:       services.NewLedger(ledger),
+		Inventory:    services.NewInventory(inventory),
+		Settings:     gormrepo.NewSettingsRepository(db),
+		Customers:    gormrepo.NewCustomerRepository(db),
+		Sequence:     gormrepo.NewSequenceRepository(),
+		Quotations:   gormrepo.NewQuotationRepository(db),
+		Orders:       gormrepo.NewOrderRepository(db),
+		Recognitions: gormrepo.NewVatRecognitionRepository(db),
+		BillingNotes: gormrepo.NewBillingNoteRepository(db),
+		Invoices:     gormrepo.NewInvoiceRepository(db),
+		CreditNotes:  gormrepo.NewCreditNoteRepository(db),
+		Settlements:  gormrepo.NewSettlementRepository(db),
+		Reports:      gormrepo.NewReportRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -109,7 +113,12 @@ func (m *Module) SettleReceivables(ctx context.Context, companyID, customerID uu
 		ControlAccountID: uuid.UUID(res.ARAccountID), Invoices: make([]integration.SettledInvoice, len(res.Invoices)),
 	}
 	for i, x := range res.Invoices {
-		out.Invoices[i] = integration.SettledInvoice{InvoiceID: uuid.UUID(x.ID), DocumentNo: x.DocumentNo, Net: x.Net, Gross: x.Gross}
+		out.Invoices[i] = integration.SettledInvoice{InvoiceID: uuid.UUID(x.ID), DocumentNo: x.DocumentNo, Kind: string(x.Kind), Net: x.Net, Gross: x.Gross,
+			VatBase: x.VatBase, Vat: x.Vat}
+	}
+	for _, l := range res.ExtraJournal {
+		out.ExtraJournal = append(out.ExtraJournal, integration.JournalLine{AccountID: uuid.UUID(l.AccountID), Debit: l.Debit, Credit: l.Credit,
+			Description: "Output VAT due on receipt " + doc.DocumentNo})
 	}
 	return out, nil
 }
@@ -119,16 +128,23 @@ func (m *Module) UnsettleReceivables(ctx context.Context, companyID, documentID 
 	return reject(m.UseCases.Settlements.Unsettle(ctx, vo.CompanyID(companyID), documentID))
 }
 
-// OpenReceivables: ใบแจ้งหนี้ค้างรับของลูกค้า (ไม่ตรวจสิทธิ์ — finance ตรวจ finance.receipt:read แล้ว)
-func (m *Module) OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID) ([]integration.OpenInvoice, error) {
-	rows, err := m.UseCases.Settlements.Open(ctx, vo.CompanyID(companyID), vo.CustomerID(customerID))
+// OpenReceivables: เอกสารขายค้างรับของลูกค้า (ขายสินค้า / ขายบริการ / มัดจำ) — billingNoteID = เฉพาะใบในใบวางบิล
+// ไม่ตรวจสิทธิ์ (finance ตรวจ finance.receipt:read แล้ว)
+func (m *Module) OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error) {
+	var bn *vo.BillingNoteID
+	if billingNoteID != nil {
+		b := vo.BillingNoteID(*billingNoteID)
+		bn = &b
+	}
+	rows, err := m.UseCases.Settlements.Open(ctx, vo.CompanyID(companyID), vo.CustomerID(customerID), bn)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]integration.OpenInvoice, len(rows))
 	for i, r := range rows {
 		id, _ := uuid.Parse(r.ID)
-		out[i] = integration.OpenInvoice{ID: id, DocumentNo: r.DocumentNo, Date: r.Date, DueDate: r.DueDate, Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+		out[i] = integration.OpenInvoice{ID: id, DocumentNo: r.DocumentNo, Date: r.Date, DueDate: r.DueDate, Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding,
+			Kind: r.Kind, VatUndue: r.VatUndue, TaxInvoice: r.TaxInvoice}
 	}
 	return out, nil
 }
@@ -138,6 +154,29 @@ func reject(err error) error {
 		return integration.Reject("sales", err)
 	}
 	return err
+}
+
+// ProvisionCompany ตั้งค่าเริ่มต้นของ module ให้บริษัทใหม่ตามประเภทธุรกิจ (บัญชี / สมุดรายวันจากผังบัญชีมาตรฐาน)
+// ลงทะเบียนเป็น hook ของ organization.Module.OnCompanyCreated หลัง ledger — ทำงานใน transaction ของการสร้างบริษัท
+func (m *Module) ProvisionCompany(ctx context.Context, c integration.NewCompany) error {
+	return m.UseCases.Settings.Provision(ctx, vo.CompanyID(c.ID), c.BusinessType)
+}
+
+// PermissionMigration: แปลงสิทธิ์เดิมของบทบาท (From -> To, Keep = คงสิทธิ์เดิมไว้ด้วย; To ว่าง = ลบสิทธิ์)
+type PermissionMigration struct {
+	From string
+	To   []string
+	Keep bool
+}
+
+// PermissionMigrations: ขายแบบใหม่ (2026-11-26) — ไม่มีใบส่งของแยก จึงลบสิทธิ์ใบส่งของออกจากทุกบทบาท (ทำซ้ำได้)
+// สิทธิ์ใบวางบิล (sales.billing_note:*) ให้ผู้ดูแลบทบาทตั้งเอง — ไม่แปลงอัตโนมัติ (จะถูกเพิ่มกลับทุกครั้งที่เริ่มระบบ)
+func PermissionMigrations() []PermissionMigration {
+	return []PermissionMigration{
+		{From: "sales.delivery:*"},
+		{From: "sales.delivery:read"},
+		{From: "sales.delivery:post"},
+	}
 }
 
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)

@@ -21,7 +21,7 @@ import (
 	"apexis/backend/internal/platform/listing"
 )
 
-// postedTable คือส่วนร่วมของใบส่งของ / ใบแจ้งหนี้ / ใบเสร็จ: JOIN ลูกค้า (+ ใบสั่งขาย), กรอง, เรียง, แบ่งหน้า
+// postedTable คือส่วนร่วมของเอกสารขาย / ใบลดหนี้: JOIN ลูกค้า (+ ใบสั่งขาย), กรอง, เรียง, แบ่งหน้า
 type postedTable struct {
 	table     string
 	withOrder bool
@@ -75,7 +75,7 @@ func (t postedTable) columns(extra string) string {
 func (t postedTable) base(ctx context.Context, db *gorm.DB, companyID vo.CompanyID) *gorm.DB {
 	q := database.Conn(ctx, db).Table(t.table + " AS d").Joins("JOIN sales_customers AS c ON c.id = d.customer_id")
 	if t.withOrder {
-		q = q.Joins("JOIN sales_orders AS o ON o.id = d.order_id")
+		q = q.Joins("LEFT JOIN sales_orders AS o ON o.id = d.order_id")
 	}
 	return q.Where("d.company_id = ?", uuidOf(companyID))
 }
@@ -91,6 +91,9 @@ func (t postedTable) filtered(ctx context.Context, db *gorm.DB, companyID vo.Com
 		}
 		if f.OrderID != nil && t.withOrder {
 			q = q.Where("d.order_id = ?", uuidOf(*f.OrderID))
+		}
+		if f.Kind != "" && t.table == "sales_invoices" {
+			q = q.Where("d.kind = ?", string(f.Kind))
 		}
 		if f.StartDate != nil {
 			q = q.Where("d.doc_date >= ?", *f.StartDate)
@@ -139,37 +142,6 @@ func createDoc(ctx context.Context, header any, children ...any) error {
 	return nil
 }
 
-// ---------- ใบส่งของ ----------
-
-var _ ports.DeliveryRepository = (*DeliveryRepository)(nil)
-
-type DeliveryRepository struct{ db *gorm.DB }
-
-func NewDeliveryRepository(db *gorm.DB) *DeliveryRepository { return &DeliveryRepository{db: db} }
-
-var deliveryTable = postedTable{table: "sales_deliveries", withOrder: true}
-
-func (r *DeliveryRepository) Create(ctx context.Context, d *entities.Delivery) error {
-	m := gp.DeliveryToModel(d)
-	return createDoc(ctx, &m, &m.Lines)
-}
-
-func (r *DeliveryRepository) UpdateStatus(ctx context.Context, d *entities.Delivery) error {
-	m := gp.DeliveryToModel(d)
-	return updateStatus(ctx, r.db, &models.DeliveryModel{}, m.CompanyID, m.ID, m.PostedModel.Status, m.PostedModel.CancelledBy, m.PostedModel.CancelledAt, domain.ErrDeliveryNotFound)
-}
-
-func (r *DeliveryRepository) FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (*entities.Delivery, error) {
-	m, err := lockHeader[models.DeliveryModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrDeliveryNotFound)
-	if err != nil {
-		return nil, err
-	}
-	if err := database.Conn(ctx, r.db).Where("delivery_id = ?", m.ID).Order("line_no").Find(&m.Lines).Error; err != nil {
-		return nil, err
-	}
-	return gp.DeliveryToEntity(m), nil
-}
-
 type stockRow struct {
 	WarehouseID     *uuid.UUID
 	System          string
@@ -180,74 +152,7 @@ func (s stockRow) dto() dto.StockInfo {
 	return dto.StockInfo{WarehouseID: optString(s.WarehouseID), System: s.System, StockDocumentNo: s.StockDocumentNo}
 }
 
-// Get — 2 query: หัว (JOIN ลูกค้า + ใบสั่งขาย) + บรรทัด
-func (r *DeliveryRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (dto.Delivery, error) {
-	var rows []struct {
-		PostedRow
-		WarehouseID     *uuid.UUID
-		System          string
-		StockDocumentNo string
-		TotalCost       decimal.Decimal
-		Reference       string
-		Description     string
-	}
-	err := deliveryTable.base(ctx, r.db, companyID).
-		Select(deliveryTable.columns("d.warehouse_id, d.system, d.stock_document_no, d.total_cost, d.reference, d.description")).
-		Where("d.id = ?", uuidOf(id)).Limit(1).Scan(&rows).Error
-	if err != nil {
-		return dto.Delivery{}, err
-	}
-	if len(rows) == 0 {
-		return dto.Delivery{}, domain.ErrDeliveryNotFound
-	}
-	h := rows[0]
-	var lines []models.DeliveryLineModel
-	if err := database.Conn(ctx, r.db).Where("delivery_id = ?", h.ID).Order("line_no").Find(&lines).Error; err != nil {
-		return dto.Delivery{}, err
-	}
-	out := dto.Delivery{
-		PostedSummary: h.PostedRow.summary(), StockInfo: stockRow{h.WarehouseID, h.System, h.StockDocumentNo}.dto(),
-		TotalCost: h.TotalCost, Reference: h.Reference, Description: h.Description, Lines: make([]dto.DeliveryLine, len(lines)),
-	}
-	for i, l := range lines {
-		out.Lines[i] = dto.DeliveryLine{OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, Cost: l.Cost}
-	}
-	return out, nil
-}
-
-func (r *DeliveryRepository) List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.PostedSummary], error) {
-	order, err := deliveryTable.order(f.Sort)
-	if err != nil {
-		return listing.Result[dto.PostedSummary]{}, err
-	}
-	rows, total, err := database.FetchPage(deliveryTable.filtered(ctx, r.db, companyID, f, "d.reference"), deliveryTable.columns(""), order, f.Page,
-		func(r PostedRow) int64 { return r.Total })
-	return toResult(rows, total, f.Page, PostedRow.summary), err
-}
-
-// UnitCosts — 1 query: ต้นทุนเฉลี่ยต่อหน่วยของบรรทัดใบสั่งขาย = ต้นทุนรวม / จำนวน ของใบส่งของที่ยังไม่ยกเลิก (สินค้า stock)
-func (r *DeliveryRepository) UnitCosts(ctx context.Context, companyID vo.CompanyID, orderID vo.OrderID, orderLineNos []int) (map[int]vo.Money, error) {
-	var rows []struct {
-		OrderLineNo int
-		Quantity    decimal.Decimal
-		Cost        decimal.Decimal
-	}
-	err := database.Conn(ctx, r.db).Table("sales_delivery_lines AS l").
-		Joins("JOIN sales_deliveries AS d ON d.id = l.delivery_id").
-		Select("l.order_line_no, SUM(l.quantity) AS quantity, SUM(l.cost) AS cost").
-		Where("d.company_id = ? AND d.order_id = ? AND d.status = 'posted' AND l.stock AND l.order_line_no IN ?",
-			uuidOf(companyID), uuidOf(orderID), orderLineNos).
-		Group("l.order_line_no").Scan(&rows).Error
-	out := make(map[int]vo.Money, len(rows))
-	for _, x := range rows {
-		if x.Quantity.IsPositive() {
-			out[x.OrderLineNo] = x.Cost.DivRound(x.Quantity, 6)
-		}
-	}
-	return out, err
-}
-
-// ---------- ใบแจ้งหนี้ ----------
+// ---------- เอกสารขาย (ขายสินค้า / ขายบริการ / มัดจำ) ----------
 
 var _ ports.InvoiceRepository = (*InvoiceRepository)(nil)
 
@@ -258,15 +163,45 @@ func NewInvoiceRepository(db *gorm.DB) *InvoiceRepository { return &InvoiceRepos
 var invoiceTable = postedTable{table: "sales_invoices", withOrder: true}
 
 func (r *InvoiceRepository) Create(ctx context.Context, i *entities.Invoice) error {
-	m := gp.InvoiceToModel(i)
-	return createDoc(ctx, &m, &m.Lines)
+	m, deps := gp.InvoiceToModel(i)
+	children := []any{&m.Lines}
+	if len(deps) > 0 {
+		children = append(children, &deps)
+	}
+	if len(m.Lines) == 0 {
+		children = children[1:]
+	}
+	return createDoc(ctx, &m, children...)
 }
 
 func (r *InvoiceRepository) UpdateStatus(ctx context.Context, i *entities.Invoice) error {
-	m := gp.InvoiceToModel(i)
+	m, _ := gp.InvoiceToModel(i)
 	return updateStatus(ctx, r.db, &models.InvoiceModel{}, m.CompanyID, m.ID, m.PostedModel.Status, m.PostedModel.CancelledBy, m.PostedModel.CancelledAt, domain.ErrInvoiceNotFound)
 }
 
+// SaveState — UPDATE เดียว: ยอดที่ตัด / ภาษีที่ถึงกำหนด / มัดจำที่ถูกหัก / ใบกำกับภาษีก่อนรับเงิน
+func (r *InvoiceRepository) SaveState(ctx context.Context, i *entities.Invoice) error {
+	m, _ := gp.InvoiceToModel(i)
+	return database.Conn(ctx, r.db).Model(&models.InvoiceModel{}).Where("company_id = ? AND id = ?", m.CompanyID, m.ID).
+		Updates(map[string]any{
+			"received_amount": m.ReceivedAmount, "vat_recognized": m.VatRecognized, "vat_credited": m.VatCredited,
+			"base_recognized": m.BaseRecognized, "base_credited": m.BaseCredited,
+			"deposit_applied": m.DepositApplied, "deposit_applied_vat": m.DepositAppliedVat,
+			"tax_invoice_no": m.TaxInvoiceNo, "tax_invoice_date": m.TaxInvoiceDate, "tax_invoice_entry_id": m.TaxInvoiceEntryID,
+			"tax_invoice_entry_no": m.TaxInvoiceEntryNo, "tax_invoice_base": m.TaxInvoiceBase, "tax_invoice_vat": m.TaxInvoiceVat,
+			"updated_at": time.Now().UTC(),
+		}).Error
+}
+
+// deposits — 1 query: มัดจำที่หักของใบ (JOIN เลขที่มัดจำ)
+func (r *InvoiceRepository) deposits(ctx context.Context, invoiceID uuid.UUID) ([]gp.DepositUseRow, error) {
+	var rows []gp.DepositUseRow
+	err := database.Conn(ctx, r.db).Table("sales_deposit_uses AS u").Select("u.*, d.document_no AS deposit_no").
+		Joins("JOIN sales_invoices AS d ON d.id = u.deposit_id").Where("u.invoice_id = ?", invoiceID).Order("u.position").Scan(&rows).Error
+	return rows, err
+}
+
+// FindForUpdate — 3 query: หัว (FOR UPDATE) + บรรทัด + มัดจำที่หัก
 func (r *InvoiceRepository) FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (*entities.Invoice, error) {
 	m, err := lockHeader[models.InvoiceModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrInvoiceNotFound)
 	if err != nil {
@@ -275,10 +210,14 @@ func (r *InvoiceRepository) FindForUpdate(ctx context.Context, companyID vo.Comp
 	if err := database.Conn(ctx, r.db).Where("invoice_id = ?", m.ID).Order("line_no").Find(&m.Lines).Error; err != nil {
 		return nil, err
 	}
-	return gp.InvoiceToEntity(m), nil
+	deps, err := r.deposits(ctx, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	return gp.InvoiceToEntity(m, deps), nil
 }
 
-// LockForSettlement — 1 query: หัวใบแจ้งหนี้ FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
+// LockForSettlement — 1 query: หัวเอกสาร FOR UPDATE เรียงตาม id (ลำดับ lock คงที่ กัน deadlock)
 func (r *InvoiceRepository) LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -288,52 +227,88 @@ func (r *InvoiceRepository) LockForSettlement(ctx context.Context, companyID vo.
 		Where("company_id = ? AND id IN ?", uuidOf(companyID), uuids(ids)).Order("id").Find(&ms).Error
 	out := make([]*entities.Invoice, len(ms))
 	for i, m := range ms {
-		out[i] = gp.InvoiceToEntity(m)
+		out[i] = gp.InvoiceToEntity(m, nil)
 	}
 	return out, err
 }
 
-// SaveReceived — statement เดียว: UPDATE ... FROM (VALUES ...)
+// SaveReceived — statement เดียว: UPDATE ... FROM (VALUES ...) (ยอดที่ตัด + ภาษีที่ถึงกำหนด)
 func (r *InvoiceRepository) SaveReceived(ctx context.Context, invoices []*entities.Invoice) error {
 	if len(invoices) == 0 {
 		return nil
 	}
 	values := make([]string, len(invoices))
-	args := make([]any, 0, 2*len(invoices)+1)
+	args := make([]any, 0, 4*len(invoices)+1)
 	for i, inv := range invoices {
-		values[i] = "(?::uuid, ?::numeric)"
-		args = append(args, uuidOf(inv.ID()), inv.State().Received)
+		values[i] = "(?::uuid, ?::numeric, ?::numeric, ?::numeric)"
+		st := inv.State()
+		args = append(args, uuidOf(inv.ID()), st.Received, st.Deferral.VatRecognized, st.Deferral.BaseRecognized)
 	}
 	args = append(args, uuidOf(invoices[0].State().CompanyID))
-	return database.Conn(ctx, r.db).Exec(`UPDATE sales_invoices AS i SET received_amount = v.received, updated_at = now()
-		FROM (VALUES `+strings.Join(values, ", ")+`) AS v(id, received)
+	return database.Conn(ctx, r.db).Exec(`UPDATE sales_invoices AS i SET received_amount = v.received, vat_recognized = v.vat,
+			base_recognized = v.base, updated_at = now()
+		FROM (VALUES `+strings.Join(values, ", ")+`) AS v(id, received, vat, base)
 		WHERE i.id = v.id AND i.company_id = ?`, args...).Error
 }
 
 type InvoiceRow struct {
 	PostedRow
-	WithDelivery   bool
-	DueDate        time.Time
-	TotalNet       decimal.Decimal
-	TotalVat       decimal.Decimal
-	TotalGross     decimal.Decimal
-	ReceivedAmount decimal.Decimal
-	CreditedAmount decimal.Decimal
+	Kind              string
+	DueDate           time.Time
+	TotalNet          decimal.Decimal
+	TotalVat          decimal.Decimal
+	TotalGross        decimal.Decimal
+	ReceivedAmount    decimal.Decimal
+	CreditedAmount    decimal.Decimal
+	DepositBase       decimal.Decimal
+	DepositVat        decimal.Decimal
+	VatDeferred       decimal.Decimal
+	VatRecognized     decimal.Decimal
+	VatCredited       decimal.Decimal
+	TaxInvoiceNo      string
+	TaxInvoiceDate    *time.Time
+	DepositApplied    decimal.Decimal
+	DepositAppliedVat decimal.Decimal
 }
 
-// summary: received_amount ในตารางรวมทั้งใบเสร็จและใบลดหนี้ — แยกยอดรับชำระ = received - credited
+// summary: received_amount ในตารางรวมรับเงิน + ใบลดหนี้ + มัดจำที่หัก — แยกยอดรับชำระ = received - credited - มัดจำ
 func (r InvoiceRow) summary() dto.InvoiceSummary {
-	return dto.InvoiceSummary{
-		PostedSummary: r.PostedRow.summary(), WithDelivery: r.WithDelivery, DueDate: dateUTC(r.DueDate),
+	depGross := r.DepositBase.Add(r.DepositVat)
+	out := dto.InvoiceSummary{
+		PostedSummary: r.PostedRow.summary(), Kind: r.Kind, DueDate: dateUTC(r.DueDate),
 		Totals:   dto.Totals{Net: r.TotalNet, Vat: r.TotalVat, Gross: r.TotalGross},
-		Received: r.ReceivedAmount.Sub(r.CreditedAmount), Credited: r.CreditedAmount, Outstanding: r.TotalGross.Sub(r.ReceivedAmount),
+		Received: r.ReceivedAmount.Sub(r.CreditedAmount).Sub(depGross), Credited: r.CreditedAmount, DepositGross: depGross,
+		Outstanding: r.TotalGross.Sub(r.ReceivedAmount), VatStatus: "output", VatRecognized: decimal.Zero, VatUndue: decimal.Zero,
 	}
+	if r.Kind == string(vo.KindServiceInvoice) {
+		undue := r.VatDeferred.Sub(r.VatRecognized).Sub(r.VatCredited)
+		out.VatRecognized, out.VatUndue = r.VatRecognized, undue
+		switch {
+		case r.VatRecognized.IsZero() && undue.IsPositive():
+			out.VatStatus = "undue"
+		case undue.IsPositive():
+			out.VatStatus = "partial"
+		}
+	} else {
+		out.VatRecognized = r.TotalVat
+	}
+	if r.TaxInvoiceDate != nil {
+		out.TaxInvoice = &dto.TaxInvoiceRef{No: r.TaxInvoiceNo, Date: dateUTC(*r.TaxInvoiceDate)}
+	}
+	if r.Kind == string(vo.KindDeposit) {
+		rem, applied := r.TotalNet.Sub(r.DepositApplied), r.DepositApplied
+		out.DepositRemaining, out.DepositApplied = &rem, &applied
+	}
+	return out
 }
 
 // invoiceExtra: ยอดใบลดหนี้ (ยังไม่ยกเลิก) เป็น subquery ต่อแถว (index: sales_credit_notes.invoice_id)
-const invoiceExtra = `d.with_delivery, d.due_date, d.total_net, d.total_vat, d.total_gross, d.received_amount,
-	(SELECT COALESCE(SUM(n.total_gross), 0) FROM sales_credit_notes AS n WHERE n.invoice_id = d.id AND n.status = 'posted') AS credited_amount`
+const invoiceExtra = `d.kind, d.due_date, d.total_net, d.total_vat, d.total_gross, d.received_amount,
+	(SELECT COALESCE(SUM(n.total_gross), 0) FROM sales_credit_notes AS n WHERE n.invoice_id = d.id AND n.status = 'posted') AS credited_amount,
+	d.deposit_base, d.deposit_vat, d.vat_deferred, d.vat_recognized, d.vat_credited, d.tax_invoice_no, d.tax_invoice_date,
+	d.deposit_applied, d.deposit_applied_vat`
 
+// Get — 3 query: หัว (JOIN ลูกค้า + ใบสั่งขาย) + บรรทัด (พร้อมยอดลดหนี้) + มัดจำที่หัก
 func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error) {
 	var rows []struct {
 		InvoiceRow
@@ -373,21 +348,35 @@ func (r *InvoiceRepository) Get(ctx context.Context, companyID vo.CompanyID, id 
 		Where("l.invoice_id = ?", h.ID).Order("l.line_no").Scan(&lines).Error; err != nil {
 		return dto.Invoice{}, err
 	}
+	deps, err := r.deposits(ctx, h.ID)
+	if err != nil {
+		return dto.Invoice{}, err
+	}
+	var recs []models.VatRecognitionModel
+	if err := database.Conn(ctx, r.db).Where("invoice_id = ? AND status = 'posted'", h.ID).Order("doc_date, created_at").Find(&recs).Error; err != nil {
+		return dto.Invoice{}, err
+	}
 	out := dto.Invoice{
 		InvoiceSummary: h.InvoiceRow.summary(), StockInfo: stockRow{h.WarehouseID, h.System, h.StockDocumentNo}.dto(),
 		VatRate: h.VatRate, PriceIncludesVat: h.PriceIncludesVat, Reference: h.Reference, Description: h.Description,
 		BillTo: dto.BillTo{Name: h.BillToName, TaxID: h.BillToTaxID, BranchNo: h.BillToBranchNo, Address: h.BillToAddress},
-		Lines:  make([]dto.InvoiceLine, len(lines)),
-	}
-	if !h.WithDelivery {
-		out.StockInfo = dto.StockInfo{}
+		Lines:  make([]dto.InvoiceLine, len(lines)), DepositsApplied: make([]dto.DepositApplied, len(deps)),
 	}
 	for i, l := range lines {
 		out.Lines[i] = dto.InvoiceLine{
-			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Quantity: l.Quantity, UnitPrice: l.UnitPrice,
+			LineNo: l.LineNo, OrderLineNo: l.OrderLineNo, Item: dto.Ref{ID: l.ItemID.String()}, Description: l.Description, Service: l.Service,
+			Quantity: l.Quantity, UnitPrice: l.UnitPrice,
 			Amounts: dto.Totals{Net: l.Net, Vat: l.Vat, Gross: l.Gross}, RevenueAccountID: l.RevenueAccountID.String(), Cost: l.Cost,
 			Returned: l.Returned, Credited: l.Credited,
 		}
+	}
+	out.VatRecognitions = make([]dto.VatRecognition, len(recs))
+	for i, x := range recs {
+		out.VatRecognitions[i] = dto.VatRecognition{Kind: x.Source, Document: dto.Ref{ID: x.DocumentID.String(), Code: x.DocumentNo},
+			Date: dateUTC(x.DocDate), Base: x.Base, Vat: x.Vat}
+	}
+	for i, d := range deps {
+		out.DepositsApplied[i] = dto.DepositApplied{Deposit: dto.Ref{ID: d.DepositID.String(), Code: d.DepositNo}, Amount: d.Amount, Vat: d.Vat}
 	}
 	return out, nil
 }
@@ -397,32 +386,139 @@ func (r *InvoiceRepository) List(ctx context.Context, companyID vo.CompanyID, f 
 	if err != nil {
 		return listing.Result[dto.InvoiceSummary]{}, err
 	}
-	rows, total, err := database.FetchPage(invoiceTable.filtered(ctx, r.db, companyID, f, "d.reference"), invoiceTable.columns(invoiceExtra), order, f.Page,
+	rows, total, err := database.FetchPage(invoiceTable.filtered(ctx, r.db, companyID, f, "d.reference", "d.tax_invoice_no"), invoiceTable.columns(invoiceExtra), order, f.Page,
 		func(r InvoiceRow) int64 { return r.Total })
 	return toResult(rows, total, f.Page, InvoiceRow.summary), err
 }
 
-// Open — 1 query: ใบแจ้งหนี้ที่ยังไม่ยกเลิกและยอดรับ < ยอดรวม (index: company_id + customer_id)
-func (r *InvoiceRepository) Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error) {
+// Open — 1 query: เอกสารที่ยังไม่ยกเลิกและยังค้าง (index: company_id + customer_id + kind)
+func (r *InvoiceRepository) Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID, billingNoteID *vo.BillingNoteID) ([]dto.OpenInvoice, error) {
 	var rows []struct {
 		ID             uuid.UUID
 		DocumentNo     string
+		Kind           string
 		DocDate        time.Time
 		DueDate        time.Time
 		TotalNet       decimal.Decimal
 		TotalGross     decimal.Decimal
 		ReceivedAmount decimal.Decimal
+		VatUndue       decimal.Decimal
+		TaxInvoiceNo   string
 	}
-	err := database.Conn(ctx, r.db).Table("sales_invoices").
-		Select("id, document_no, doc_date, due_date, total_net, total_gross, received_amount").
-		Where("company_id = ? AND customer_id = ? AND status = 'posted' AND received_amount < total_gross", uuidOf(companyID), uuidOf(customerID)).
-		Order("due_date, document_no").Limit(500).Scan(&rows).Error
+	q := database.Conn(ctx, r.db).Table("sales_invoices AS i").
+		Select(`i.id, i.document_no, i.kind, i.doc_date, i.due_date, i.total_net, i.total_gross, i.received_amount,
+			i.vat_deferred - i.vat_recognized - i.vat_credited AS vat_undue, i.tax_invoice_no`).
+		Where("i.company_id = ? AND i.customer_id = ? AND i.status = 'posted' AND i.received_amount < i.total_gross", uuidOf(companyID), uuidOf(customerID))
+	if billingNoteID != nil {
+		q = q.Where("i.id IN (SELECT invoice_id FROM sales_billing_note_invoices WHERE billing_note_id = ?)", uuidOf(*billingNoteID))
+	}
+	err := q.Order("i.due_date, i.document_no").Limit(500).Scan(&rows).Error
 	out := make([]dto.OpenInvoice, len(rows))
 	for i, x := range rows {
-		out[i] = dto.OpenInvoice{ID: x.ID.String(), DocumentNo: x.DocumentNo, Date: gp.DateUTC(x.DocDate), DueDate: gp.DateUTC(x.DueDate),
-			Net: x.TotalNet, Gross: x.TotalGross, Outstanding: x.TotalGross.Sub(x.ReceivedAmount)}
+		out[i] = dto.OpenInvoice{ID: x.ID.String(), DocumentNo: x.DocumentNo, Kind: x.Kind, Date: gp.DateUTC(x.DocDate), DueDate: gp.DateUTC(x.DueDate),
+			Net: x.TotalNet, Gross: x.TotalGross, Outstanding: x.TotalGross.Sub(x.ReceivedAmount), VatUndue: x.VatUndue,
+			TaxInvoice: x.TaxInvoiceNo != ""}
 	}
 	return out, err
+}
+
+// OpenDeposits — 1 query: มัดจำที่รับเงินครบ (received = gross) และยังหักได้ (applied < net)
+func (r *InvoiceRepository) OpenDeposits(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenDeposit, error) {
+	var rows []struct {
+		ID             uuid.UUID
+		DocumentNo     string
+		DocDate        time.Time
+		VatRate        decimal.Decimal
+		TotalNet       decimal.Decimal
+		TotalVat       decimal.Decimal
+		DepositApplied decimal.Decimal
+	}
+	err := database.Conn(ctx, r.db).Table("sales_invoices").
+		Select("id, document_no, doc_date, vat_rate, total_net, total_vat, deposit_applied").
+		Where(`company_id = ? AND customer_id = ? AND kind = 'deposit' AND status = 'posted' AND received_amount = total_gross
+			AND deposit_applied < total_net`, uuidOf(companyID), uuidOf(customerID)).
+		Order("doc_date, document_no").Limit(200).Scan(&rows).Error
+	out := make([]dto.OpenDeposit, len(rows))
+	for i, x := range rows {
+		out[i] = dto.OpenDeposit{ID: x.ID.String(), DocumentNo: x.DocumentNo, Date: dateUTC(x.DocDate), VatRate: x.VatRate,
+			Base: x.TotalNet, Vat: x.TotalVat, Remaining: x.TotalNet.Sub(x.DepositApplied)}
+	}
+	return out, err
+}
+
+// Billable — 1 query: ข้อมูลใบ + อยู่ในใบวางบิลอื่นที่ยังเปิดหรือไม่
+func (r *InvoiceRepository) Billable(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) (map[vo.InvoiceID]entities.BillableInvoice, error) {
+	out := map[vo.InvoiceID]entities.BillableInvoice{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID             uuid.UUID
+		DocumentNo     string
+		CustomerID     uuid.UUID
+		Kind           string
+		Status         string
+		TotalGross     decimal.Decimal
+		ReceivedAmount decimal.Decimal
+		OnOpenNote     bool
+	}
+	err := database.Conn(ctx, r.db).Table("sales_invoices AS i").
+		Select(`i.id, i.document_no, i.customer_id, i.kind, i.status, i.total_gross, i.received_amount,
+			EXISTS (SELECT 1 FROM sales_billing_note_invoices AS bi JOIN sales_billing_notes AS b ON b.id = bi.billing_note_id
+				WHERE bi.invoice_id = i.id AND b.status = 'open') AS on_open_note`).
+		Where("i.company_id = ? AND i.id IN ?", uuidOf(companyID), uuids(ids)).Scan(&rows).Error
+	for _, x := range rows {
+		out[vo.InvoiceID(x.ID)] = entities.BillableInvoice{
+			ID: vo.InvoiceID(x.ID), DocumentNo: x.DocumentNo, CustomerID: vo.CustomerID(x.CustomerID), Kind: vo.InvoiceKind(x.Kind),
+			Status: vo.DocStatus(x.Status), Outstanding: x.TotalGross.Sub(x.ReceivedAmount), OnOpenNote: x.OnOpenNote,
+		}
+	}
+	return out, err
+}
+
+// ---------- ภาษีขายที่ถึงกำหนด (ขายบริการ) ----------
+
+var _ ports.VatRecognitionRepository = (*VatRecognitionRepository)(nil)
+
+type VatRecognitionRepository struct{ db *gorm.DB }
+
+func NewVatRecognitionRepository(db *gorm.DB) *VatRecognitionRepository {
+	return &VatRecognitionRepository{db: db}
+}
+
+// Create — INSERT แบบ batch statement เดียว
+func (r *VatRecognitionRepository) Create(ctx context.Context, companyID vo.CompanyID, rows []ports.VatRecognition) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	ms := make([]models.VatRecognitionModel, len(rows))
+	for i, x := range rows {
+		ms[i] = models.VatRecognitionModel{
+			ID: uuid.Must(uuid.NewV7()), CompanyID: uuidOf(companyID), DocDate: x.Date, Source: x.Source, DocumentID: x.DocumentID,
+			DocumentNo: x.DocumentNo, InvoiceID: uuidOf(x.InvoiceID), Base: x.Base, Vat: x.Vat, Status: "posted", CreatedAt: now,
+		}
+	}
+	return database.Conn(ctx, r.db).Omit(clause.Associations).Create(&ms).Error
+}
+
+// LockDocument — 1 query (FOR UPDATE)
+func (r *VatRecognitionRepository) LockDocument(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) ([]ports.VatRecognition, error) {
+	var ms []models.VatRecognitionModel
+	err := database.Conn(ctx, r.db).Clauses(clause.Locking{Strength: clause.LockingStrengthUpdate}).
+		Where("company_id = ? AND document_id = ? AND status = 'posted'", uuidOf(companyID), documentID).Order("id").Find(&ms).Error
+	out := make([]ports.VatRecognition, len(ms))
+	for i, m := range ms {
+		out[i] = ports.VatRecognition{Source: m.Source, DocumentID: m.DocumentID, DocumentNo: m.DocumentNo, Date: gp.DateUTC(m.DocDate),
+			InvoiceID: vo.InvoiceID(m.InvoiceID), Base: m.Base, Vat: m.Vat}
+	}
+	return out, err
+}
+
+func (r *VatRecognitionRepository) Cancel(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error {
+	return database.Conn(ctx, r.db).Model(&models.VatRecognitionModel{}).
+		Where("company_id = ? AND document_id = ? AND status = 'posted'", uuidOf(companyID), documentID).
+		Update("status", "cancelled").Error
 }
 
 // ---------- ประวัติการตัดยอด (เอกสารรับเงินของ finance) ----------

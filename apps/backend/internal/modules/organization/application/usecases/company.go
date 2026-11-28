@@ -15,14 +15,17 @@ import (
 // CompanyUseCases จัดการบริษัท (tenant) — สิทธิ์ / สมาชิกของบริษัทอยู่ที่ identity (ผ่าน ports.Membership)
 type CompanyUseCases struct {
 	base
-	members ports.Membership
+	members     ports.Membership
+	provisioner ports.CompanyProvisioner
 }
 
 // Create สร้างบริษัท + ให้ผู้สร้างเป็น owner ใน transaction เดียว
 //
 //	BEGIN -> INSERT organization_companies -> identity: INSERT owner role + membership -> COMMIT
 //
-// identity เข้าร่วม transaction เดียวกันผ่าน ctx — ถ้าขั้นใดล้มเหลวจะ rollback ทั้งหมด
+//	-> provisioner: ผังบัญชีมาตรฐานตามประเภทธุรกิจ + ค่าตั้งเริ่มต้นของ module อื่น -> COMMIT
+//
+// identity / module อื่นเข้าร่วม transaction เดียวกันผ่าน ctx — ถ้าขั้นใดล้มเหลวจะ rollback ทั้งหมด
 // ผู้ใช้ที่ active ทุกคนสร้างบริษัทได้ (ถ้าต้องการจำกัดเฉพาะ platform admin ให้เพิ่มการตรวจตรงนี้)
 func (uc *CompanyUseCases) Create(ctx context.Context, in dto.CreateCompanyInput) (dto.Company, error) {
 	c, err := entities.NewCompany(in.Data)
@@ -33,7 +36,13 @@ func (uc *CompanyUseCases) Create(ctx context.Context, in dto.CreateCompanyInput
 		if err := uc.companies.Create(ctx, c); err != nil {
 			return err
 		}
-		return uc.members.ProvisionOwner(ctx, c.ID(), in.UserID)
+		if err := uc.members.ProvisionOwner(ctx, c.ID(), in.UserID); err != nil {
+			return err
+		}
+		if uc.provisioner == nil {
+			return nil
+		}
+		return uc.provisioner.Provision(ctx, c.ID(), c.Data().BusinessType)
 	})
 	if err != nil {
 		return dto.Company{}, err
@@ -134,6 +143,7 @@ func companyDTO(c *entities.Company) dto.Company {
 		LegalNameTH: d.LegalNameTH, LegalNameEN: d.LegalNameEN,
 		Address: d.Address, Phone: d.Phone, Email: d.Email, Website: d.Website,
 		BaseCurrency: d.BaseCurrency, FiscalYearStartMonth: d.FiscalYearStartMonth,
-		AmountDecimals: d.AmountDecimals, QuantityDecimals: d.QuantityDecimals, Status: string(d.Status),
+		AmountDecimals: d.AmountDecimals, QuantityDecimals: d.QuantityDecimals,
+		BusinessType: string(d.BusinessType), Status: string(d.Status),
 	}
 }

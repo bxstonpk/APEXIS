@@ -44,6 +44,7 @@ type Organization interface {
 	FiscalPeriodAt(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, yearStart time.Time, open bool, err error)
 	MissingDimensions(ctx context.Context, companyID uuid.UUID, branches, departments, costCenters, projectSites []uuid.UUID) ([]string, error)
 	FiscalPeriodRange(ctx context.Context, companyID uuid.UUID, date time.Time) (periodID uuid.UUID, fiscalYear int, start, end time.Time, open bool, err error)
+	CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error)
 }
 
 type Module struct {
@@ -151,6 +152,65 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 	return gp.TopUpDefaultChart(db)
+}
+
+// ProvisionCompany สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจ + สมุดรายวันมาตรฐานให้บริษัทใหม่
+// ลงทะเบียนเป็น hook ของ organization.Module.OnCompanyCreated — ทำงานใน transaction ของการสร้างบริษัท
+func (m *Module) ProvisionCompany(ctx context.Context, c integration.NewCompany) error {
+	bt, err := vo.ParseBusinessType(string(c.BusinessType))
+	if err != nil {
+		return err
+	}
+	_, err = m.UseCases.Accounts.Provision(ctx, vo.CompanyID(c.ID), bt)
+	return err
+}
+
+// AccountIDsByCode คืน id ของบัญชีที่ลงรายการได้ตามรหัส (รหัสที่ไม่พบ / บัญชีคุม / inactive ไม่อยู่ในผล)
+// module อื่นใช้ตั้งค่าเริ่มต้นจากผังบัญชีมาตรฐานตอนสร้างบริษัท — query เดียว, เข้าร่วม transaction ใน ctx
+func (m *Module) AccountIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error) {
+	found, err := m.UseCases.Accounts.PostableIDsByCode(ctx, vo.CompanyID(companyID), codes)
+	out := make(map[string]uuid.UUID, len(found))
+	for code, id := range found {
+		out[code] = uuid.UUID(id)
+	}
+	return out, err
+}
+
+// JournalIDsByCode คืน id ของสมุดรายวันที่ active ตามรหัส (เช่น GEN / CRJ / CDJ)
+func (m *Module) JournalIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error) {
+	found, err := m.UseCases.Accounts.JournalIDsByCode(ctx, vo.CompanyID(companyID), codes)
+	out := make(map[string]uuid.UUID, len(found))
+	for code, id := range found {
+		out[code] = uuid.UUID(id)
+	}
+	return out, err
+}
+
+// AccountRefs / JournalRefs คืนรหัส / ชื่อของบัญชี / สมุดรายวันตาม id (รวมที่ลบแล้ว) ให้ module อื่นแสดงในเอกสาร — query เดียว
+func (m *Module) AccountRefs(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Ref, error) {
+	in := make([]vo.AccountID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.AccountID(id)
+	}
+	found, err := m.UseCases.Accounts.AccountRefs(ctx, vo.CompanyID(companyID), in)
+	out := make(map[uuid.UUID]integration.Ref, len(found))
+	for id, r := range found {
+		out[uuid.UUID(id)] = integration.Ref{ID: uuid.UUID(id), Code: r.Code, Name: r.Name}
+	}
+	return out, err
+}
+
+func (m *Module) JournalRefs(ctx context.Context, companyID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]integration.Ref, error) {
+	in := make([]vo.JournalID, len(ids))
+	for i, id := range ids {
+		in[i] = vo.JournalID(id)
+	}
+	found, err := m.UseCases.Accounts.JournalRefs(ctx, vo.CompanyID(companyID), in)
+	out := make(map[uuid.UUID]integration.Ref, len(found))
+	for id, r := range found {
+		out[uuid.UUID(id)] = integration.Ref{ID: uuid.UUID(id), Code: r.Code, Name: r.Name}
+	}
+	return out, err
 }
 
 // Permissions คือรหัสสิทธิ์ทั้งหมดของ module นี้ — main.go ลงทะเบียนกับ platform/permissions (GET /api/v1/permissions)

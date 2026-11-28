@@ -272,6 +272,7 @@ type ItemAccounts struct {
 	ID       vo.ItemID
 	Code     string
 	Name     string
+	Uom      string // รหัสหน่วยนับ
 	Type     vo.ItemType
 	Status   vo.Status
 	Item     vo.GLAccounts
@@ -283,7 +284,9 @@ type PurchaseItem struct {
 	ID       vo.ItemID
 	Code     string
 	Name     string
-	Stock    bool // ชนิด stock (รับเข้าคลัง)
+	Uom      string // รหัสหน่วยนับ
+	Stock    bool   // ชนิด stock (รับเข้าคลัง)
+	Service  bool   // ชนิดบริการ
 	Active   bool
 	Accounts vo.GLAccounts
 }

@@ -11,12 +11,12 @@ import { withQuery } from '@/lib/url'
  * แม่แบบ: หัวหน้า + ปุ่มสร้าง / แถบค้นหา (GET form → URL) / กรอบตาราง (เรียงด้วยลิงก์) + แบ่งหน้าท้ายกรอบ
  */
 
-export function ListHeader({ title, description, createHref, count }: { title: string; description?: string; createHref?: string | false; count?: number }) {
+export function ListHeader({ title, createHref, count }: { title: string; createHref?: string | false; count?: number }) {
   const countText = count === undefined ? undefined : format(texts.common.count, { n: count.toLocaleString('th-TH') })
   return (
     <PageHeader
       title={title}
-      description={[description, countText].filter(Boolean).join(' · ') || undefined}
+      description={countText}
       actions={
         createHref && (
           <ButtonLink href={createHref}>
@@ -76,13 +76,13 @@ export function ListView<T>({
     // มีเงื่อนไขค้นหา / กรอง (ไม่นับการเรียง / แบ่งหน้า) = ไม่พบตามเงื่อนไข, ไม่มี = ยังไม่มีข้อมูล
     const filtered = [...list.query.keys()].some((k) => !['sort', 'page', 'page_size'].includes(k))
     return filtered ? (
-      <EmptyPanel icon={<SearchX aria-hidden className="size-6" />} title={texts.common.noMatch} hint={texts.common.noMatchHint}>
+      <EmptyPanel icon={<SearchX aria-hidden className="size-6" />} title={texts.common.noMatch}>
         <ButtonLink href={path} variant="secondary">
           {texts.common.clearFilters}
         </ButtonLink>
       </EmptyPanel>
     ) : (
-      <EmptyPanel icon={<Inbox aria-hidden className="size-6" />} title={texts.common.emptyTitle} hint={createHref ? texts.common.emptyHint : undefined}>
+      <EmptyPanel icon={<Inbox aria-hidden className="size-6" />} title={texts.common.emptyTitle}>
         {createHref && (
           <ButtonLink href={createHref}>
             <Plus aria-hidden />
@@ -118,12 +118,11 @@ export function ListView<T>({
 }
 
 /** หน้าว่างของรายการ: ไอคอน + ข้อความ + ปุ่มทำต่อ */
-function EmptyPanel({ icon, title, hint, children }: { icon: ReactNode; title: string; hint?: string; children?: ReactNode }) {
+function EmptyPanel({ icon, title, children }: { icon: ReactNode; title: string; children?: ReactNode }) {
   return (
     <section className="flex flex-col items-center rounded-(--radius-panel) border border-dashed border-line-strong bg-surface px-6 py-14 text-center">
       <span className="flex size-12 items-center justify-center rounded-full bg-neutral-soft text-ink-muted">{icon}</span>
       <h2 className="mt-4 text-base font-semibold">{title}</h2>
-      {hint && <p className="mt-1 text-sm text-ink-muted">{hint}</p>}
       {children && <div className="mt-5">{children}</div>}
     </section>
   )

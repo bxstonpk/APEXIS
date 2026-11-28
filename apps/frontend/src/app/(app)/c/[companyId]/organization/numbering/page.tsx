@@ -27,7 +27,7 @@ export default async function NumberingPage({ params }: { params: Promise<{ comp
 
   return (
     <>
-      <PageHeader title={texts.numbering.heading} description={texts.numbering.description} />
+      <PageHeader title={texts.numbering.heading} />
       {error ? <Alert tone="error">{error}</Alert> : <NumberingTable apiPath={apiPath} items={items} canManage={can(ctx.permissions, NUMBERING_MANAGE)} />}
     </>
   )

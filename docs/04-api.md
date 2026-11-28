@@ -102,12 +102,12 @@ frontend ใช้ query string ของหน้าเป็น state ขอ�
 
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
-| POST | `/companies` | login | ผู้สร้างเป็น owner — 201 |
+| POST | `/companies` | login | ผู้สร้างเป็น owner + ตั้งผังบัญชีมาตรฐานและค่าตั้งขาย / จัดซื้อ / คลัง / การเงินตาม `business_type` ใน transaction เดียว — 201 (ขั้นใดล้มเหลว = ไม่มีบริษัท) |
 | GET | `/me/companies` | login | บริษัทที่ตัวเองเป็นสมาชิก `?q=&status=&sort=name\|code&page=&page_size=` |
-| GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, status}` — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
+| GET | `/me/companies/{companyID}` | สมาชิก | ข้อมูลสรุป `{id, code, name, tax_id, business_type, status}` (รายการ `/me/companies` มี `business_type` เช่นกัน) — ไม่ต้องมีสิทธิ์อ่านบริษัท (frontend ใช้แสดงชื่อบริษัท); ไม่ใช่สมาชิก = 404 |
 | GET | `/me/companies/{companyID}/letterhead` | สมาชิก | หัวกระดาษเอกสารพิมพ์ `{name, legal_name_th, legal_name_en, tax_id, address{line, sub_district, district, province, postal_code, country}, phone, email, website}` — ไม่ใช่สมาชิก = 404 |
 | GET | `/companies/{companyID}` | `organization.company:read` | |
-| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code`), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
+| PUT | `/companies/{companyID}` | `organization.company:manage` | แทนที่ทั้งก้อน (ยกเว้น `code` / `business_type` — ส่งมาจะถูกละเว้น), ใช้ `status` เปิด/ปิดบริษัท; `amount_decimals` / `quantity_decimals` (0–6) เพิ่มได้ ลดไม่ได้ |
 
 ### ข้อมูลภายใต้บริษัท
 
@@ -127,8 +127,9 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 ### Request body (organization)
 
 ```jsonc
-// POST /companies   (ต้องมีแค่ code, name — ที่เหลือมีค่าเริ่มต้น)
-{ "code": "ACME", "name": "ACME", "tax_id": "0105556000000" }
+// POST /companies   (ต้องมี code, name, business_type — ที่เหลือมีค่าเริ่มต้น)
+// business_type: service (บริการทั่วไป) | trading (ซื้อขายสินค้า) | manufacturing (ผลิตสินค้า) | construction (ก่อสร้าง) — แก้ไม่ได้ภายหลัง
+{ "code": "ACME", "name": "ACME", "business_type": "trading", "tax_id": "0105556000000" }
 
 // PUT /companies/{companyID}   (แทนที่ทั้งก้อน — ต้องส่ง name, base_currency, fiscal_year_start_month, status; code แก้ไม่ได้)
 { "name": "ACME", "tax_id": "0105556000000",
@@ -176,7 +177,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | Method | Path | Permission | หมายเหตุ |
 |---|---|---|---|
 | GET | `/accounts/tree` | `ledger.account:read` | ทุกบัญชีของบริษัท (ทุกสถานะ) เรียงตามรหัส ไม่แบ่งหน้า — 1 คิวรี; หน้าผังบัญชีสร้างต้นไม้จาก `parent` (ผังบัญชีมีหลักร้อยบัญชี จึงส่งทั้งชุด) |
-| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐาน 262 บัญชี (245 ตามต้นฉบับ + สินค้าคงเหลือ / ต้นทุนขาย / รายได้จากการขาย ตาม TAS 2) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
+| POST | `/accounts/defaults` | `ledger.account:manage` | สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจของบริษัท (บริการ 245 / ซื้อขาย 259 / ผลิต 274 / ก่อสร้าง 261 บัญชี — ดู 01-requirements LED-10; บริษัทใหม่ได้ผังนี้ตอนสร้างบริษัทแล้ว) + สมุด GEN / CRJ / CDJ (ข้ามรหัสสมุดที่มีอยู่) ใน transaction เดียว → 201 `{accounts, journals}`; บริษัทมีบัญชีอยู่แล้ว = 409 `chart_of_accounts_already_has_accounts` |
 
 | Resource | Endpoints | URL query (นอกจาก `q, sort, page, page_size`) | sort key | Permission |
 |---|---|---|---|---|
@@ -339,8 +340,10 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ลูกค้า | `/customers[/{customerID}]` | `status` | `sales.customer:read\|manage` |
 | ใบเสนอราคา | `GET`, `POST /quotations`; `GET`, `PUT`, `PATCH`, `DELETE /quotations/{quotationID}` | `status, customer_id, item_id, start_date, end_date` | `sales.quotation:read\|manage` |
 | ใบสั่งขาย | `GET`, `POST /sales-orders`; `GET`, `PUT`, `PATCH`, `DELETE /sales-orders/{orderID}` | เหมือนใบเสนอราคา | `sales.order:read\|manage`; `PATCH {"status":"approved"}` ต้องมี `sales.order:approve` |
-| ใบส่งของ | `GET`, `POST /deliveries`; `GET`, `PATCH /deliveries/{deliveryID}` | `status, customer_id, order_id, start_date, end_date` | `sales.delivery:read\|post` |
-| ใบแจ้งหนี้ / ใบกำกับภาษี | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | เหมือนใบส่งของ | `sales.invoice:read\|post` |
+| ขายสินค้า (IV: ใบส่งของ / ใบแจ้งหนี้ / ใบกำกับภาษี) | `GET`, `POST /sales-invoices`; `GET`, `PATCH /sales-invoices/{invoiceID}` | `status, customer_id, order_id, start_date, end_date` | `sales.invoice:read\|post` |
+| ขายบริการ (SV: ใบแจ้งหนี้) | `GET`, `POST /service-invoices`; `GET`, `PATCH /service-invoices/{invoiceID}`; `POST /service-invoices/{invoiceID}/tax-invoice` | เหมือนขายสินค้า | `sales.invoice:read\|post` |
+| รับเงินมัดจำ (DP: ใบรับเงินมัดจำ / ใบกำกับภาษี) | `GET`, `POST /sales-deposits`; `GET /sales-deposits/open?customer_id=`; `GET`, `PATCH /sales-deposits/{invoiceID}` | เหมือนขายสินค้า | `sales.invoice:read\|post` |
+| ใบวางบิล (BN) | `GET`, `POST /billing-notes`; `GET`, `PATCH /billing-notes/{billingNoteID}` | `status` (open,paid,cancelled), `customer_id, start_date, end_date` | `sales.billing_note:read\|manage` |
 | ใบลดหนี้ | `GET`, `POST /sales-credit-notes`; `GET`, `PATCH /sales-credit-notes/{creditNoteID}` | `status, customer_id, invoice_id, start_date, end_date` | `sales.invoice:read\|post` |
 
 - ลูกค้า / ผู้ขาย: ที่อยู่ส่งเป็น `address_detail` ตามแบบกรมสรรพากร `{building, room_no, floor_no, village, house_no, moo, soi, yaek, street, sub_district, district, province, postal_code}` ("-" = ว่าง, รหัสไปรษณีย์ 5 หลัก, ผิด = 400 `invalid_address`); response มี `address` = ข้อความที่ประกอบแล้ว (กรุงเทพฯ ใช้ แขวง / เขต) ใช้พิมพ์ใบกำกับภาษีและเก็บ snapshot ในเอกสารการเงิน
@@ -362,21 +365,40 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | GET | `/companies/{companyID}/vat-registrants?tax_id=&branch_no=` | `sales.customer:manage` หรือ `purchasing.supplier:manage` | ค้นจากระบบผู้ประกอบการจด VAT ของกรมสรรพากร (ไม่บันทึกอะไร) — ตอบ `[{tax_id, branch_no, branch_name, name, tax_type, phone, vat_registered_on, address, address_detail}]` สำนักงานใหญ่ก่อน; ไม่พบ = 404 `vat_registrant_not_found`; ระบบสรรพากรติดต่อไม่ได้ / ช้าเกิน 10 วินาที = 503 `vat_registry_unavailable` |
 
 - ใบเสนอราคา `PATCH` รับ `sent` / `accepted` / `rejected`; ใบสั่งขาย `PATCH` รับ `approved` / `closed` / `cancelled` (approved ตอบ `warnings`)
-- ใบส่งของ / ใบแจ้งหนี้ไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`
+- เอกสารขายไม่มี draft — `POST` = ลงบัญชีทันที; `PATCH` รับเฉพาะ `{"status":"cancelled"}`; ไม่มีใบส่งของแยก (`/deliveries` และสิทธิ์ `sales.delivery:*` ถูกลบ — บทบาทเดิมถูกถอดสิทธิ์ตอน migrate)
+- **จุดเกิดภาษี / ประเภทธุรกิจ** (ตัดสินใจ 2026-11-26): ขายสินค้า = ภาษีขายตามวันที่ใบ, ขายบริการ = ภาษีขายยังไม่ถึงกำหนด (`undue_output_vat_account_id`) จนรับเงินที่ finance / ออกใบกำกับก่อนรับเงิน; ซื้อขาย / ผลิต ออก IV, บริการ / ก่อสร้าง ออก SV — อีกชนิด = 422 `document_not_available_for_business_type` (อ่าน / ยกเลิกได้); เงินเข้าทั้งหมดรับที่ finance (`POST /receipts`)
+- ค่าตั้งขายเพิ่ม `undue_output_vat_account_id` (2102020900) / `deposit_account_id` (2102021000) — ตั้งให้อัตโนมัติตอนสร้างบริษัททุกประเภท; เอกสารที่ต้องใช้แต่ไม่ได้ตั้ง = 422 `sales_settings_are_incomplete`
+- response เอกสารขาย: `kind` (invoice / service_invoice / deposit), `order {id, order_no}`, `bill_to`, `lines[].item.type` (service / stock / non_stock), `lines[].service`, `totals`, `deposit_deducted`, `received_amount`, `credited_amount`, `outstanding`, `vat_status` (output / undue / partial), `vat_recognized`, `vat_undue`, `tax_invoice {no, date} | null`, `deposits_applied [{deposit {id, document_no}, amount, vat}]`, `vat_recognitions [{kind: receipt|tax_invoice, document {id, document_no}, date, base, vat}]`; มัดจำเพิ่ม `deposit_remaining`, `applied_amount`
+- ใบลดหนี้มี `vat_kind` (output / undue) และ `invoice.kind`; ใบลดหนี้ของ SV ที่ภาษียังไม่ถึงกำหนดลด Dr ภาษีขายยังไม่ถึงกำหนด (ไม่อยู่ใน `output-vat`)
 
 ```jsonc
 // POST /sales-orders จากใบเสนอราคา (ไม่ส่ง customer_id / lines)
 { "quotation_id": "…", "date": "2026-03-05" }
-// POST /sales-invoices — แยกใบ (ไม่เกินที่ส่งแล้ว) หรือรวมใบ with_delivery (ต้องมี warehouse_id เมื่อมีสินค้า stock)
-{ "order_id": "…", "date": "2026-03-07", "with_delivery": true, "warehouse_id": "…",
+// POST /sales-invoices (ขายสินค้า) จากใบสั่งขาย — ตัดสต็อกเสมอ (warehouse_id บังคับเมื่อมีสินค้า stock)
+{ "order_id": "…", "date": "2026-03-07", "warehouse_id": "…",
   "lines": [ { "order_line_no": 1, "quantity": "5" }, { "order_line_no": 2, "quantity": "1" } ] }
+// POST /service-invoices (ขายบริการ) ออกตรง — vat_rate ไม่ส่ง = ตามค่าตั้ง; deposits = มัดจำที่หัก (ฐานก่อน VAT, ต้องรับเงินครบแล้ว)
+{ "customer_id": "…", "customer_branch_no": "", "date": "2026-03-22", "price_includes_vat": false,
+  "lines": [ { "item_id": "<บริการ>", "description": "", "quantity": "1", "unit_price": "1000" } ],
+  "deposits": [ { "deposit_id": "…", "amount": "300" } ] }
+// POST /service-invoices/{id}/tax-invoice — ใบกำกับภาษีก่อนรับเงิน (TX): ภาษีที่เหลือทั้งหมดถึงกำหนด; ซ้ำ = 422
+{ "date": "2026-03-16" }
+// POST /sales-deposits — amount ตาม price_includes_vat; order_id (ไม่บังคับ) = ลูกค้า / VAT ตามใบสั่งขาย
+{ "customer_id": "…", "customer_branch_no": "", "order_id": null, "date": "2026-03-20", "description": "มัดจำงาน", "amount": "300", "price_includes_vat": false }
+// GET /sales-deposits/open?customer_id= — มัดจำที่รับเงินครบแล้วและยังหักได้
+[ { "id": "…", "document_no": "DP2026-000001", "date": "2026-03-20", "vat_rate": "7", "base": "300", "vat": "21", "remaining_amount": "300" } ]
+// POST /billing-notes — ใบที่วางบิลไม่ได้ (ลูกค้าอื่น / ไม่ค้าง / อยู่ในใบวางบิลอื่นที่เปิด) = 422 invoice_cannot_be_put_on_this_billing_note
+{ "customer_id": "…", "date": "2026-03-25", "due_date": "2026-04-05", "description": "", "invoice_ids": ["…", "…"] }
+// response: { id, document_no, date, due_date, customer, status: open|paid|cancelled, total, outstanding, description,
+//             invoices: [ { id, document_no, kind, date, due_date, gross, outstanding } ] }
 ```
 
 | `book` (`sales.report:read`) | parameter | ผลลัพธ์ |
 |---|---|---|
-| `outstanding-sales-orders` | `customer_id, item_id, q, sort, page, page_size` | บรรทัดค้างส่ง (`to_deliver`) / ค้างออกบิล (`to_invoice`) |
+| `outstanding-sales-orders` | `customer_id, item_id, q, sort, page, page_size` | บรรทัดค้างออกเอกสารขาย (`to_invoice`; `to_deliver` เท่ากัน — ไม่มีใบส่งของแยก) |
 | `ar-aging` | `end_date` (บังคับ), `customer_id, q, page, page_size` | ยอดค้างต่อลูกค้า (หักยอดรับถึงวันที่) แยกช่วงอายุ + `totals` |
-| `output-vat` | `start_date, end_date` (บังคับ), `customer_id, sort, page, page_size` | ใบกำกับภาษี: ลูกค้า + เลขผู้เสียภาษี / สาขา, ฐาน (ก่อน VAT), ภาษีขาย + ยอดรวม |
+| `output-vat` | `start_date, end_date` (บังคับ), `customer_id, sort, page, page_size` | เฉพาะเอกสารที่ภาษีเกิดแล้ว — `kind`: `invoice` / `deposit` (ตามวันที่ใบ, หักภาษีมัดจำที่หัก), `tax_invoice` (`document_id` = SV), `receipt` (`document_id` = ใบรับเงิน), `credit_note` (vat_kind output, ติดลบ); `reference_no` / `reference_id` = เอกสารต้นทาง; ฐาน + ภาษี + ยอดรวม |
+| `undue-output-vat` | `end_date` (บังคับ), `customer_id, page, page_size` | SV ที่ภาษียังไม่ถึงกำหนด ณ วันที่: `rows [{invoice, date, customer, gross, vat_total, vat_recognized, vat_undue}]`, `totals` |
 
 หมวดสินค้า / สินค้า รับ `revenue_account_id` เพิ่ม
 
@@ -391,7 +413,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 | ประเภทภาษีหัก ณ ที่จ่าย | `/withholding-tax-types[/{whtTypeID}]` | `status` | `finance.settings:read\|manage` |
 | ประเภทภาษีสำหรับหน้าจ่ายเงิน | `GET /payments/wht-types` | (เฉพาะ active) | `finance.payment:read` |
 | รับเงิน | `GET`, `POST /receipts`; `GET`, `PATCH /receipts/{receiptID}` | `kind` (customer,other), `status, party_id, cash_account_id, start_date, end_date`; sort `date\|document_no` | `finance.receipt:read\|post` |
-| ใบแจ้งหนี้ขายค้างรับ | `GET /receipts/open-invoices?customer_id=` | — | `finance.receipt:read` |
+| เอกสารขายค้างรับ | `GET /receipts/open-invoices?customer_id=&billing_note_id=` | `billing_note_id` = เฉพาะใบในใบวางบิล | `finance.receipt:read` |
 | จ่ายเงิน | `GET`, `POST /payments`; `GET`, `PATCH /payments/{paymentID}` | `kind` (supplier,other) + เหมือนรับเงิน | `finance.payment:read\|post` |
 | ใบแจ้งหนี้ซื้อค้างจ่าย | `GET /payments/open-invoices?supplier_id=` | — | `finance.payment:read` |
 | โอนเงินระหว่างบัญชี | `GET`, `POST /cash-transfers`; `GET`, `PATCH /cash-transfers/{transferID}` | `status, cash_account_id, start_date, end_date` | `finance.transfer:read\|post` |
@@ -400,6 +422,7 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 - เลขที่: `finance.receipt` (RV), `finance.payment` (PV), `finance.transfer` (TF) — ตั้งรูปแบบได้ที่ `document-numberings`
 - สมุดรายวัน: `receipt_journal_id` / `payment_journal_id` / `transfer_journal_id` ของค่าตั้งการเงิน (ไม่ได้ตั้ง = 422 `finance_settings_are_incomplete`)
 - บัญชีลูกหนี้ / เจ้าหนี้มาจากค่าตั้งขาย / จัดซื้อ (เจ้าของบัญชีคุม) — การเงินขอผ่าน `sales.SettleReceivables` / `purchasing.SettlePayables` ใน transaction เดียวกัน; กฎของขาย / จัดซื้อ (เกินยอดค้าง ฯลฯ) ตอบ 422 `rejected`
+- **รับเงินขายบริการ (ม.78/1)**: sales คืนภาษีที่ถึงกำหนดตามสัดส่วนที่รับ (ยอดตัดหนี้รวมภาษีถูกหัก / ยอดค้างก่อนรับ; รับครบ = ส่วนที่เหลือ) — ใบรับเงินลง Dr ภาษีขายยังไม่ถึงกำหนด / Cr ภาษีขายในรายการเดียวกัน; response ใบรับเงินมี `tax_invoice` (พิมพ์ "ใบเสร็จรับเงิน / ใบกำกับภาษี"), `vat_lines [{invoice, base, vat}]`, `lines[].invoice_kind / vat_base / vat`; open-invoices มี `kind`, `vat_undue`, `tax_invoice`; `POST /receipts` รับ `billing_note_id` (อ้างอิงเท่านั้น ไม่บันทึก)
 - คู่ค้า ณ วันเอกสาร (ชื่อ เลขผู้เสียภาษี สาขา ที่อยู่ ประเภทผู้มีเงินได้) เก็บติดเอกสาร — รายงานภาษีไม่ต้องอ่านทะเบียนข้าม module
 - จ่ายเงินที่หักภาษี ณ ที่จ่ายต้องรู้เลขผู้เสียภาษีและประเภท (`individual` = ภ.ง.ด.3, `juristic` = ภ.ง.ด.53) — ผู้ขายใช้ข้อมูลทะเบียน, จ่ายเงินอื่นกรอกใน `payee`
 - **หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)**: ใบจ่ายที่มีภาษีหักได้ `wht_certificate_no` (`finance.wht_certificate`, WT) ใน transaction เดียวกัน; ประเภทภาษีหัก ณ ที่จ่ายมี `income_type` = ช่องในแบบ (`40_1, 40_2, 40_3, 40_4a, 40_4b, 3_tres, other`; ของเดิม = `3_tres`); หน้าเว็บพิมพ์ 2 ฉบับจากข้อมูลใบจ่าย
@@ -436,6 +459,51 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 ตอนเริ่มโปรแกรม `identity.RenamePermissions` แปลงสิทธิ์ของบทบาทเดิม (ทำซ้ำได้): `cashbank.account:*` → `finance.cash_account:*`, `sales.receipt:*` → `finance.receipt:*`,
 `purchasing.payment:*` → `finance.payment:*`; ผู้มี `purchasing.settings:*` / `purchasing.report:read` / `sales.report:read` ได้ `finance.settings:*` / `finance.report:read` เพิ่ม
+
+## 4.11 Endpoint — manufacturing (ผลิต)
+
+ใช้ได้เฉพาะบริษัทประเภท `manufacturing` — ประเภทอื่นตอบ 422 `the_manufacturing_app_is_available_only_to_manufacturing_companies`
+
+| Resource | Path | Filter เพิ่ม | สิทธิ์ |
+|---|---|---|---|
+| ค่าตั้ง | `GET`, `PUT /manufacturing-settings` | — | `manufacturing.settings:read\|manage` |
+| สูตรการผลิต | `GET`, `POST /boms`; `GET`, `PUT`, `DELETE /boms/{bomID}` | `q, item_id, status`; sort `code\|name\|updated_at` | `manufacturing.bom:read\|manage` |
+| ใบสั่งผลิต | `GET`, `POST /production-orders`; `GET`, `PUT /production-orders/{orderID}` | `q, status, item_id, from, to`; sort `date\|document_no\|created_at` (ค่าเริ่มต้น `-date,-document_no`) | `manufacturing.order:read\|manage` |
+| การทำงานของใบสั่งผลิต | `POST /production-orders/{orderID}/release`, `/issue`, `/return`, `/complete`, `/cancel` | — | `manufacturing.order:manage` |
+
+```jsonc
+// POST /boms, PUT /boms/{id} — แทนที่ทั้งก้อน; scrap_percent ไม่ส่ง = 0; account_id ไม่ส่ง = เครดิตบัญชีปันเข้างานในค่าตั้ง
+{ "code": "FG-1", "name": "สูตรโต๊ะ", "item_id": "…", "output_quantity": "2", "status": "active", "is_default": true,
+  "components": [ { "item_id": "…", "quantity": "4", "scrap_percent": "10" } ],
+  "conversion_costs": [ { "description": "ค่าแรง", "account_id": null, "amount": "50" } ] }
+// POST /production-orders — เลขที่ออกทันที (ชนิด manufacturing.production_order ค่าเริ่มต้น MO{fy}-{seq:6}, ตั้งรูปแบบได้ที่ /document-numberings)
+{ "date": "2026-03-01", "item_id": "…", "bom_id": "…", "quantity": "4", "warehouse_id": "…",
+  "planned_start": "2026-03-02", "planned_end": "2026-03-10", "description": "" }
+// PUT /production-orders/{id} — draft เท่านั้น; body เดียวกัน + materials (ไม่ส่ง = คำนวณจากสูตรใหม่)
+{ "...": "...", "materials": [ { "item_id": "…", "required_quantity": "9" } ] }
+// POST /production-orders/{id}/issue | /return
+{ "date": "2026-03-02", "lines": [ { "item_id": "…", "quantity": "12" } ] }
+// POST /production-orders/{id}/complete
+{ "date": "2026-03-05", "completed_quantity": "3" }
+// POST /production-orders/{id}/cancel
+{ "reason": "ผลิตผิดสเปก" }
+```
+
+- สูตร: `{id, code, name, item{id,code,name,uom}, output_quantity, status, is_default, components[{line_no, item, quantity, scrap_percent}], conversion_costs[{line_no, description, account{id,code,name}|null, amount}], created_at, updated_at}` (รายการไม่มี components / conversion_costs); รหัสซ้ำ / สูตรหลักที่ใช้งานอยู่ซ้ำของสินค้าเดียวกัน = 409; ลบสูตรที่มีใบสั่งผลิตอ้าง = 409
+- ใบสั่งผลิต: `{id, document_no, date, item, bom{id,code,name}, quantity, warehouse{id,code,name}, planned_start, planned_end, status, description, materials[{line_no, item, required_quantity, issued_quantity, returned_quantity, net_quantity, cost}], conversion_cost, movements[{id, kind: issue|return|receipt, date, document_id, document_no, value, entry_no, cancelled}], costs{materials, conversion, total, unit_cost|null}, completed_quantity, completed_at, cancelled_at, cancel_reason, created_by, created_at}` — รายการมี `total_cost` แทน materials / movements / costs
+  - `conversion_cost` = ค่าแรง / ค่าใช้จ่ายมาตรฐานตามจำนวนสั่ง; `costs.conversion` = ที่ปันเข้างานแล้ว (ตอนปิดงาน ตามจำนวนที่ผลิตได้); `unit_cost` = รวม / จำนวนที่ผลิตได้ (6 ตำแหน่ง)
+  - `movements[].document_no` = เลขที่เอกสารสต็อกของ inventory (เบิก GI / รับเข้า GR); `entry_no` ว่าง = ปีบัญชีระบบสิ้นงวด (ไม่ลงบัญชี)
+- ระบบบัญชีตามปีบัญชีของ inventory — **periodic (ค่าเริ่มต้นทุกประเภทธุรกิจ)**: สต็อก / ต้นทุน FIFO / ต้นทุนจริงของสินค้าสำเร็จรูปครบ ไม่มีรายการบัญชี; **perpetual**: เบิก Dr งานระหว่างผลิต / Cr สินค้าคงเหลือ, คืนกลับด้าน, ปิดงาน Dr สินค้าสำเร็จรูป / Cr งานระหว่างผลิต + Cr บัญชีปันเข้างาน (ดู 01-requirements MFG-08)
+- 422: สถานะไม่ถูกต้อง (`production_order_is_not_a_draft` / `..._not_released`), วัตถุดิบไม่อยู่ในใบ, คืนเกินที่เบิกสุทธิ, วันที่ก่อนวันที่ใบสั่งผลิต, สต็อกไม่พอ / งวดปิด / สินค้าสำเร็จรูปถูกใช้แล้วตอนยกเลิก (`rejected_by_inventory…`), ค่าตั้งไม่ครบ (`manufacturing_settings_are_incomplete: wip_account_id`), สินค้าไม่มีบัญชีสินค้าคงเหลือ (perpetual)
+- ค่าตั้ง: `GET` คืน `{journal_id, wip_account_id, conversion_account_id, default_warehouse_id, journal{id,code,name}, wip_account, conversion_account, default_warehouse}`; `PUT` ส่ง 4 id (ไม่ส่ง = ไม่ตั้ง) — บริษัทผลิตใหม่ได้ GEN / 1105050000 / 5065000000 ให้อัตโนมัติ
+
+### รายงาน (`manufacturing.report:read`)
+
+| `book` | parameter | ผลลัพธ์ |
+|---|---|---|
+| `production-cost` | `start_date, end_date` (บังคับ, วันที่ปิดงาน), `item_id, page, page_size` | ใบสั่งผลิตที่ปิดงาน: `order{id,document_no}, date, item, quantity, materials, conversion, total, unit_cost` + `totals{materials, conversion, total}` ทั้งช่วง |
+| `material-usage` | เหมือน `production-cost` | ใบสั่งผลิต × วัตถุดิบ: `standard_quantity` (ปริมาณที่ต้องใช้ × จำนวนที่ผลิตได้ / จำนวนสั่ง), `actual_quantity` (เบิกสุทธิ), `variance_quantity`, `actual_cost`, `variance_value` (ผลต่าง × ต้นทุนเฉลี่ยที่เบิก) |
+| `wip` | `end_date` (บังคับ), `page, page_size` | ใบที่ปล่อยผลิตแล้วแต่ยังไม่ปิดงาน ณ วันที่: `order, date, item, quantity, materials` (เบิก − คืนถึงวันที่) + `total` |
 
 ## Dashboard (ภาพรวมของแต่ละแอป)
 

@@ -158,10 +158,13 @@ type DocumentSummary struct {
 
 type ReceiptLine struct {
 	Invoice     *Ref // Code = เลขที่ใบแจ้งหนี้
+	InvoiceKind string
 	AccountID   *string
 	Description string
 	Amount      vo.Money
 	Wht         vo.Money
+	VatBase     vo.Money // ภาษีขายที่ถึงกำหนดด้วยใบรับเงินนี้ (ขายบริการ)
+	Vat         vo.Money
 }
 
 type Receipt struct {
@@ -239,6 +242,9 @@ type OpenInvoice struct {
 	Net         vo.Money
 	Gross       vo.Money
 	Outstanding vo.Money
+	Kind        string
+	VatUndue    vo.Money
+	TaxInvoice  bool
 }
 
 // WithholdingRow: ภาษีหัก ณ ที่จ่าย 1 บรรทัด (ใบจ่าย) หรือภาษีถูกหัก 1 ใบรับ

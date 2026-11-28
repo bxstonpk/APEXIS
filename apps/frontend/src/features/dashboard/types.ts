@@ -14,7 +14,7 @@ export type SalesDashboard = Period & {
   /** ปีบัญชีก่อนหน้า เดือนต่อเดือนกับ monthly (null = ไม่มียอด) */
   previous_year: { month: string; net: string }[] | null
   quotations: { open_count: number; open_amount: string }
-  orders: { draft_count: number; to_deliver_count: number; to_invoice_count: number }
+  orders: { draft_count: number; to_invoice_count: number }
   receivables: { outstanding: string; overdue: string; aging: Aging }
   top_customers: { customer: Ref; net: string }[]
 }

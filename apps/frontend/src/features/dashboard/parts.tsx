@@ -12,15 +12,13 @@ import type { Period } from './period'
 
 /** ส่วนประกอบของหน้าภาพรวม (server) — shadcn Card + โทเคนของ APEXIS */
 
-export function DashboardHeader({ company, title, description, period }: { company: string; title: string; description: string; period: Period }) {
+export function DashboardHeader({ company, title, period }: { company: string; title: string; period: Period }) {
   return (
     <header className="flex flex-col gap-4 border-b border-line pb-5 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
         <p className="text-[13px] text-ink-muted">{company}</p>
         <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          {description} · {format(texts.reports.period, { start: formatDate(period.start), end: formatDate(period.end) })}
-        </p>
+        <p className="mt-1 text-sm text-ink-muted">{format(texts.reports.period, { start: formatDate(period.start), end: formatDate(period.end) })}</p>
       </div>
       <PeriodFilter period={period} />
     </header>

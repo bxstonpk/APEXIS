@@ -26,53 +26,94 @@ func (uc *AccountUseCases) Tree(ctx context.Context, in dto.Actor) ([]dto.Accoun
 	})
 }
 
-// CreateDefaults สร้างผังบัญชีมาตรฐาน + สมุดรายวันมาตรฐาน (GEN / CRJ / CDJ) ใน transaction เดียว
+// CreateDefaults สร้างผังบัญชีมาตรฐานตามประเภทธุรกิจของบริษัท + สมุดรายวันมาตรฐาน (GEN / CRJ / CDJ) ใน transaction เดียว
 //
 // ทำได้เฉพาะบริษัทที่ยังไม่มีบัญชี (กันผังซ้อนกับผังที่ตั้งเอง) — สมุดที่มีรหัสอยู่แล้วจะข้าม
-// query: ตรวจบัญชี 1 + INSERT บัญชีแบบ batch 3 + ตรวจรหัสสมุด 1 + INSERT สมุด (ไม่เกิน 3)
+// บริษัทใหม่ได้ผังนี้อัตโนมัติตอนสร้างบริษัท (Provision) — endpoint นี้ใช้กับบริษัทเดิมที่ยังไม่มีผังบัญชี
+// query: ประเภทธุรกิจ 1 + ตรวจบัญชี 1 + INSERT บัญชีแบบ batch + ตรวจรหัสสมุด 1 + INSERT สมุด (ไม่เกิน 3)
 func (uc *AccountUseCases) CreateDefaults(ctx context.Context, in dto.Actor) (dto.DefaultChartResult, error) {
 	var out dto.DefaultChartResult
 	err := uc.write(ctx, in, vo.PermAccountManage, func(ctx context.Context) error {
-		has, err := uc.accounts.HasAny(ctx, in.CompanyID)
+		bt, err := uc.org.BusinessType(ctx, in.CompanyID)
 		if err != nil {
 			return err
 		}
-		if has {
-			return domain.ErrChartExists
-		}
-		chart, err := entities.NewDefaultChart(in.CompanyID)
-		if err != nil {
-			return err
-		}
-		if err := uc.accounts.CreateMany(ctx, chart); err != nil {
-			return err
-		}
-		out.Accounts = len(chart)
-
-		codes := make([]string, len(entities.DefaultJournals))
-		for i, j := range entities.DefaultJournals {
-			codes[i] = j.Code
-		}
-		existing, err := uc.journals.ExistingCodes(ctx, in.CompanyID, codes)
-		if err != nil {
-			return err
-		}
-		for _, d := range entities.DefaultJournals {
-			if existing[d.Code] {
-				continue
-			}
-			j, err := entities.NewJournal(in.CompanyID, entities.JournalData{Code: d.Code, Name: d.Name, Status: vo.StatusActive})
-			if err != nil {
-				return err
-			}
-			if err := uc.journals.Create(ctx, j); err != nil {
-				return err
-			}
-			out.Journals++
-		}
-		return nil
+		out, err = uc.seed(ctx, in.CompanyID, bt)
+		return err
 	})
 	return out, err
+}
+
+// Provision สร้างผังบัญชีมาตรฐานของประเภทธุรกิจ bt + สมุดรายวันมาตรฐานให้บริษัทที่เพิ่งสร้าง
+// เรียกจาก hook ตอนสร้างบริษัท (organization) — ไม่ตรวจสิทธิ์ (ระบบทำให้) และเข้าร่วม transaction ของผู้เรียกใน ctx
+func (uc *AccountUseCases) Provision(ctx context.Context, companyID vo.CompanyID, bt vo.BusinessType) (dto.DefaultChartResult, error) {
+	var out dto.DefaultChartResult
+	err := uc.tx.WithinTransaction(ctx, func(ctx context.Context) error {
+		var err error
+		out, err = uc.seed(ctx, companyID, bt)
+		return err
+	})
+	return out, err
+}
+
+func (uc *AccountUseCases) seed(ctx context.Context, companyID vo.CompanyID, bt vo.BusinessType) (dto.DefaultChartResult, error) {
+	var out dto.DefaultChartResult
+	has, err := uc.accounts.HasAny(ctx, companyID)
+	if err != nil {
+		return out, err
+	}
+	if has {
+		return out, domain.ErrChartExists
+	}
+	chart, err := entities.NewDefaultChart(companyID, bt)
+	if err != nil {
+		return out, err
+	}
+	if err := uc.accounts.CreateMany(ctx, chart); err != nil {
+		return out, err
+	}
+	out.Accounts = len(chart)
+
+	codes := make([]string, len(entities.DefaultJournals))
+	for i, j := range entities.DefaultJournals {
+		codes[i] = j.Code
+	}
+	existing, err := uc.journals.ExistingCodes(ctx, companyID, codes)
+	if err != nil {
+		return out, err
+	}
+	for _, d := range entities.DefaultJournals {
+		if existing[d.Code] {
+			continue
+		}
+		j, err := entities.NewJournal(companyID, entities.JournalData{Code: d.Code, Name: d.Name, Status: vo.StatusActive})
+		if err != nil {
+			return out, err
+		}
+		if err := uc.journals.Create(ctx, j); err != nil {
+			return out, err
+		}
+		out.Journals++
+	}
+	return out, nil
+}
+
+// PostableIDsByCode / JournalIDsByCode: id ตามรหัส (module อื่นใช้ตั้งค่าเริ่มต้นจากผังมาตรฐาน) — ไม่ตรวจสิทธิ์, เข้าร่วม transaction ใน ctx
+func (uc *AccountUseCases) PostableIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.AccountID, error) {
+	return uc.accounts.PostableIDsByCode(ctx, companyID, codes)
+}
+
+// AccountRefs / JournalRefs: รหัส / ชื่อตาม id ให้ module อื่นแสดงในเอกสาร — ไม่ตรวจสิทธิ์ (ผู้เรียกตรวจสิทธิ์เอกสารของตัวเองแล้ว)
+func (uc *AccountUseCases) AccountRefs(ctx context.Context, companyID vo.CompanyID, ids []vo.AccountID) (map[vo.AccountID]dto.CodeName, error) {
+	return uc.accounts.RefsByIDs(ctx, companyID, ids)
+}
+
+func (uc *AccountUseCases) JournalRefs(ctx context.Context, companyID vo.CompanyID, ids []vo.JournalID) (map[vo.JournalID]dto.CodeName, error) {
+	return uc.journals.RefsByIDs(ctx, companyID, ids)
+}
+
+func (uc *AccountUseCases) JournalIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error) {
+	return uc.journals.ActiveIDsByCode(ctx, companyID, codes)
 }
 
 func (uc *AccountUseCases) Get(ctx context.Context, in dto.ByID[vo.AccountID]) (dto.Account, error) {

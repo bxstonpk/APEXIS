@@ -174,6 +174,7 @@ type taxRow struct {
 	DocumentID   uuid.UUID
 	DocumentNo   string
 	ReferenceNo  string
+	ReferenceID  *uuid.UUID
 	CustomerID   uuid.UUID
 	CustomerCode string
 	CustomerName string
@@ -202,7 +203,7 @@ func (r *ReportRepository) taxReport(base func() *gorm.DB, columns string, f dto
 	totals := dto.TaxRow{Base: decimal.Zero, Tax: decimal.Zero}
 	for i, x := range rows {
 		res.Items[i] = dto.TaxRow{
-			Date: dateUTC(x.DocDate), Kind: x.Kind, DocumentID: x.DocumentID.String(), DocumentNo: x.DocumentNo, ReferenceNo: x.ReferenceNo,
+			Date: dateUTC(x.DocDate), Kind: x.Kind, DocumentID: x.DocumentID.String(), DocumentNo: x.DocumentNo, ReferenceNo: x.ReferenceNo, ReferenceID: strOrEmpty(x.ReferenceID),
 			Customer: dto.Ref{ID: x.CustomerID.String(), Code: x.CustomerCode, Name: x.CustomerName},
 			TaxID:    x.TaxID, BranchNo: x.BranchNo, TaxType: x.TaxType, Base: x.Base, Tax: x.Tax,
 		}
@@ -221,42 +222,117 @@ func (r *ReportRepository) taxReport(base func() *gorm.DB, columns string, f dto
 const taxCustomer = `c.id AS customer_id, c.code AS customer_code, d.bill_to_name AS customer_name, d.bill_to_tax_id AS tax_id,
 	d.bill_to_branch_no AS branch_no, c.tax_type`
 
-// OutputVat: ใบแจ้งหนี้ / ใบกำกับภาษี + ใบลดหนี้ (ยอดติดลบ) ที่ยังไม่ยกเลิกในช่วงวันที่ — ฐาน = ยอดก่อน VAT
-// UNION ALL เป็นตาราง d แล้วกรอง / เรียง / แบ่งหน้า / รวมยอดใน query เดียว
+// outputVatDocs: เอกสารที่ภาษีขายเกิดแล้วในช่วงวันที่ (ประมวลรัษฎากร ม.78 / 78/1) — ใช้ร่วมกันระหว่างรายงานและสรุป ภ.พ.30
+//
+//	invoice: ภาษีเกิดตามวันที่ใบ (หักภาษีของมัดจำที่หักในใบ — เกิดไปแล้วตอนออกใบมัดจำ)
+//	deposit: ใบรับเงินมัดจำ / ใบกำกับภาษี
+//	tax_invoice / receipt: ภาษีของใบแจ้งหนี้บริการที่ถึงกำหนด (ใบกำกับก่อนรับเงิน / รับชำระ) จาก sales_vat_recognitions
+//	credit_note: ใบลดหนี้ที่ลดภาษีขาย (vat_kind = output) เป็นยอดติดลบ — ใบลดหนี้ของภาษียังไม่ถึงกำหนดไม่อยู่ในรายงาน
+//
+// ใบแจ้งหนี้บริการที่ยังไม่รับเงิน / ไม่ออกใบกำกับไม่อยู่ในรายงาน; ต้องส่ง args = outputVatArgs(...)
+const outputVatDocs = `(
+	SELECT i.id, i.customer_id, i.doc_date, i.document_no, i.kind, '' AS reference_no, NULL::uuid AS reference_id,
+		i.bill_to_name, i.bill_to_tax_id, i.bill_to_branch_no, i.total_net - i.deposit_base AS total_net, i.total_vat - i.deposit_vat AS total_vat
+	FROM sales_invoices AS i
+	WHERE i.company_id = ? AND i.status = 'posted' AND i.kind IN ('invoice', 'deposit') AND i.doc_date BETWEEN ? AND ?
+	UNION ALL
+	SELECT v.document_id, i.customer_id, v.doc_date, v.document_no, v.source, i.document_no, i.id,
+		i.bill_to_name, i.bill_to_tax_id, i.bill_to_branch_no, v.base, v.vat
+	FROM sales_vat_recognitions AS v JOIN sales_invoices AS i ON i.id = v.invoice_id
+	WHERE v.company_id = ? AND v.status = 'posted' AND v.doc_date BETWEEN ? AND ?
+	UNION ALL
+	SELECT n.id, n.customer_id, n.doc_date, n.document_no, 'credit_note', iv.document_no, iv.id,
+		n.bill_to_name, n.bill_to_tax_id, n.bill_to_branch_no, -n.total_net, -n.total_vat
+	FROM sales_credit_notes AS n JOIN sales_invoices AS iv ON iv.id = n.invoice_id
+	WHERE n.company_id = ? AND n.status = 'posted' AND n.vat_kind = 'output' AND n.doc_date BETWEEN ? AND ?) AS d`
+
+func outputVatArgs(companyID uuid.UUID, start, end time.Time) []any {
+	return []any{companyID, start, end, companyID, start, end, companyID, start, end}
+}
+
+// OutputVat — 1 query: เอกสารที่ภาษีเกิดแล้ว (outputVatDocs) กรอง / เรียง / แบ่งหน้า / รวมยอด
 func (r *ReportRepository) OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error) {
-	docs := `(SELECT i.id, i.company_id, i.customer_id, i.doc_date, i.document_no, 'invoice' AS kind, '' AS reference_no,
-			i.bill_to_name, i.bill_to_tax_id, i.bill_to_branch_no, i.total_net, i.total_vat
-		FROM sales_invoices AS i WHERE i.company_id = ? AND i.status = 'posted' AND i.doc_date BETWEEN ? AND ?
-		UNION ALL
-		SELECT n.id, n.company_id, n.customer_id, n.doc_date, n.document_no, 'credit_note', iv.document_no,
-			n.bill_to_name, n.bill_to_tax_id, n.bill_to_branch_no, -n.total_net, -n.total_vat
-		FROM sales_credit_notes AS n JOIN sales_invoices AS iv ON iv.id = n.invoice_id
-		WHERE n.company_id = ? AND n.status = 'posted' AND n.doc_date BETWEEN ? AND ?) AS d`
-	c := uuidOf(companyID)
+	args := outputVatArgs(uuidOf(companyID), f.Start, f.End)
 	base := func() *gorm.DB {
-		q := database.Conn(ctx, r.db).Table(docs, c, f.Start, f.End, c, f.Start, f.End).Joins("JOIN sales_customers AS c ON c.id = d.customer_id")
+		q := database.Conn(ctx, r.db).Table(outputVatDocs, args...).Joins("JOIN sales_customers AS c ON c.id = d.customer_id")
 		if f.CustomerID != nil {
 			q = q.Where("d.customer_id = ?", uuidOf(*f.CustomerID))
 		}
 		return q
 	}
-	return r.taxReport(base, `d.doc_date, d.kind, d.id AS document_id, d.document_no, d.reference_no, `+taxCustomer+`, d.total_net AS base, d.total_vat AS tax,
+	return r.taxReport(base, `d.doc_date, d.kind, d.id AS document_id, d.document_no, d.reference_no, d.reference_id, `+taxCustomer+`, d.total_net AS base, d.total_vat AS tax,
 		COUNT(*) OVER () AS total, SUM(d.total_net) OVER () AS total_base, SUM(d.total_vat) OVER () AS total_tax`, f)
 }
 
-// VatTotals — 1 query: ภาษีขายของช่วงวันที่ = ใบแจ้งหนี้ - ใบลดหนี้ (ที่ยังไม่ยกเลิก)
+// VatTotals — 1 query: ยอดรวมของ outputVatDocs (สรุป ภ.พ.30)
 func (r *ReportRepository) VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error) {
 	var t struct {
 		Base      decimal.Decimal
 		Tax       decimal.Decimal
 		Documents int
 	}
-	err := database.Conn(ctx, r.db).Raw(`SELECT COALESCE(SUM(net), 0) AS base, COALESCE(SUM(vat), 0) AS tax, COUNT(*) AS documents
-		FROM (SELECT total_net AS net, total_vat AS vat FROM sales_invoices
-		       WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @start AND @end
-		      UNION ALL
-		      SELECT -total_net, -total_vat FROM sales_credit_notes
-		       WHERE company_id = @company AND status = 'posted' AND doc_date BETWEEN @start AND @end) AS v`,
-		map[string]any{"company": uuidOf(companyID), "start": start, "end": end}).Scan(&t).Error
+	err := database.Conn(ctx, r.db).Raw(`SELECT COALESCE(SUM(d.total_net), 0) AS base, COALESCE(SUM(d.total_vat), 0) AS tax, COUNT(*) AS documents FROM `+outputVatDocs,
+		outputVatArgs(uuidOf(companyID), start, end)...).Scan(&t).Error
 	return dto.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, err
+}
+
+// UndueVat — 1 query: ใบแจ้งหนี้บริการ (ออกถึงวันที่) ที่ภาษียังไม่ถึงกำหนด ณ วันที่
+// = ตั้งไว้ - ถึงกำหนด (รับเงิน / ใบกำกับ) ถึงวันที่ - ใบลดหนี้ภาษียังไม่ถึงกำหนดถึงวันที่; window function รวมยอด
+func (r *ReportRepository) UndueVat(ctx context.Context, companyID vo.CompanyID, f dto.UndueVatFilter) (listing.Result[dto.UndueVatRow], dto.UndueVatRow, error) {
+	c := uuidOf(companyID)
+	where := "i.company_id = ? AND i.kind = 'service_invoice' AND i.status = 'posted' AND i.doc_date <= ?"
+	args := []any{f.End, f.End, c, f.End}
+	if f.CustomerID != nil {
+		where += " AND i.customer_id = ?"
+		args = append(args, uuidOf(*f.CustomerID))
+	}
+	inner := `SELECT i.id, i.document_no, i.doc_date, i.customer_id, i.total_gross, i.vat_deferred,
+			COALESCE((SELECT SUM(v.vat) FROM sales_vat_recognitions AS v WHERE v.invoice_id = i.id AND v.status = 'posted' AND v.doc_date <= ?), 0) AS recognized,
+			COALESCE((SELECT SUM(n.total_vat) FROM sales_credit_notes AS n
+				WHERE n.invoice_id = i.id AND n.status = 'posted' AND n.vat_kind = 'undue' AND n.doc_date <= ?), 0) AS credited
+		FROM sales_invoices AS i WHERE ` + where
+	var rows []struct {
+		ID           uuid.UUID
+		DocumentNo   string
+		DocDate      time.Time
+		CustomerID   uuid.UUID
+		CustomerCode string
+		CustomerName string
+		TotalGross   decimal.Decimal
+		VatDeferred  decimal.Decimal
+		Recognized   decimal.Decimal
+		Undue        decimal.Decimal
+		Total        int64
+		TGross       decimal.Decimal
+		TVat         decimal.Decimal
+		TRecognized  decimal.Decimal
+		TUndue       decimal.Decimal
+	}
+	query := `SELECT x.id, x.document_no, x.doc_date, x.customer_id, c.code AS customer_code, c.name AS customer_name, x.total_gross,
+			x.vat_deferred, x.recognized, x.vat_deferred - x.recognized - x.credited AS undue,
+			COUNT(*) OVER () AS total, SUM(x.total_gross) OVER () AS t_gross, SUM(x.vat_deferred) OVER () AS t_vat,
+			SUM(x.recognized) OVER () AS t_recognized, SUM(x.vat_deferred - x.recognized - x.credited) OVER () AS t_undue
+		FROM (` + inner + `) AS x JOIN sales_customers AS c ON c.id = x.customer_id
+		WHERE x.vat_deferred - x.recognized - x.credited > 0
+		ORDER BY x.doc_date, x.document_no LIMIT ? OFFSET ?`
+	err := database.Conn(ctx, r.db).Raw(query, append(args, f.Page.Limit(), f.Page.Offset())...).Scan(&rows).Error
+	zero := decimal.Zero
+	res := listing.Result[dto.UndueVatRow]{Items: make([]dto.UndueVatRow, len(rows)), Page: f.Page}
+	totals := dto.UndueVatRow{Gross: zero, VatTotal: zero, VatRecognized: zero, VatUndue: zero}
+	if err != nil {
+		return res, totals, err
+	}
+	for i, x := range rows {
+		res.Items[i] = dto.UndueVatRow{
+			Invoice: dto.Ref{ID: x.ID.String(), Code: x.DocumentNo}, Date: dateUTC(x.DocDate),
+			Customer: dto.Ref{ID: x.CustomerID.String(), Code: x.CustomerCode, Name: x.CustomerName},
+			Gross:    x.TotalGross, VatTotal: x.VatDeferred, VatRecognized: x.Recognized, VatUndue: x.Undue,
+		}
+	}
+	if len(rows) > 0 {
+		x := rows[0]
+		res.Total = x.Total
+		totals = dto.UndueVatRow{Gross: x.TGross, VatTotal: x.TVat, VatRecognized: x.TRecognized, VatUndue: x.TUndue}
+	}
+	return res, totals, nil
 }

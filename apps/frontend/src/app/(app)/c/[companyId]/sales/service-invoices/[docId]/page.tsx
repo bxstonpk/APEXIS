@@ -1,0 +1,13 @@
+import type { Metadata } from 'next'
+import { texts } from '@/config'
+import { SaleViewPage } from '@/features/sales/salePages'
+import type { SearchParams } from '@/lib/url'
+
+export const metadata: Metadata = { title: texts.sales.serviceInvoices.pageTitle }
+
+type Props = { params: Promise<{ companyId: string; docId: string }>; searchParams: Promise<SearchParams> }
+
+export default async function Page({ params, searchParams }: Props) {
+  const { companyId, docId } = await params
+  return <SaleViewPage companyId={companyId} kind="service_invoice" docId={docId} sp={await searchParams} />
+}

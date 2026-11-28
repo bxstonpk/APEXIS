@@ -86,15 +86,23 @@ func createDoc[R interface{ ToInput() (In, error) }, In any, T any, B any](h *Ha
 	}
 }
 
-// openInvoices: GET .../open-invoices?{param}=<uuid>
-func openInvoices(h *Handler, param string, run func(context.Context, dto.Actor, uuid.UUID) ([]dto.OpenInvoice, error)) http.HandlerFunc {
+// openInvoices: GET .../open-invoices?{param}=<uuid>[&billing_note_id=<uuid>] (billing_note_id เฉพาะรับเงิน)
+func openInvoices(h *Handler, param string, run func(context.Context, dto.Actor, uuid.UUID, *uuid.UUID) ([]dto.OpenInvoice, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.serve(w, r, http.StatusOK, func(a dto.Actor) (any, error) {
 			id, err := uuid.Parse(r.URL.Query().Get(param))
 			if err != nil || id == uuid.Nil {
 				return nil, requests.Invalid("%s is required (UUID)", param)
 			}
-			rows, err := run(r.Context(), a, id)
+			var billingNoteID *uuid.UUID
+			if raw := r.URL.Query().Get("billing_note_id"); raw != "" {
+				bn, err := uuid.Parse(raw)
+				if err != nil {
+					return nil, requests.Invalid("billing_note_id must be a UUID")
+				}
+				billingNoteID = &bn
+			}
+			rows, err := run(r.Context(), a, id, billingNoteID)
 			return one(responses.FromOpenInvoices(rows), err)
 		})
 	}
@@ -224,7 +232,9 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, authenticate func(http.Handl
 
 	handle("GET "+base+"/payments", listDocs(h, kinds("supplier", "other"), uc.Payments.List, responses.FromPaymentSummary))
 	handle("POST "+base+"/payments", createDoc[requests.Payment](h, uc.Payments.Create, responses.FromPayment))
-	handle("GET "+base+"/payments/open-invoices", openInvoices(h, "supplier_id", uc.Payments.OpenInvoices))
+	handle("GET "+base+"/payments/open-invoices", openInvoices(h, "supplier_id", func(ctx context.Context, a dto.Actor, id uuid.UUID, _ *uuid.UUID) ([]dto.OpenInvoice, error) {
+		return uc.Payments.OpenInvoices(ctx, a, id)
+	}))
 	handle("GET "+base+"/payments/wht-types", h.listWhtTypes(true))
 	handle("GET "+base+"/payments/{paymentID}", getDoc(h, "paymentID", uc.Payments.Get, responses.FromPayment))
 	handle("PATCH "+base+"/payments/{paymentID}", cancelDoc(h, "paymentID", uc.Payments.Cancel, responses.FromPayment))

@@ -93,7 +93,7 @@ export async function OrderList({ companyId, sp, createHref }: { companyId: stri
   ]
   return (
     <>
-      <ListHeader title={t.orders.heading} description={t.orders.description} createHref={createHref} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={t.orders.heading} createHref={createHref} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="order" supplier={supplier} />
       <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} createHref={createHref} />
     </>
@@ -116,7 +116,7 @@ export async function ReceiptList({ companyId, sp }: { companyId: string; sp: Se
   ]
   return (
     <>
-      <ListHeader title={t.receipts.heading} description={t.receipts.description} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={t.receipts.heading} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="posted" supplier={supplier} />
       <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} />
     </>
@@ -146,7 +146,7 @@ export async function InvoiceList({ companyId, sp }: { companyId: string; sp: Se
   ]
   return (
     <>
-      <ListHeader title={t.invoices.heading} description={t.invoices.description} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={t.invoices.heading} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="posted" supplier={supplier} />
       <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} />
     </>
@@ -161,7 +161,7 @@ export async function PurchaseFulfilPage({ companyId, orderId, mode }: { company
   const t = texts.purchasing
   const page = mode === 'receipt' ? t.receipts : t.invoices
   const docsPath = purchasingPage(companyId, mode === 'receipt' ? 'receipts' : 'invoices')
-  if (!orderId) return <MessagePanel title={t.orders.notFound} description={t.fulfil.pickOrder} />
+  if (!orderId) return <MessagePanel title={t.orders.notFound} />
   const res = await loadItem<PurchaseOrder>(purchasingDocsApi.orders(companyId), orderId, t.orders.notFound)
   if ('panel' in res) return res.panel
   const o = res.item

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { branchLabel } from '@/features/sales/PrintDocument'
 import { format, texts } from '@/config'
+import { menuAvailableFor } from '@/config/apps'
 import { formatAmount, toUnits } from '@/features/accounting/money'
 import { FormPage, loadItem } from '@/features/organization/pages'
 import { DocActions, type DocAction } from '@/features/sales/Actions'
@@ -19,7 +20,7 @@ type Props = { params: Promise<{ companyId: string; docId: string }>; searchPara
 
 /**
  * ใบสั่งขาย — ร่าง: แก้ไข / อนุมัติ (คำเตือนวงเงิน) / ลบ
- * อนุมัติแล้ว: ส่งของ / ออกใบกำกับภาษี (ไปหน้าสร้างพร้อม ?order_id=) / ปิด / ยกเลิก + ความคืบหน้ารายบรรทัด
+ * อนุมัติแล้ว: ขายสินค้า หรือ ออกใบแจ้งหนี้ (ตามประเภทธุรกิจ, ไปหน้าสร้างพร้อม ?order_id=) / รับเงินมัดจำ / ปิด / ยกเลิก + ความคืบหน้ารายบรรทัด
  */
 export default async function Page({ params, searchParams }: Props) {
   const { companyId, docId } = await params
@@ -33,8 +34,11 @@ export default async function Page({ params, searchParams }: Props) {
   if ('panel' in res) return res.panel
   const o = res.item
   const has = (p: string) => can(ctx.permissions, p)
-  const toDeliver = o.lines.some((l) => toUnits(l.quantity) > toUnits(l.delivered_quantity))
-  const toInvoice = o.lines.some((l) => toUnits(l.quantity) > toUnits(l.invoiced_quantity))
+  const left = (l: Order['lines'][number]) => toUnits(l.quantity) > toUnits(l.invoiced_quantity)
+  const toInvoice = o.lines.some(left)
+  // ใบแจ้งหนี้ค่าบริการรับเฉพาะบรรทัดบริการ (ไม่รู้ชนิด = ให้ backend ตรวจ)
+  const toServiceInvoice = o.lines.some((l) => left(l) && (!l.item.type || l.item.type === 'service'))
+  const bt = ctx.company.business_type
 
   const actions: DocAction[] = []
   if (o.status === 'draft') {
@@ -46,10 +50,14 @@ export default async function Page({ params, searchParams }: Props) {
       actions.push({ kind: 'patch', status: 'cancelled', label: a.cancelOrder, confirm: a.confirm.cancelOrder, danger: true })
       actions.push({ kind: 'patch', status: 'closed', label: a.close, confirm: a.confirm.close })
     }
-    if (toInvoice && has(perms.invoicePost))
-      actions.push({ kind: 'link', href: `${salesPage(companyId, 'invoices')}/new?order_id=${o.id}`, label: a.invoice, icon: 'invoice', primary: !toDeliver })
-    if (toDeliver && has(perms.deliveryPost))
-      actions.push({ kind: 'link', href: `${salesPage(companyId, 'deliveries')}/new?order_id=${o.id}`, label: a.deliver, icon: 'deliver', primary: true })
+    // ปุ่มแปลงเป็นเอกสารขายตามเมนูที่ประเภทธุรกิจใช้: ซื้อขาย / ผลิต = ขายสินค้า, บริการ / ก่อสร้าง = ใบแจ้งหนี้
+    if (has(perms.invoicePost)) {
+      if (toServiceInvoice && menuAvailableFor('sales', 'service-invoices', bt))
+        actions.push({ kind: 'link', href: `${salesPage(companyId, 'service-invoices')}/new?order_id=${o.id}`, label: a.serviceInvoice, icon: 'invoice', primary: true })
+      if (toInvoice && menuAvailableFor('sales', 'invoices', bt))
+        actions.push({ kind: 'link', href: `${salesPage(companyId, 'invoices')}/new?order_id=${o.id}`, label: a.invoice, icon: 'deliver', primary: true })
+      if (toInvoice) actions.push({ kind: 'link', href: `${salesPage(companyId, 'deposits')}/new?order_id=${o.id}`, label: a.deposit, icon: 'receive' })
+    }
   }
 
   return (
@@ -99,7 +107,7 @@ export default async function Page({ params, searchParams }: Props) {
                 extra:
                   o.status === 'draft' ? undefined : (
                     <span className="mt-1 block text-[12px] text-ink-muted">
-                      {format(t.progress, { delivered: formatAmount(l.delivered_quantity), invoiced: formatAmount(l.invoiced_quantity), ordered: formatAmount(l.quantity) })}
+                      {format(t.progress, { invoiced: formatAmount(l.invoiced_quantity), ordered: formatAmount(l.quantity) })}
                     </span>
                   ),
               }))}

@@ -54,6 +54,9 @@ type LedgerEntry struct {
 type Ledger interface {
 	InvalidAccounts(ctx context.Context, companyID vo.CompanyID, ids []vo.GLAccountID) ([]vo.GLAccountID, error)
 	JournalUsable(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) (bool, error)
+	// AccountsByCode / JournalsByCode: id ตามรหัสในผังบัญชีมาตรฐาน (ตั้งค่าเริ่มต้นตอนสร้างบริษัท) — รหัสที่ไม่พบ / ลงรายการไม่ได้ไม่อยู่ในผล
+	AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.GLAccountID, error)
+	JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error)
 	Post(ctx context.Context, e LedgerEntry) (vo.EntryID, string, error)
 	Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.UserID, id vo.EntryID, date time.Time, description string) error
 	// Balances: ยอด (เดบิต - เครดิต) สะสมถึง asOf ของบัญชีแยกประเภท — เรียกครั้งเดียวทุกบัญชี
@@ -85,12 +88,16 @@ type Counterparty struct {
 	TaxType  vo.TaxType // ผู้ขายเท่านั้น
 }
 
+// SettledInvoice: Kind / VatBase / Vat — เอกสารขาย (ขายบริการ: ภาษีขายที่ถึงกำหนดจากการรับเงินครั้งนี้)
 type SettledInvoice struct {
 	ID         vo.InvoiceID
 	DocumentNo string
 	PartnerRef string
+	Kind       string
 	Net        vo.Money
 	Gross      vo.Money
+	VatBase    vo.Money
+	Vat        vo.Money
 }
 
 // SettlementResult: คู่ค้า + บัญชีคุม (ลูกหนี้ / เจ้าหนี้) + ใบแจ้งหนี้ตามลำดับที่ส่ง
@@ -98,6 +105,8 @@ type SettlementResult struct {
 	Party            Counterparty
 	ControlAccountID vo.GLAccountID
 	Invoices         []SettledInvoice
+	// ExtraJournal: บรรทัดที่ต้องลงเพิ่มในรายการเดียวกัน (ขาย: Dr ภาษีขายยังไม่ถึงกำหนด / Cr ภาษีขาย)
+	ExtraJournal []services.JournalLine
 }
 
 type OpenInvoice struct {
@@ -109,6 +118,9 @@ type OpenInvoice struct {
 	Net         vo.Money
 	Gross       vo.Money
 	Outstanding vo.Money
+	Kind        string   // ขาย: invoice | service_invoice | deposit
+	VatUndue    vo.Money // ขายบริการ: ภาษีขายยังไม่ถึงกำหนด
+	TaxInvoice  bool     // ขายบริการที่ออกใบกำกับภาษีแล้ว
 }
 
 // Settlements: ตัดยอด / คืนยอดใบแจ้งหนี้ของ sales (ลูกหนี้) หรือ purchasing (เจ้าหนี้)
@@ -116,7 +128,8 @@ type OpenInvoice struct {
 type Settlements interface {
 	Settle(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, doc SettlementDoc, lines []Settlement) (SettlementResult, error)
 	Unsettle(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
-	Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID) ([]OpenInvoice, error)
+	// Open: billingNoteID = เฉพาะใบในใบวางบิล (ขายเท่านั้น; จัดซื้อไม่ใช้)
+	Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]OpenInvoice, error)
 }
 
 // ---------- ภาษีมูลค่าเพิ่ม (ภ.พ.30) ----------

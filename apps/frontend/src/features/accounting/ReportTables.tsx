@@ -83,9 +83,7 @@ export function TrialBalanceTable({ r, ledgerHref }: { r: TrialBalance; ledgerHr
         <span className={cx('inline-flex items-center gap-1.5 font-medium', ok ? 'text-success' : 'text-danger')}>
           {ok ? <CircleCheck aria-hidden className="size-4" /> : <CircleAlert aria-hidden className="size-4" />}
           {ok ? t.tbBalanced : t.tbUnbalanced}
-        </span>
-        <span>{t.balanceHint}</span>
-        {toUnits(r.prior_years_earnings) !== 0n && (
+        </span>        {toUnits(r.prior_years_earnings) !== 0n && (
           <span>
             {t.priorYears}: <span className="tabular-nums">{amount(r.prior_years_earnings)}</span>
           </span>
@@ -189,7 +187,6 @@ export function BalanceSheetTable({ r }: { r: BalanceSheet }) {
         <GrandTotal label={t.totals.liabilitiesAndEquity} value={r.total_liabilities_and_equity} />
         {(r.suspense.length > 0 || suspense !== 0n) && <Section title={t.sections.suspense} lines={r.suspense} totalLabel={t.totals.suspense} total={r.total_suspense} />}
       </StatementFrame>
-      {(r.suspense.length > 0 || suspense !== 0n) && <p className="text-[13px] text-ink-muted">{t.suspenseHint}</p>}
     </div>
   )
 }
@@ -215,7 +212,6 @@ export function IncomeStatementTable({ r }: { r: IncomeStatement }) {
         <GrandTotal label={t.totals.netIncome} value={r.net_income} />
         {suspense && <Section title={t.sections.suspenseExcluded} lines={r.suspense} totalLabel={t.totals.suspensePeriod} total={r.total_suspense} />}
       </StatementFrame>
-      {suspense && <p className="text-[13px] text-ink-muted">{t.suspenseIncomeHint}</p>}
     </div>
   )
 }

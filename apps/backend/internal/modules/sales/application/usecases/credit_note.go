@@ -23,10 +23,10 @@ import (
 // ยอดค้าง / ใบค้างรับของ finance / อายุลูกหนี้ / วงเงินเครดิต จึงหักใบลดหนี้อัตโนมัติ และยกเลิกใบแจ้งหนี้ไม่ได้จนกว่าจะยกเลิกใบลดหนี้
 type CreditNoteUseCases struct {
 	base
-	notes       repositories.CreditNoteRepository
-	invoices    repositories.InvoiceRepository
-	deliveries  repositories.DeliveryRepository
-	settlements repositories.SettlementRepository
+	notes        repositories.CreditNoteRepository
+	invoices     repositories.InvoiceRepository
+	settlements  repositories.SettlementRepository
+	recognitions repositories.VatRecognitionRepository
 }
 
 func (uc *CreditNoteUseCases) Get(ctx context.Context, in dto.ByID[vo.CreditNoteID]) (dto.CreditNote, error) {
@@ -162,17 +162,32 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 			}
 		}
 
+		vatKind := inv.CreditVatKind()
 		cn, err := entities.NewCreditNote(entities.CreditNoteState{
 			CompanyID: in.CompanyID, InvoiceID: inv.ID(), InvoiceNo: ist.Posting.DocumentNo, CustomerID: ist.CustomerID, BillTo: ist.BillTo,
-			Date: d.Date, Kind: d.Kind, Reason: d.Reason, Description: d.Description, Vat: ist.Vat, Stock: stock, Lines: lines,
+			Date: d.Date, Kind: d.Kind, Reason: d.Reason, Description: d.Description, Vat: ist.Vat, VatKind: vatKind, Stock: stock, Lines: lines,
 			Posting: entities.Posting{DocumentNo: no, FiscalYear: period.FiscalYear, PeriodID: period.ID, By: in.UserID, At: uc.now()},
 		}, ist.Date)
 		if err != nil {
 			return err
 		}
 		cs := cn.State()
+		// ขายบริการที่ยังไม่ออกใบกำกับภาษี: ใบลดหนี้ลดภาษีขายยังไม่ถึงกำหนด (ไม่ใช่ใบลดหนี้ทางภาษี) — อื่น ๆ ลดภาษีขาย
+		vatAccount := accountOr(settings.OutputVatAccountID)
 		if !cs.Totals.Vat.IsZero() {
-			if err := settings.Require("output_vat_account_id"); err != nil {
+			field := "output_vat_account_id"
+			if vatKind == vo.VatUndue {
+				field = "undue_output_vat_account_id"
+			}
+			if err := settings.Require(field); err != nil {
+				return err
+			}
+			if vatKind == vo.VatUndue {
+				vatAccount = *settings.UndueOutputVatAccountID
+			}
+		}
+		if vatKind == vo.VatUndue {
+			if err := inv.CreditUndue(cs.Totals.Net, cs.Totals.Vat); err != nil {
 				return err
 			}
 		}
@@ -180,7 +195,7 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		if err := inv.Receive(ist.CustomerID, cs.Totals.Gross); err != nil {
 			return fmt.Errorf("%w: %s (outstanding %s, credit %s)", domain.ErrOverCredit, ist.Posting.DocumentNo, inv.Outstanding(), cs.Totals.Gross)
 		}
-		journal := cn.Journal(*settings.ARAccountID, accountOr(settings.OutputVatAccountID), accountOr(settings.CogsAccountID))
+		journal := cn.Journal(*settings.ARAccountID, vatAccount, accountOr(settings.CogsAccountID))
 		entryID, entryNo, err := uc.post(ctx, in.Actor, *settings.JournalID, d.Date, "ใบลดหนี้ "+no+" / "+ist.Posting.DocumentNo, no, journal)
 		if err != nil {
 			return err
@@ -192,7 +207,7 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 		if err := uc.notes.Create(ctx, cn); err != nil {
 			return err
 		}
-		if err := uc.invoices.SaveReceived(ctx, []*entities.Invoice{inv}); err != nil {
+		if err := uc.invoices.SaveState(ctx, inv); err != nil {
 			return err
 		}
 		return uc.settlements.Create(ctx, in.CompanyID, dto.SettlementDoc{ID: uuid.UUID(cn.ID()), No: no, Date: d.Date},
@@ -205,7 +220,7 @@ func (uc *CreditNoteUseCases) Create(ctx context.Context, in dto.Create[dto.Cred
 }
 
 // restock รับสินค้า stock คืนเข้าคลังที่ต้นทุนเดิมต่อหน่วย:
-// ใบส่งของ / ใบกำกับภาษี = ต้นทุนในบรรทัดใบแจ้งหนี้; ใบแจ้งหนี้แยก = ต้นทุนเฉลี่ยของใบส่งของตามบรรทัดใบสั่งขาย
+// ต้นทุนต่อหน่วย = ต้นทุน FIFO ในบรรทัดขายสินค้า / จำนวน
 // perpetual ต้องมีบัญชีต้นทุนขาย (Cr ต้นทุนขาย / Dr สินค้าคงเหลือ)
 func (uc *CreditNoteUseCases) restock(ctx context.Context, a dto.Actor, settings entities.Settings, inv *entities.Invoice, lines []entities.CreditNoteLine,
 	idx []int, system vo.AccountingSystem, d dto.CreditNoteInput, no string) (entities.Stock, error) {
@@ -219,35 +234,13 @@ func (uc *CreditNoteUseCases) restock(ctx context.Context, a dto.Actor, settings
 		}
 	}
 	ist := inv.State()
-	var averages map[int]vo.Money
-	if !ist.WithDelivery {
-		orderLines := make([]int, 0, len(idx))
-		for _, i := range idx {
-			il, _ := inv.CreditLine(lines[i].InvoiceLineNo)
-			orderLines = append(orderLines, il.OrderLineNo)
-		}
-		var err error
-		if averages, err = uc.deliveries.UnitCosts(ctx, a.CompanyID, ist.OrderID, orderLines); err != nil {
-			return stock, err
-		}
-	}
 	in := make([]ports.ReceiptLine, len(idx))
 	for k, i := range idx {
 		il, _ := inv.CreditLine(lines[i].InvoiceLineNo)
-		var unit vo.Money
-		var ok bool
-		if ist.WithDelivery {
-			ok = il.Stock && il.Quantity.IsPositive()
-			if ok {
-				unit = il.Cost.DivRound(il.Quantity, 6)
-			}
-		} else {
-			unit, ok = averages[il.OrderLineNo]
-		}
-		if !ok {
+		if !il.Stock || !il.Quantity.IsPositive() {
 			return stock, fmt.Errorf("%w: invoice line %d", domain.ErrCostUnknown, lines[i].InvoiceLineNo)
 		}
-		in[k] = ports.ReceiptLine{ItemID: lines[i].ItemID, Quantity: lines[i].Quantity, UnitCost: unit}
+		in[k] = ports.ReceiptLine{ItemID: lines[i].ItemID, Quantity: lines[i].Quantity, UnitCost: il.Cost.DivRound(il.Quantity, 6)}
 	}
 	doc, err := uc.inventory.PostReceipt(ctx, a.CompanyID, a.UserID, *d.WarehouseID, d.Date, no, "Sales return "+no+" / "+ist.Posting.DocumentNo, in)
 	if err != nil {
@@ -275,8 +268,18 @@ func (uc *CreditNoteUseCases) Cancel(ctx context.Context, in dto.ByID[vo.CreditN
 		if _, err := uc.openPeriod(ctx, in.CompanyID, s.Date); err != nil {
 			return err
 		}
-		if err := unsettle(ctx, uc.invoices, uc.settlements, in.CompanyID, uuid.UUID(cn.ID())); err != nil {
+		if err := unsettle(ctx, uc.invoices, uc.settlements, uc.recognitions, in.CompanyID, uuid.UUID(cn.ID())); err != nil {
 			return err
+		}
+		if s.VatKind == vo.VatUndue {
+			inv, err := uc.invoices.FindForUpdate(ctx, in.CompanyID, s.InvoiceID)
+			if err != nil {
+				return err
+			}
+			inv.UncreditUndue(s.Totals.Net, s.Totals.Vat)
+			if err := uc.invoices.SaveState(ctx, inv); err != nil {
+				return err
+			}
 		}
 		if s.Stock.StockDocumentID != nil {
 			if err := uc.inventory.CancelDocument(ctx, in.CompanyID, in.UserID, *s.Stock.StockDocumentID); err != nil {

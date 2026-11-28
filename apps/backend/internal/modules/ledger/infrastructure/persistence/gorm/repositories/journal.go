@@ -46,6 +46,46 @@ func (r *JournalRepository) ExistingCodes(ctx context.Context, companyID vo.Comp
 	return out, err
 }
 
+func (r *JournalRepository) ActiveIDsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error) {
+	out := map[string]vo.JournalID{}
+	if len(codes) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID   uuid.UUID
+		Code string
+	}
+	err := database.Conn(ctx, r.db).Model(&models.JournalModel{}).Select("id, code").
+		Where("company_id = ? AND code IN ? AND status = ?", uuidOf(companyID), codes, string(vo.StatusActive)).
+		Scan(&rows).Error
+	for _, row := range rows {
+		out[row.Code] = vo.JournalID(row.ID)
+	}
+	return out, err
+}
+
+func (r *JournalRepository) RefsByIDs(ctx context.Context, companyID vo.CompanyID, ids []vo.JournalID) (map[vo.JournalID]dto.CodeName, error) {
+	out := map[vo.JournalID]dto.CodeName{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	in := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		in[i] = uuidOf(id)
+	}
+	var rows []struct {
+		ID   uuid.UUID
+		Code string
+		Name string
+	}
+	err := database.Conn(ctx, r.db).Unscoped().Model(&models.JournalModel{}).Select("id, code, name").
+		Where("company_id = ? AND id IN ?", uuidOf(companyID), in).Scan(&rows).Error
+	for _, row := range rows {
+		out[vo.JournalID(row.ID)] = dto.CodeName{Code: row.Code, Name: row.Name}
+	}
+	return out, err
+}
+
 func (r *JournalRepository) Delete(ctx context.Context, companyID vo.CompanyID, id vo.JournalID) error {
 	return softDelete[models.JournalModel](ctx, r.db, uuidOf(companyID), uuidOf(id), domain.ErrJournalNotFound)
 }

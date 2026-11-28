@@ -5,12 +5,16 @@ import (
 	vo "apexis/backend/internal/modules/ledger/domain/value_objects"
 )
 
-// NewDefaultChart สร้างผังบัญชีมาตรฐานทั้งชุดของบริษัท (เรียงบัญชีคุมก่อนบัญชีย่อย)
+// NewDefaultChart สร้างผังบัญชีมาตรฐานของประเภทธุรกิจ bt ทั้งชุด (เรียงบัญชีคุมก่อนบัญชีย่อย)
 // ทุกบัญชีผ่านกฎเดียวกับการสร้างทีละบัญชี (รูปแบบรหัส, parent ต้องเป็นบัญชีคุมหมวดเดียวกัน)
-func NewDefaultChart(companyID vo.CompanyID) ([]*Account, error) {
-	byCode := make(map[string]*Account, len(DefaultChart))
-	out := make([]*Account, 0, len(DefaultChart))
-	for _, d := range DefaultChart {
+func NewDefaultChart(companyID vo.CompanyID, bt vo.BusinessType) ([]*Account, error) {
+	if _, err := vo.ParseBusinessType(string(bt)); err != nil {
+		return nil, err
+	}
+	chart := ChartFor(bt)
+	byCode := make(map[string]*Account, len(chart))
+	out := make([]*Account, 0, len(chart))
+	for _, d := range chart {
 		var parent *Account
 		var parentID *vo.AccountID
 		if d.ParentCode != "" {

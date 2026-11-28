@@ -3,8 +3,9 @@
 import { CircleCheck, Lock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
-import { Alert, Badge, Button, SelectField, TextField } from '@/components'
+import { Alert, Button, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
+import { businessTypeName, type BusinessType } from '@/config/businessTypes'
 import { AddressFields, emptyAddress, FormBar, StatusSelect, type Address } from '@/features/forms/FormParts'
 import { cx } from '@/lib/cx'
 import { apiRequest, errorMessage } from '@/lib/http'
@@ -26,6 +27,8 @@ export type Company = {
   amount_decimals: number
   quantity_decimals: number
   status: string
+  /** กำหนดตอนสร้างบริษัท แก้ไม่ได้ (ไม่ส่งไปกับ PUT) */
+  business_type?: BusinessType
 }
 
 type Field = 'name' | 'base_currency' | 'email' | 'phone' | 'postal_code' | 'country'
@@ -91,7 +94,7 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
 
     setBusy(true)
     try {
-      const { id: _id, code: _code, ...body } = v
+      const { id: _id, code: _code, business_type: _type, ...body } = v
       const next = { ...v, name: v.name.trim(), address: { ...v.address, country: v.address.country.trim().toUpperCase() || 'TH' } }
       await apiRequest(`/companies/${company.id}`, { method: 'PUT', body: { ...body, name: next.name, address: next.address } })
       setBase(next)
@@ -116,8 +119,9 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
       {formError && <Alert tone="error">{formError}</Alert>}
       {readOnly && <Alert>{texts.common.readOnly}</Alert>}
 
-      <SettingsSection title={t.sections.general} description={t.sections.generalDescription}>
-        <ReadOnlyValue label={f.code} value={v.code} hint={t.readOnlyCode} />
+      <SettingsSection title={t.sections.general}>
+        <ReadOnlyValue label={f.code} value={v.code} />
+        {v.business_type && <ReadOnlyValue label={texts.businessTypes.label} value={businessTypeName(v.business_type)} />}
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         <TextField label={f.legalNameTh} value={v.legal_name_th} maxLength={300} disabled={readOnly} onChange={(e) => set('legal_name_th', e.target.value)} />
         <TextField label={f.legalNameEn} value={v.legal_name_en} maxLength={300} disabled={readOnly} onChange={(e) => set('legal_name_en', e.target.value)} />
@@ -127,16 +131,14 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
         <TextField label={f.website} value={v.website} maxLength={300} type="url" autoComplete="url" disabled={readOnly} onChange={(e) => set('website', e.target.value)} />
       </SettingsSection>
 
-      <SettingsSection title={t.sections.address} description={t.sections.addressDescription}>
+      <SettingsSection title={t.sections.address}>
         <AddressFields value={v.address} onChange={(a) => set('address', a)} disabled={readOnly} errors={errors} />
       </SettingsSection>
 
-      <SettingsSection title={t.sections.accounting} description={t.sections.accountingDescription}>
+      <SettingsSection title={t.sections.accounting}>
         <TextField
           label={f.baseCurrency}
-          required
-          hint={f.baseCurrencyHint}
-          value={v.base_currency}
+          required          value={v.base_currency}
           maxLength={3}
           disabled={readOnly}
           error={errors.base_currency}
@@ -155,7 +157,6 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
         <DecimalsField
           label={f.amountDecimals}
           value={v.amount_decimals}
-          min={company.amount_decimals}
           disabled={readOnly}
           options={decimals(company.amount_decimals)}
           onChange={(n) => set('amount_decimals', n)}
@@ -163,14 +164,13 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
         <DecimalsField
           label={f.quantityDecimals}
           value={v.quantity_decimals}
-          min={company.quantity_decimals}
           disabled={readOnly}
           options={decimals(company.quantity_decimals)}
           onChange={(n) => set('quantity_decimals', n)}
         />
       </SettingsSection>
 
-      <SettingsSection title={t.sections.status} description={t.sections.statusDescription} tone={v.status === 'inactive' ? 'warning' : undefined}>
+      <SettingsSection title={t.sections.status} tone={v.status === 'inactive' ? 'warning' : undefined}>
         <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />
       </SettingsSection>
 
@@ -205,8 +205,8 @@ export function CompanySettingsForm({ company, canManage }: { company: Company; 
   )
 }
 
-/** กลุ่มการตั้งค่า: ซ้าย = หัวข้อ + คำอธิบาย, ขวา = ช่องกรอก (จอแคบเรียงบนลงล่าง) */
-function SettingsSection({ title, description, tone, children }: { title: string; description: string; tone?: 'warning'; children: ReactNode }) {
+/** กลุ่มการตั้งค่า: ซ้าย = หัวข้อ, ขวา = ช่องกรอก (จอแคบเรียงบนลงล่าง) */
+function SettingsSection({ title, tone, children }: { title: string; tone?: 'warning'; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="grid gap-4 border-b border-line pb-8 last-of-type:border-b-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-10">
@@ -214,7 +214,6 @@ function SettingsSection({ title, description, tone, children }: { title: string
         <h2 id={id} className="text-[15px] font-semibold">
           {title}
         </h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{description}</p>
       </div>
       <div
         className={cx(
@@ -229,15 +228,14 @@ function SettingsSection({ title, description, tone, children }: { title: string
 }
 
 /** ค่าที่แก้ไม่ได้ — แสดงเป็นข้อความ (ไม่ใช่ช่องที่ถูกปิด) ตามหลัก read-only ≠ disabled */
-function ReadOnlyValue({ label, value, hint }: { label: string; value: string; hint: string }) {
+function ReadOnlyValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[13px] font-medium text-ink">{label}</span>
-      <span className="flex h-10 items-center gap-2 rounded-(--radius-control) bg-neutral-soft px-3 text-sm font-medium" title={hint}>
+      <span className="flex h-10 items-center gap-2 rounded-(--radius-control) bg-neutral-soft px-3 text-sm font-medium">
         {value}
         <Lock aria-hidden className="ml-auto size-3.5 text-ink-subtle" />
       </span>
-      <span className="text-[13px] text-ink-muted">{hint}</span>
     </div>
   )
 }
@@ -246,14 +244,12 @@ function ReadOnlyValue({ label, value, hint }: { label: string; value: string; h
 function DecimalsField({
   label,
   value,
-  min,
   disabled,
   options,
   onChange,
 }: {
   label: string
   value: number
-  min: number
   disabled: boolean
   options: { value: string; label: string }[]
   onChange: (n: number) => void
@@ -264,7 +260,6 @@ function DecimalsField({
       <SelectField label={label} value={String(value)} disabled={disabled} options={options} onChange={(e) => onChange(Number(e.target.value))} />
       <p className="flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
         <span className="tabular-nums">{format(t.decimalsExample, { value: decimalsExample(value) })}</span>
-        {value > min ? <Badge tone="warning">{t.fields.decimalsHint}</Badge> : <span>· {t.fields.decimalsHint}</span>}
       </p>
     </div>
   )

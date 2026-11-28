@@ -155,8 +155,8 @@ func TestLedgerFlow(t *testing.T) {
 	staff := a.user("staff@example.com")
 	outsider := a.user("outsider@example.com")
 
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
-	other := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "beta", "name": "Beta"}), 201, "company B").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
+	other := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "beta", "name": "Beta", "business_type": "trading"}), 201, "company B").id()
 	base := "/api/v1/companies/" + company
 	for _, y := range []obj{{"year": 2025, "start_date": "2025-01-01"}, {"year": 2026, "start_date": "2026-01-01"}} {
 		a.expect(a.do("POST", base+"/fiscal-years", owner, y), 201, "fiscal year")

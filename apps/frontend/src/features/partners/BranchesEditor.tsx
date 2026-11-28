@@ -60,9 +60,7 @@ export function BranchesEditor({
           <legend className="px-1 text-[13px] font-medium text-ink-muted">{format(t.title, { n: String(i + 1) })}</legend>
           <TextField
             label={t.branchNo}
-            required
-            hint={texts.sales.customers.branchHint}
-            value={b.branch_no}
+            required            value={b.branch_no}
             maxLength={5}
             inputMode="numeric"
             disabled={disabled}

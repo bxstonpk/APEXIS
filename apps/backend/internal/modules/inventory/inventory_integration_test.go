@@ -144,7 +144,7 @@ func TestInventoryFlow(t *testing.T) {
 	staff := a.user("staff@example.com")
 	outsider := a.user("outsider@example.com")
 
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	// ทศนิยมกำหนดที่บริษัท: เงิน 2, จำนวนสินค้า 3
 	companyBody := obj{"name": "ACME", "base_currency": "THB", "fiscal_year_start_month": 1, "amount_decimals": 2, "quantity_decimals": 3, "status": "active"}

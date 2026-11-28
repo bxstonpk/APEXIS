@@ -11,6 +11,7 @@ import (
 
 	"apexis/backend/internal/modules/finance/application/ports"
 	domain "apexis/backend/internal/modules/finance/domain/errors"
+	journal "apexis/backend/internal/modules/finance/domain/services"
 	vo "apexis/backend/internal/modules/finance/domain/value_objects"
 	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/numbering"
@@ -81,6 +82,8 @@ type LedgerAccess interface {
 	ReverseEntry(ctx context.Context, companyID, userID, entryID uuid.UUID, date time.Time, description string) (integration.PostedEntry, error)
 	InvalidPostingAccounts(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID) ([]uuid.UUID, error)
 	JournalUsable(ctx context.Context, companyID, journalID uuid.UUID) (bool, error)
+	AccountIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error)
+	JournalIDsByCode(ctx context.Context, companyID uuid.UUID, codes []string) (map[string]uuid.UUID, error)
 	AccountBalances(ctx context.Context, companyID uuid.UUID, accountIDs []uuid.UUID, asOf time.Time) (map[uuid.UUID]decimal.Decimal, error)
 }
 
@@ -120,6 +123,24 @@ func (l *Ledger) JournalUsable(ctx context.Context, companyID vo.CompanyID, id v
 	return l.ledger.JournalUsable(ctx, uuid.UUID(companyID), uuid.UUID(id))
 }
 
+func (l *Ledger) AccountsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.GLAccountID, error) {
+	found, err := l.ledger.AccountIDsByCode(ctx, uuid.UUID(companyID), codes)
+	out := make(map[string]vo.GLAccountID, len(found))
+	for code, id := range found {
+		out[code] = vo.GLAccountID(id)
+	}
+	return out, err
+}
+
+func (l *Ledger) JournalsByCode(ctx context.Context, companyID vo.CompanyID, codes []string) (map[string]vo.JournalID, error) {
+	found, err := l.ledger.JournalIDsByCode(ctx, uuid.UUID(companyID), codes)
+	out := make(map[string]vo.JournalID, len(found))
+	for code, id := range found {
+		out[code] = vo.JournalID(id)
+	}
+	return out, err
+}
+
 func (l *Ledger) Post(ctx context.Context, e ports.LedgerEntry) (vo.EntryID, string, error) {
 	lines := make([]integration.JournalLine, len(e.Lines))
 	for i, x := range e.Lines {
@@ -140,7 +161,7 @@ func (l *Ledger) Reverse(ctx context.Context, companyID vo.CompanyID, userID vo.
 type ReceivablesAccess interface {
 	SettleReceivables(ctx context.Context, companyID, customerID uuid.UUID, doc integration.SettlementDoc, lines []integration.Settlement) (integration.SettlementResult, error)
 	UnsettleReceivables(ctx context.Context, companyID, documentID uuid.UUID) error
-	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID) ([]integration.OpenInvoice, error)
+	OpenReceivables(ctx context.Context, companyID, customerID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error)
 	OutputVat(ctx context.Context, companyID uuid.UUID, start, end time.Time) (integration.VatTotals, error)
 }
 
@@ -158,7 +179,7 @@ type settleFunc func(ctx context.Context, companyID, partyID uuid.UUID, doc inte
 type Settlements struct {
 	settle   settleFunc
 	unsettle func(ctx context.Context, companyID, documentID uuid.UUID) error
-	open     func(ctx context.Context, companyID, partyID uuid.UUID) ([]integration.OpenInvoice, error)
+	open     func(ctx context.Context, companyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]integration.OpenInvoice, error)
 }
 
 var _ ports.Settlements = (*Settlements)(nil)
@@ -168,7 +189,10 @@ func NewReceivables(s ReceivablesAccess) *Settlements {
 }
 
 func NewPayables(p PayablesAccess) *Settlements {
-	return &Settlements{settle: p.SettlePayables, unsettle: p.UnsettlePayables, open: p.OpenPayables}
+	open := func(ctx context.Context, companyID, partyID uuid.UUID, _ *uuid.UUID) ([]integration.OpenInvoice, error) {
+		return p.OpenPayables(ctx, companyID, partyID)
+	}
+	return &Settlements{settle: p.SettlePayables, unsettle: p.UnsettlePayables, open: open}
 }
 
 func (s *Settlements) Settle(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, doc ports.SettlementDoc, lines []ports.Settlement) (ports.SettlementResult, error) {
@@ -187,7 +211,11 @@ func (s *Settlements) Settle(ctx context.Context, companyID vo.CompanyID, partyI
 		ControlAccountID: vo.GLAccountID(res.ControlAccountID), Invoices: make([]ports.SettledInvoice, len(res.Invoices)),
 	}
 	for i, x := range res.Invoices {
-		out.Invoices[i] = ports.SettledInvoice{ID: vo.InvoiceID(x.InvoiceID), DocumentNo: x.DocumentNo, PartnerRef: x.PartnerRef, Net: x.Net, Gross: x.Gross}
+		out.Invoices[i] = ports.SettledInvoice{ID: vo.InvoiceID(x.InvoiceID), DocumentNo: x.DocumentNo, PartnerRef: x.PartnerRef, Kind: x.Kind,
+			Net: x.Net, Gross: x.Gross, VatBase: x.VatBase, Vat: x.Vat}
+	}
+	for _, l := range res.ExtraJournal {
+		out.ExtraJournal = append(out.ExtraJournal, journal.JournalLine{AccountID: vo.GLAccountID(l.AccountID), Debit: l.Debit, Credit: l.Credit})
 	}
 	return out, nil
 }
@@ -196,12 +224,12 @@ func (s *Settlements) Unsettle(ctx context.Context, companyID vo.CompanyID, docu
 	return s.unsettle(ctx, uuid.UUID(companyID), documentID)
 }
 
-func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID) ([]ports.OpenInvoice, error) {
-	rows, err := s.open(ctx, uuid.UUID(companyID), partyID)
+func (s *Settlements) Open(ctx context.Context, companyID vo.CompanyID, partyID uuid.UUID, billingNoteID *uuid.UUID) ([]ports.OpenInvoice, error) {
+	rows, err := s.open(ctx, uuid.UUID(companyID), partyID, billingNoteID)
 	out := make([]ports.OpenInvoice, len(rows))
 	for i, r := range rows {
 		out[i] = ports.OpenInvoice{ID: vo.InvoiceID(r.ID), DocumentNo: r.DocumentNo, PartnerRef: r.PartnerRef, Date: r.Date, DueDate: r.DueDate,
-			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding, Kind: r.Kind, VatUndue: r.VatUndue, TaxInvoice: r.TaxInvoice}
 	}
 	return out, err
 }

@@ -24,6 +24,7 @@ import (
 	"apexis/backend/internal/modules/purchasing"
 	"apexis/backend/internal/modules/sales"
 	"apexis/backend/internal/platform/database"
+	"apexis/backend/internal/platform/integration"
 	"apexis/backend/internal/platform/reports"
 )
 
@@ -88,7 +89,10 @@ func (a api) user(email string) string {
 	return r.data()["access_token"].(string)
 }
 
-func setup(t *testing.T) api {
+func setup(t *testing.T) api { return setupApp(t, nil) }
+
+// setupApp: hooks != nil = ลงทะเบียนการตั้งค่าบริษัทใหม่แบบ main.go (ledger -> sales -> purchasing -> inventory -> finance) ตามด้วย hooks
+func setupApp(t *testing.T, hooks []integration.CompanyCreatedHook) api {
 	dsn := os.Getenv("IDENTITY_TEST_DSN")
 	if dsn == "" {
 		t.Skip("IDENTITY_TEST_DSN not set")
@@ -131,6 +135,11 @@ func setup(t *testing.T) api {
 	sal.RegisterRoutes(mux)
 	fin := finance.New(db, idm, org, led, sal, pur)
 	fin.RegisterRoutes(mux)
+	if hooks != nil {
+		for _, h := range append([]integration.CompanyCreatedHook{led.ProvisionCompany, sal.ProvisionCompany, pur.ProvisionCompany, inv.ProvisionCompany, fin.ProvisionCompany}, hooks...) {
+			org.OnCompanyCreated(h)
+		}
+	}
 	reg := reports.NewRegistry()
 	for _, r := range []interface{ RegisterReports(*reports.Registry) }{led, inv, pur, sal, fin} {
 		r.RegisterReports(reg)
@@ -145,7 +154,7 @@ func setup(t *testing.T) api {
 func TestPayments(t *testing.T) {
 	a := setup(t)
 	owner := a.user("owner@example.com")
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 
@@ -335,7 +344,7 @@ func TestPayments(t *testing.T) {
 func TestReceiptsTransfersAndPermissionMigration(t *testing.T) {
 	a := setup(t)
 	owner := a.user("owner@example.com")
-	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME"}), 201, "company").id()
+	company := a.expect(a.do("POST", "/api/v1/companies", owner, obj{"code": "acme", "name": "ACME", "business_type": "trading"}), 201, "company").id()
 	base := "/api/v1/companies/" + company
 	a.expect(a.do("POST", base+"/fiscal-years", owner, obj{"year": 2026, "start_date": "2026-01-01"}), 201, "FY2026")
 	acc := map[string]string{}

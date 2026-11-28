@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { Alert, Button, ButtonLink } from '@/components'
 import { format, texts } from '@/config'
-import { formatAmount } from '@/features/accounting/money'
+import { formatAmount, toUnits } from '@/features/accounting/money'
 import { FormBar } from '@/features/forms/FormParts'
 import { formatDate } from '@/lib/format'
 import { apiRequest, errorMessage } from '@/lib/http'
 import { showToast } from '@/lib/toast'
-import type { Payment, Receipt, Transfer } from './types'
+import type { Payment, Receipt, ReceiptVatLine, Transfer } from './types'
 
 /** ปุ่มยกเลิกเอกสาร (PATCH status=cancelled) — ยืนยันก่อน, ไม่มีสิทธิ์ / ยกเลิกแล้ว = ไม่แสดง */
 function CancelBar({
@@ -177,6 +177,8 @@ export function MoneyDocView({
         </table>
       </div>
 
+      {'vat_lines' in doc && doc.vat_lines && doc.vat_lines.length > 0 && <VatLines lines={doc.vat_lines} />}
+
       <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
         <table className="w-full min-w-[32rem] border-collapse text-sm">
           <thead>
@@ -216,6 +218,53 @@ export function MoneyDocView({
 
       <CancelBar apiPath={apiPath} no={doc.document_no} canCancel={canCancel && doc.status === 'posted'} listHref={listHref} printHref={printHref} printLabel={printLabel} />
     </div>
+  )
+}
+
+/** ภาษีขายที่เกิดจากการรับเงินครั้งนี้ (รับเงินค่าบริการ) — ใบนี้เป็นใบเสร็จรับเงิน / ใบกำกับภาษี */
+function VatLines({ lines }: { lines: ReceiptVatLine[] }) {
+  const v = texts.finance.receipts.vatLines
+  const base = lines.reduce((s, l) => s + toUnits(l.base), 0n)
+  const vat = lines.reduce((s, l) => s + toUnits(l.vat), 0n)
+  return (
+    <section aria-labelledby="receipt-vat-lines" className="flex flex-col gap-3">
+      <h2 id="receipt-vat-lines" className="text-[15px] font-semibold">
+        {v.title}
+      </h2>
+      <div className="relative overflow-x-auto rounded-(--radius-panel) border border-line bg-surface shadow-card">
+        <table className="w-full min-w-[32rem] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line bg-subtle">
+              <th scope="col" className={th}>
+                {v.invoice}
+              </th>
+              <th scope="col" className={`${th} text-right`}>
+                {v.base}
+              </th>
+              <th scope="col" className={`${th} text-right`}>
+                {v.vat}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.invoice.id} className="border-b border-line">
+                <td className="px-3 py-2.5 font-mono text-[13px]">{l.invoice.document_no}</td>
+                <td className={num}>{formatAmount(l.base)}</td>
+                <td className={num}>{formatAmount(l.vat)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-subtle font-semibold">
+              <td className="px-3 py-3 text-right text-[13px] text-ink-muted">{texts.finance.totals.amount}</td>
+              <td className={num}>{formatAmount(base)}</td>
+              <td className={num}>{formatAmount(vat)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
   )
 }
 

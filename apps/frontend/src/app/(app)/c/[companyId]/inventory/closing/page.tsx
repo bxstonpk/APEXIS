@@ -66,7 +66,7 @@ export default async function Page({ params, searchParams }: Props) {
   ]
   return (
     <div className="flex flex-col gap-4">
-      <ListHeader title={t.heading} description={t.description} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={t.heading}count={list.error ? undefined : list.meta.total} />
       {canPost && <CreateClosing apiPath={invApi.closings(companyId)} defaultDate={lastMonthEnd} />}
       <ListView list={list} path={path} columns={columns} rowKey={(r) => r.id} sort={param(sp, 'sort') || '-period_end'} />
     </div>

@@ -41,16 +41,19 @@ type Module struct {
 	UseCases      *usecases.UseCases
 	identity      Identity
 	documentTypes *usecases.DocumentTypes
+	provisioning  *services.Provisioning
 	handler       *handlers.Handler
 }
 
 func New(db *gorm.DB, identity Identity) *Module {
 	idn := services.NewIdentity(identity)
 	types := usecases.NewDocumentTypes()
+	provisioning := services.NewProvisioning()
 	uc := usecases.New(usecases.Deps{
 		Tx:            gp.NewTransactionManager(db),
 		Auth:          idn,
 		Members:       idn,
+		Provisioner:   provisioning,
 		Companies:     gormrepo.NewCompanyRepository(db),
 		Branches:      gormrepo.NewBranchRepository(db),
 		BusinessUnits: gormrepo.NewBusinessUnitRepository(db),
@@ -62,7 +65,7 @@ func New(db *gorm.DB, identity Identity) *Module {
 		Numbering:     gormrepo.NewNumberingRepository(db),
 		DocumentTypes: types,
 	})
-	return &Module{UseCases: uc, identity: identity, documentTypes: types, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
+	return &Module{UseCases: uc, identity: identity, documentTypes: types, provisioning: provisioning, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
 
 func (m *Module) RegisterRoutes(mux *nethttp.ServeMux) {
@@ -86,6 +89,24 @@ func (m *Module) CompanySettings(ctx context.Context, companyID uuid.UUID) (acti
 		return false, 0, 0, err
 	}
 	return s.Active, s.AmountDecimals, s.QuantityDecimals, nil
+}
+
+// CompanyBusinessType คืนประเภทธุรกิจของบริษัท ("" เมื่อไม่พบบริษัท) — ใช้เลือกผังบัญชีมาตรฐาน
+func (m *Module) CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (integration.BusinessType, error) {
+	s, err := m.UseCases.Lookups.CompanySettings(ctx, vo.CompanyID(companyID))
+	if errors.Is(err, domain.ErrCompanyNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return integration.BusinessType(s.BusinessType), nil
+}
+
+// OnCompanyCreated ลงทะเบียน hook ที่ตั้งค่าเริ่มต้นให้บริษัทใหม่ (เรียกตอนเริ่มโปรแกรม)
+// hook ทำงานตามลำดับที่ลงทะเบียน ใน transaction เดียวกับการสร้างบริษัท — error = rollback ทั้งหมด
+func (m *Module) OnCompanyCreated(h integration.CompanyCreatedHook) {
+	m.provisioning.Add(h)
 }
 
 // FiscalPeriodAt คืนงวดบัญชีที่ครอบคลุม date: id งวด, ปีบัญชี, วันเริ่มปีบัญชี, งวดเปิดอยู่หรือไม่

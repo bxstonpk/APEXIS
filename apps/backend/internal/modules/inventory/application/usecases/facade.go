@@ -17,9 +17,18 @@ import (
 // ทำงานใน transaction ของผู้เรียก (ctx)
 type FacadeUseCases struct {
 	base
-	settings repositories.SettingsRepository
-	items    repositories.ItemRepository
-	docs     *DocumentUseCases
+	settings   repositories.SettingsRepository
+	items      repositories.ItemRepository
+	warehouses repositories.WarehouseRepository
+	docs       *DocumentUseCases
+}
+
+// Warehouses คืนคลังตาม id (คลังที่ไม่พบจะไม่อยู่ในผลลัพธ์) — query เดียว
+func (uc *FacadeUseCases) Warehouses(ctx context.Context, companyID vo.CompanyID, ids []vo.WarehouseID) ([]*entities.Warehouse, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	return uc.warehouses.FindByIDs(ctx, companyID, ids)
 }
 
 // PurchaseItems คืนสินค้าพร้อมบัญชีที่ใช้จริง (ไม่ผูกกับปีบัญชี — ใช้ตรวจสินค้าตอนสร้าง / อนุมัติใบสั่งซื้อ)
@@ -39,7 +48,7 @@ func (uc *FacadeUseCases) resolve(ctx context.Context, companyID vo.CompanyID, s
 	out := make([]dto.PurchaseItem, len(rows))
 	for i, r := range rows {
 		out[i] = dto.PurchaseItem{
-			ID: r.ID, Code: r.Code, Name: r.Name, Stock: r.Type == vo.ItemStock, Active: r.Status == vo.StatusActive,
+			ID: r.ID, Code: r.Code, Name: r.Name, Uom: r.Uom, Stock: r.Type == vo.ItemStock, Service: r.Type == vo.ItemService, Active: r.Status == vo.StatusActive,
 			Accounts: r.Item.Or(r.Category).Or(s.Defaults),
 		}
 	}

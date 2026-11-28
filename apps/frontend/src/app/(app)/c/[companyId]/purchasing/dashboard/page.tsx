@@ -28,7 +28,7 @@ export default async function Page({ params, searchParams }: Props) {
   const aging = `${purchasingPage(companyId, 'reports')}?book=ap-aging&end_date=${period.end}`
   return (
     <div className="flex flex-col gap-6">
-      <DashboardHeader company={ctx.company.name} title={t.title} description={t.description} period={period} />
+      <DashboardHeader company={ctx.company.name} title={t.title} period={period} />
       {error && <DashboardError message={error} />}
       {d && (
         <>
@@ -57,7 +57,7 @@ export default async function Page({ params, searchParams }: Props) {
           </KpiGrid>
           <DashboardGrid>
             <TrendChart title={t.monthly} description={texts.dashboard.monthlyHint} data={d.monthly} series={[{ key: 'net', label: t.net }]} />
-            <Panel title={t.aging} description={t.agingHint}>
+            <Panel title={t.aging}>
               <AgingList aging={d.payables.aging} href={aging} />
             </Panel>
             <Panel

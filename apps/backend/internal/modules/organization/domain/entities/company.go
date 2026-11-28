@@ -21,9 +21,10 @@ type CompanyData struct {
 	Email                string
 	Website              string
 	BaseCurrency         string
-	FiscalYearStartMonth int // 1 = มกราคม ... 10 = ตุลาคม (ปีงบประมาณราชการ)
-	AmountDecimals       int // ทศนิยมของจำนวนเงิน (0-6) — ทุก module ใช้ค่านี้ ไม่ fix ไว้ในโค้ด
-	QuantityDecimals     int // ทศนิยมของจำนวนสินค้า (0-6)
+	FiscalYearStartMonth int             // 1 = มกราคม ... 10 = ตุลาคม (ปีงบประมาณราชการ)
+	AmountDecimals       int             // ทศนิยมของจำนวนเงิน (0-6) — ทุก module ใช้ค่านี้ ไม่ fix ไว้ในโค้ด
+	QuantityDecimals     int             // ทศนิยมของจำนวนสินค้า (0-6)
+	BusinessType         vo.BusinessType // ประเภทธุรกิจ — แก้ไม่ได้หลังสร้าง (ผังบัญชีมาตรฐานสร้างตามประเภทนี้)
 	Status               vo.Status
 }
 
@@ -31,6 +32,7 @@ type CompanyData struct {
 //
 // กฎ:
 //   - รหัสบริษัทไม่ซ้ำทั้งระบบ (unique constraint) และแก้ไม่ได้หลังสร้าง
+//   - ประเภทธุรกิจ (บริการ / ซื้อขาย / ผลิต / ก่อสร้าง) ต้องระบุตอนสร้างและแก้ไม่ได้ — ผังบัญชีและค่าตั้งเริ่มต้นสร้างตามประเภทนี้
 //   - บริษัทที่ inactive เป็น "อ่านอย่างเดียว": อ่านข้อมูลได้ แต่สร้าง / แก้ / ลบข้อมูลของบริษัทไม่ได้
 //     ยกเว้นแก้ข้อมูลบริษัทเอง (เพื่อเปิดใช้งานกลับ)
 //   - จำนวนทศนิยม (เงิน / จำนวนสินค้า) เพิ่มได้แต่ลดไม่ได้ — ข้อมูลเดิมที่มีทศนิยมมากกว่าจะผิดรูป
@@ -58,6 +60,7 @@ func (c *Company) IsActive() bool    { return c.data.Status == vo.StatusActive }
 // Update แทนที่ข้อมูลทั้งก้อน ยกเว้นรหัสบริษัท (คงค่าเดิมเสมอ)
 func (c *Company) Update(d CompanyData) error {
 	d.Code = c.data.Code
+	d.BusinessType = c.data.BusinessType
 	n, err := normalizeCompany(d)
 	if err != nil {
 		return err
@@ -115,6 +118,9 @@ func normalizeCompany(d CompanyData) (CompanyData, error) {
 		return CompanyData{}, err
 	}
 	if out.QuantityDecimals, err = vo.NewDecimals(d.QuantityDecimals); err != nil {
+		return CompanyData{}, err
+	}
+	if out.BusinessType, err = vo.ParseBusinessType(string(d.BusinessType)); err != nil {
 		return CompanyData{}, err
 	}
 	if out.Status, err = vo.ParseStatus(string(d.Status)); err != nil {

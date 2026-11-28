@@ -31,7 +31,7 @@ export default async function Page({ params, searchParams }: Props) {
   const has = (p: string) => can(ctx.permissions, p)
   return (
     <div className="flex flex-col gap-6">
-      <DashboardHeader company={ctx.company.name} title={t.title} description={t.description} period={period} />
+      <DashboardHeader company={ctx.company.name} title={t.title} period={period} />
       {error && <DashboardError message={error} />}
       {d && (
         <>

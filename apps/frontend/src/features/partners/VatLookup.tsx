@@ -138,9 +138,7 @@ export function VatLookup({
     <div className="flex flex-col gap-2 sm:col-span-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <TextField
-          label={t.taxId}
-          hint={t.hint}
-          value={taxId}
+          label={t.taxId}          value={taxId}
           inputMode="numeric"
           autoComplete="off"
           maxLength={13}

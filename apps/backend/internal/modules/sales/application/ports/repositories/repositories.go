@@ -59,27 +59,52 @@ type OrderRepository interface {
 	Exposure(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID, exclude vo.OrderID, amountDecimals int) (vo.Money, error)
 }
 
-type DeliveryRepository interface {
-	Create(ctx context.Context, d *entities.Delivery) error
-	UpdateStatus(ctx context.Context, d *entities.Delivery) error
-	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (*entities.Delivery, error)
-	Get(ctx context.Context, companyID vo.CompanyID, id vo.DeliveryID) (dto.Delivery, error)
-	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.PostedSummary], error)
-	// UnitCosts: ต้นทุนเฉลี่ยต่อหน่วยของบรรทัดใบสั่งขายจากใบส่งของที่ยังไม่ยกเลิก (ไม่มี = ไม่อยู่ใน map) — query เดียว
-	UnitCosts(ctx context.Context, companyID vo.CompanyID, orderID vo.OrderID, orderLineNos []int) (map[int]vo.Money, error)
-}
-
+// InvoiceRepository: เอกสารขายที่ตั้งลูกหนี้ (ขายสินค้า / ขายบริการ / มัดจำ) — ตารางเดียวแยกด้วย kind
 type InvoiceRepository interface {
 	Create(ctx context.Context, i *entities.Invoice) error
 	UpdateStatus(ctx context.Context, i *entities.Invoice) error
+	// SaveState: ยอดที่ตัด / ภาษีที่ถึงกำหนด / มัดจำที่ถูกหัก / ใบกำกับภาษีก่อนรับเงิน ของใบเดียว
+	SaveState(ctx context.Context, i *entities.Invoice) error
 	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (*entities.Invoice, error)
-	// LockForSettlement: หัวใบแจ้งหนี้ (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
+	// LockForSettlement: หัวเอกสาร (ไม่มีบรรทัด) FOR UPDATE เรียง id — query เดียว
 	LockForSettlement(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) ([]*entities.Invoice, error)
 	SaveReceived(ctx context.Context, invoices []*entities.Invoice) error
 	Get(ctx context.Context, companyID vo.CompanyID, id vo.InvoiceID) (dto.Invoice, error)
 	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.InvoiceSummary], error)
-	// Open: ใบแจ้งหนี้ที่ยังค้างรับของลูกค้า เรียงวันครบกำหนด — query เดียว
-	Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenInvoice, error)
+	// Open: เอกสารที่ยังค้างรับของลูกค้า เรียงวันครบกำหนด (billingNoteID = เฉพาะใบในใบวางบิล) — query เดียว
+	Open(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID, billingNoteID *vo.BillingNoteID) ([]dto.OpenInvoice, error)
+	// OpenDeposits: มัดจำที่รับเงินครบแล้วและยังหักได้ของลูกค้า — query เดียว
+	OpenDeposits(ctx context.Context, companyID vo.CompanyID, customerID vo.CustomerID) ([]dto.OpenDeposit, error)
+	// Billable: ข้อมูลใบที่ใช้ตรวจตอนวางบิล (รวมว่าอยู่ในใบวางบิลอื่นที่ยังเปิดหรือไม่) — query เดียว
+	Billable(ctx context.Context, companyID vo.CompanyID, ids []vo.InvoiceID) (map[vo.InvoiceID]entities.BillableInvoice, error)
+}
+
+// VatRecognition คือภาษีขายที่ถึงกำหนดของใบแจ้งหนี้บริการ 1 รายการ
+type VatRecognition struct {
+	Source     string // receipt | tax_invoice
+	DocumentID uuid.UUID
+	DocumentNo string
+	Date       time.Time
+	InvoiceID  vo.InvoiceID
+	Base       vo.Money
+	Vat        vo.Money
+}
+
+// VatRecognitionRepository: ประวัติภาษีที่ถึงกำหนด (รายงานภาษีขายตามวันที่ถึงกำหนด)
+type VatRecognitionRepository interface {
+	Create(ctx context.Context, companyID vo.CompanyID, rows []VatRecognition) error
+	// LockDocument: รายการที่ยังมีผลของเอกสาร (FOR UPDATE)
+	LockDocument(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) ([]VatRecognition, error)
+	Cancel(ctx context.Context, companyID vo.CompanyID, documentID uuid.UUID) error
+}
+
+// BillingNoteRepository: ใบวางบิล
+type BillingNoteRepository interface {
+	Create(ctx context.Context, b *entities.BillingNote) error
+	UpdateStatus(ctx context.Context, b *entities.BillingNote) error
+	FindForUpdate(ctx context.Context, companyID vo.CompanyID, id vo.BillingNoteID) (*entities.BillingNote, error)
+	Get(ctx context.Context, companyID vo.CompanyID, id vo.BillingNoteID) (dto.BillingNote, error)
+	List(ctx context.Context, companyID vo.CompanyID, f dto.DocumentFilter) (listing.Result[dto.BillingNoteSummary], error)
 }
 
 // CreditNoteRepository: ใบลดหนี้ขาย
@@ -106,10 +131,12 @@ type SettlementRepository interface {
 type ReportRepository interface {
 	Outstanding(ctx context.Context, companyID vo.CompanyID, f dto.OutstandingFilter) (listing.Result[dto.OutstandingRow], error)
 	Aging(ctx context.Context, companyID vo.CompanyID, f dto.AgingFilter) (listing.Result[dto.AgingRow], dto.AgingRow, error)
-	// OutputVat: ใบแจ้งหนี้ + ใบลดหนี้ (ติดลบ) ที่ยังไม่ยกเลิกในช่วงวันที่ — ฐาน = ยอดก่อน VAT, ภาษี = VAT
+	// OutputVat: เอกสารที่ภาษีขายเกิดแล้ว (ขายสินค้า / มัดจำ / ใบกำกับภาษี / รับชำระบริการ / ใบลดหนี้ติดลบ) ในช่วงวันที่
 	OutputVat(ctx context.Context, companyID vo.CompanyID, f dto.TaxFilter) (listing.Result[dto.TaxRow], dto.TaxRow, error)
-	// VatTotals: ภาษีขายของช่วงวันที่ — ใบแจ้งหนี้ลบใบลดหนี้ (ที่ยังไม่ยกเลิก) — query เดียว
+	// VatTotals: ยอดรวมของ OutputVat ในช่วงวันที่ — query เดียว
 	VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error)
+	// UndueVat: ใบแจ้งหนี้บริการที่ภาษียังไม่ถึงกำหนด ณ วันที่ (ตั้งหัก ถึงกำหนด / ลดหนี้ ที่เกิดถึงวันนั้น)
+	UndueVat(ctx context.Context, companyID vo.CompanyID, f dto.UndueVatFilter) (listing.Result[dto.UndueVatRow], dto.UndueVatRow, error)
 	// Dashboard: ภาพรวมแอปขายในช่วง (aggregate ไม่กี่ query)
 	Dashboard(ctx context.Context, companyID vo.CompanyID, p dashperiod.Period) (dto.Dashboard, error)
 }

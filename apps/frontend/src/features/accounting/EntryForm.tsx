@@ -193,9 +193,7 @@ export function EntryForm({ companyApi, listHref, entriesPath, canPost, entry, d
         />
         <TextField label={t.fields.date} required type="date" value={head.date} error={errors.date} onChange={(e) => setHead((h) => ({ ...h, date: e.target.value }))} />
         <TextField
-          label={t.fields.reference}
-          hint={t.referenceHint}
-          value={head.reference}
+          label={t.fields.reference}          value={head.reference}
           maxLength={100}
           onChange={(e) => setHead((h) => ({ ...h, reference: e.target.value }))}
         />

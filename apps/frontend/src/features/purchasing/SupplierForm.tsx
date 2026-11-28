@@ -97,7 +97,7 @@ export function SupplierForm({
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-6">
       <FormNotices formError={form.formError} readOnly={readOnly} />
-      <FormSection title={t.sections.tax} description={t.sections.taxHint}>
+      <FormSection title={t.sections.tax}>
         <VatLookup
           source={lookupApi}
           taxId={v.tax_id}
@@ -111,9 +111,7 @@ export function SupplierForm({
           autoFetch={!item}
         />
         <TextField
-          label={f.branchNo}
-          hint={texts.sales.customers.branchHint}
-          value={v.branch_no}
+          label={f.branchNo}          value={v.branch_no}
           maxLength={5}
           inputMode="numeric"
           disabled={readOnly}
@@ -129,21 +127,18 @@ export function SupplierForm({
         />
         <label className="flex cursor-pointer items-start gap-3 sm:col-span-2">
           <input type="checkbox" checked={vat} disabled={readOnly} onChange={(e) => setVat(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
-          <span>
-            <span className="block text-sm font-medium">{f.vatRegistered}</span>
-            <span className="block text-[13px] text-ink-muted">{f.vatRegisteredHint}</span>
-          </span>
+          <span className="block text-sm font-medium">{f.vatRegistered}</span>
         </label>
       </FormSection>
-      <FormSection title={texts.branches.form.general} description={texts.common.sections.generalHint}>
+      <FormSection title={texts.branches.form.general}>
         <TextField label={f.code} required value={v.code} maxLength={30} disabled={readOnly} error={errors.code} onChange={(e) => set('code', normalizeCode(e.target.value))} />
         <TextField label={f.name} required value={v.name} maxLength={200} disabled={readOnly} error={errors.name} onChange={(e) => set('name', e.target.value)} />
         {item && <StatusSelect value={v.status} disabled={readOnly} onChange={(s) => set('status', s)} />}
       </FormSection>
-      <FormSection title={texts.partners.address.section} description={texts.partners.address.sectionHint}>
+      <FormSection title={texts.partners.address.section}>
         <ThaiAddressFields value={address} onChange={setAddress} disabled={readOnly} postalError={errors.postal} />
       </FormSection>
-      <FormSection title={texts.partners.branches.section} description={texts.partners.branches.sectionHint}>
+      <FormSection title={texts.partners.branches.section}>
         <BranchesEditor value={branches} onChange={setBranches} errors={branchErrs} disabled={readOnly} />
       </FormSection>
       <FormSection title={t.sections.terms}>
