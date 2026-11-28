@@ -29,12 +29,14 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
   )
   const branch = supplier?.branches?.find((b) => b.branch_no === o.supplier_branch_no)
   const vat = toUnits(o.vat_rate) > 0n
+  const service = o.kind === 'service'
   return (
     <>
-      <PrintToolbar backHref={`${purchasingPage(companyId, 'orders')}/${o.id}`} />
+      <PrintToolbar backHref={`${purchasingPage(companyId, service ? 'work-orders' : 'orders')}/${o.id}`} />
       <PrintDocument
+        docType={service ? 'purchasing.work_order' : 'purchasing.order'}
         letterhead={letterhead}
-        title={pp.purchaseOrder}
+        title={service ? pp.workOrder : pp.purchaseOrder}
         docNo={o.order_no}
         info={[
           [p.date, printDate(o.date)],

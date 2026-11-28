@@ -28,6 +28,14 @@ var (
 	ErrInvalidFiscalStart  = errors.New("fiscal year must start on the first day of a month")
 	ErrInvalidNumbering    = errors.New("invalid document number format") // detailed
 	ErrInvalidBusinessType = errors.New("business type must be service, trading, manufacturing or construction")
+	// แม่แบบเอกสาร / รูป
+	ErrInvalidPaper           = errors.New("paper must be a4_portrait, a4_landscape or a5_portrait")
+	ErrInvalidTemplateDocType = errors.New("invalid template document type")
+	ErrInvalidTemplateHTML    = errors.New("template html is required and must not exceed 200 KB")
+	ErrTemplateDisallowed     = errors.New("template contains disallowed content") // detailed: ระบุสิ่งที่ไม่อนุญาต
+	ErrInvalidAssetName       = errors.New("asset name must be 1-40 characters: a-z, 0-9, - or _ (starting with a letter or digit)")
+	ErrInvalidAssetType       = errors.New("asset must be a png, jpeg or svg image")
+	ErrAssetTooLarge          = errors.New("asset must not exceed 500 KB")
 )
 
 // ไม่พบ (404)
@@ -41,6 +49,8 @@ var (
 	ErrFiscalYearNotFound   = errors.New("fiscal year not found")
 	ErrFiscalPeriodNotFound = errors.New("fiscal period not found")
 	ErrDocumentTypeNotFound = errors.New("document type not found")
+	ErrTemplateNotFound     = errors.New("document template not found")
+	ErrAssetNotFound        = errors.New("document asset not found")
 )
 
 // ขัดแย้งกับข้อมูลที่มีอยู่ (409)
@@ -50,6 +60,7 @@ var (
 	ErrInUse              = errors.New("record is referenced by other records")
 	ErrFiscalYearExists   = errors.New("fiscal year already exists")
 	ErrFiscalYearOverlaps = errors.New("fiscal year overlaps an existing fiscal year")
+	ErrAssetNameExists    = errors.New("asset name already exists")
 )
 
 // ผิดกฎธุรกิจ (422)
@@ -61,6 +72,7 @@ var (
 	ErrProjectEndDateRequired = errors.New("closed project site requires an end date")
 	ErrPeriodCloseOrder       = errors.New("earlier periods must be closed first")
 	ErrPeriodReopenOrder      = errors.New("later periods must be reopened first")
+	ErrTemplateInactive       = errors.New("inactive template cannot be the default")
 )
 
 // สิทธิ์ (403)

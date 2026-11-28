@@ -333,6 +333,7 @@ login (รหัสชั่วคราว) → cookie มี user.must_change_
 | สาขา, หน่วยธุรกิจ, แผนก, ศูนย์ต้นทุน, โครงการ / ไซต์งาน | รายการ / สร้าง / แก้ไข / ลบ | ลำดับชั้นแสดงเป็นตาราง มีคอลัมน์ "แม่" และกรอง `?parent_id=`; backend ตรวจการวน, ข้อมูลที่ถูกอ้างอิงลบไม่ได้ |
 | ปีบัญชี / งวด | รายการปี, สร้างปี (backend สร้าง 12 งวด), หน้าปีพร้อมงวด | ปิด / เปิดทีละงวด (ยืนยันก่อน) — ปุ่มแสดงเฉพาะงวดแรกที่เปิด / งวดล่าสุดที่ปิด; ต้องมีสิทธิ์ `fiscal_period:close` |
 | เลขที่เอกสาร | ตารางทุกชนิดเอกสาร จัดกลุ่มตาม module | แก้ทีละแถว, ตัวอย่างเลขที่เปลี่ยนทันทีที่พิมพ์ (`lib/numbering.ts`), "ใช้ค่าเริ่มต้น" |
+| แม่แบบเอกสาร | รายการจัดกลุ่มตามชนิดเอกสาร (`?doc_type=`), สร้าง (`new?doc_type=&from=builtin`), แก้ (`templates/{id}`) | แถว "แม่แบบมาตรฐาน" อ่านอย่างเดียว (ส่งออก / สร้างจากแม่แบบมาตรฐาน); แม่แบบของบริษัท: ส่งออก .html, ตั้งค่าเริ่มต้น, ลบ (ยืนยันก่อน); ส่วน "รูปของแม่แบบ" อัปโหลด / คัดลอก `<img src="{{asset "ชื่อ"}}">` / ลบ |
 | ข้อมูลบริษัท | ฟอร์มเดียว | ทศนิยมเลือกได้ตั้งแต่ค่าปัจจุบัน (ลดไม่ได้), บันทึกแล้วอยู่หน้าเดิม |
 
 เพิ่มหน้าจริงให้แอปใหม่: สร้างโฟลเดอร์ `c/[companyId]/<app>/` ที่มี `layout.tsx` (AppShell), `page.tsx` (`redirectToFirstMenu`), `[...rest]/page.tsx` (`ComingSoon`) แบบเดียวกับ `organization/` แล้วเพิ่มหน้าของเมนูนั้น
@@ -370,6 +371,15 @@ login (รหัสชั่วคราว) → cookie มี user.must_change_
   - ภาษีขายยังไม่ถึงกำหนด (`?book=undue-output-vat&end_date=`): ใบแจ้งหนี้ค่าบริการที่ภาษียังไม่เกิด ณ วันที่ — ใช้กระทบยอดบัญชีภาษีขายยังไม่ถึงกำหนด
 - สรุป ภ.พ.30 (`/finance/reports?book=vat-summary`) — ภาษีขาย / ซื้อ / ต้องชำระ / ชำระเกิน + ลิงก์ไปรายงานรายใบของช่วงเดียวกัน
 - หนังสือรับรอง 50 ทวิ: ปุ่ม "พิมพ์หนังสือรับรอง 50 ทวิ" ในใบสำคัญจ่ายที่มีภาษีหัก → `/finance/payments/{id}/wht-certificate` (`WhtCertificate`: ฉบับที่ 1 / 2, ภ.ง.ด.3 / 53 ตามประเภทผู้รับเงิน, ยอดรวมตามประเภทเงินได้ของ "ประเภทภาษีหัก ณ ที่จ่าย")
+
+### แม่แบบเอกสารพิมพ์ (`features/print-templates/`)
+
+- **ขั้นตอน render**: หน้าพิมพ์สร้างข้อมูลของชนิดเอกสาร (`data.ts` `documentPrintData` / `tableDocument`, `finance/WhtCertificate.tsx` `whtCertificateData`, `finance/TaxForms.tsx` `withholdingData` / `pp30Data` / `vatReportData`) → `<TemplatedPrint docType data>` โหลดแม่แบบ (`?template=<id>` → `GET /document-templates/default` → `builtin/`) → `engine.ts`: Handlebars (`Handlebars.create()`, escape `{{x}}` เสมอ, ปิด prototype access) → DOMPurify → เอกสารเต็ม (ฟอนต์ IBM Plex Sans Thai จาก `/print-fonts/`, `@page` ตามกระดาษ) → `<iframe srcDoc sandbox="allow-same-origin allow-modals">` (ไม่มี allow-scripts) — ปุ่มพิมพ์เรียก `iframe.contentWindow.print()`
+- **helper**: `money`, `qty`, `date` (พ.ศ.), `bahtText`, `eq`, `inc`, `asset "ชื่อ"` (URL ของรูป)
+- **รายการตัวแปร**: `catalog.ts` (`VARIABLES` ต่อตระกูล document / wht_certificate / withholding / pp30 / vat_report, `HELPERS`, `sampleData(docType)` ข้อมูลตัวอย่างของตัวแก้)
+- **แม่แบบมาตรฐาน vs ของบริษัท**: แม่แบบมาตรฐานอยู่ในโค้ด (`builtin/document.ts`, `wht.ts`, `taxforms.ts`, เลือกด้วย `builtinTemplate(docType)`) — ไม่อยู่ใน DB, อ่านอย่างเดียว, ใช้เมื่อบริษัทไม่มีค่าเริ่มต้น; แม่แบบของบริษัทอยู่ใน DB (เริ่มจากคัดลอกแม่แบบมาตรฐานหรือนำเข้า .html)
+- **ตัวแก้** (`TemplateEditor.tsx`): โค้ด HTML (มีเลขบรรทัด) + นำเข้า / ส่งออก .html + คลิกตัวแปร / helper เพื่อแทรกที่เคอร์เซอร์ + ตัวอย่างสดด้วยข้อมูลตัวอย่าง (สร้างหลัง mount เท่านั้น เพราะ DOMPurify ต้องมี DOM); error `template_contains_disallowed_content` แสดงที่ช่องโค้ดพร้อมสิ่งที่ backend พบ
+- ตัวเลือกแม่แบบบนหน้าพิมพ์แสดงเมื่อบริษัทมีแม่แบบของชนิดนั้นอย่างน้อย 1 ใบ (ตัวเลือก = มาตรฐาน + ของบริษัท) และเปลี่ยน `?template=`
 
 ### การโหลดหน้า (skeleton, `features/loading/`)
 - ทุกการโหลดหน้าแสดง skeleton เสมอ (ไม่ว่าจะเร็วหรือช้า) — โครงเดียวกับหน้าจริงเพื่อไม่ให้เนื้อหากระโดด; `role="status"` + `aria-busy` + ข้อความ "กำลังโหลด..." สำหรับ screen reader; ปิด animation เมื่อตั้ง reduced motion

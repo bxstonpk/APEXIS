@@ -51,6 +51,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     <>
       <PrintToolbar backHref={`${financePage(companyId, 'receipts')}/${r.id}`} />
       <PrintDocument
+        docType="finance.receipt"
         letterhead={letterhead}
         title={title}
         docNo={r.document_no}

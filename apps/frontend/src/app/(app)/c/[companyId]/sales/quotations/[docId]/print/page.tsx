@@ -26,6 +26,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
     <>
       <PrintToolbar backHref={`${salesPage(companyId, 'quotations')}/${q.id}`} />
       <PrintDocument
+        docType="sales.quotation"
         letterhead={letterhead}
         title={p.quotation}
         docNo={q.document_no}

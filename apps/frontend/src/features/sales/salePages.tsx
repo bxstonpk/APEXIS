@@ -280,6 +280,7 @@ export async function SalePrintPage({ companyId, kind, docId, as }: { companyId:
         </div>
       )}
       <PrintDocument
+        docType={kind === 'invoice' ? 'sales.invoice' : asTax ? 'sales.tax_invoice' : 'sales.service_invoice'}
         letterhead={letterhead}
         title={salePrintTitle(kind, vat, asTax)}
         docNo={asTax ? inv.tax_invoice!.no : inv.document_no}

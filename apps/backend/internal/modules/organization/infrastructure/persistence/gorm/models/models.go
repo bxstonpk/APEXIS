@@ -183,6 +183,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&FiscalYearModel{},
 		&FiscalPeriodModel{},
 		&NumberingModel{},
+		&DocumentTemplateModel{},
+		&DocumentAssetModel{},
 	)
 }
 
@@ -198,3 +200,38 @@ type NumberingModel struct {
 }
 
 func (NumberingModel) TableName() string { return "organization_document_numberings" }
+
+// DocumentTemplateModel: แม่แบบเอกสารพิมพ์ที่บริษัทสร้าง (HTML + Handlebars)
+// ค่าเริ่มต้นได้ 1 แม่แบบต่อ (บริษัท, ชนิดเอกสาร) — partial unique index; ค้นรายการตาม (company_id, doc_type)
+type DocumentTemplateModel struct {
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	CompanyID uuid.UUID      `gorm:"type:uuid;not null;index:idx_org_doc_templates_type,priority:1;uniqueIndex:uq_org_doc_templates_default,priority:1,where:is_default AND deleted_at IS NULL"`
+	Company   *CompanyModel  `gorm:"foreignKey:CompanyID;constraint:OnDelete:RESTRICT"`
+	DocType   string         `gorm:"size:50;not null;index:idx_org_doc_templates_type,priority:2;uniqueIndex:uq_org_doc_templates_default,priority:2,where:is_default AND deleted_at IS NULL"`
+	Name      string         `gorm:"size:100;not null"`
+	HTML      string         `gorm:"type:text;not null"`
+	Paper     string         `gorm:"size:20;not null;check:chk_org_doc_templates_paper,paper IN ('a4_portrait','a4_landscape','a5_portrait')"`
+	IsDefault bool           `gorm:"not null;default:false"`
+	Status    string         `gorm:"size:20;not null;check:chk_org_doc_templates_status,status IN ('active','inactive')"`
+	CreatedBy uuid.UUID      `gorm:"type:uuid;not null"`
+	CreatedAt time.Time      `gorm:"not null"`
+	UpdatedAt time.Time      `gorm:"not null"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+func (DocumentTemplateModel) TableName() string { return "organization_document_templates" }
+
+// DocumentAssetModel: รูปของแม่แบบ (โลโก้ / ลายเซ็น / ตราประทับ) เก็บใน DB — ชื่อไม่ซ้ำในบริษัท, ลบจริง (ไม่มีข้อมูลธุรกิจอ้างถึง)
+type DocumentAssetModel struct {
+	ID          uuid.UUID     `gorm:"type:uuid;primaryKey"`
+	CompanyID   uuid.UUID     `gorm:"type:uuid;not null;uniqueIndex:uq_org_doc_assets_name,priority:1"`
+	Company     *CompanyModel `gorm:"foreignKey:CompanyID;constraint:OnDelete:RESTRICT"`
+	Name        string        `gorm:"size:40;not null;uniqueIndex:uq_org_doc_assets_name,priority:2"`
+	ContentType string        `gorm:"size:40;not null;check:chk_org_doc_assets_type,content_type IN ('image/png','image/jpeg','image/svg+xml')"`
+	Size        int           `gorm:"not null;check:chk_org_doc_assets_size,size > 0 AND size <= 512000"`
+	Data        []byte        `gorm:"type:bytea;not null"`
+	CreatedAt   time.Time     `gorm:"not null"`
+	UpdatedAt   time.Time     `gorm:"not null"`
+}
+
+func (DocumentAssetModel) TableName() string { return "organization_document_assets" }

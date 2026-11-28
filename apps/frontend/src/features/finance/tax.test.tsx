@@ -6,7 +6,18 @@ import { findApp } from '@/config/apps'
 import type { Letterhead } from '@/features/sales/types'
 import { monthLabel, paginate, type Pp30, type TaxOverview, type VatReport, type WhtForm } from './tax'
 import { TaxFilingPanel, validateFiling } from './TaxFilingPanel'
-import { Pp30Print, VatReportPrint, WhtFormPrint } from './TaxForms'
+import { builtinTemplate } from '@/features/print-templates/builtin'
+import { renderTemplate, sanitize } from '@/features/print-templates/engine'
+import type { TemplateDocType } from '@/features/print-templates/types'
+import { pp30Data, vatReportData, withholdingData } from './TaxForms'
+
+/** แสดงแม่แบบมาตรฐานของชนิดเอกสารด้วยข้อมูลพิมพ์ แล้วคืน container (แทน iframe ในหน้าจริง) */
+function showBuiltin(docType: TemplateDocType, data: object): HTMLElement {
+  const el = document.createElement('div')
+  el.innerHTML = sanitize(renderTemplate(builtinTemplate(docType).html, data as Record<string, unknown>))
+  document.body.appendChild(el)
+  return el
+}
 import { TaxOverviewTable } from './TaxOverviewTable'
 
 const refresh = vi.fn()
@@ -114,8 +125,8 @@ describe('พิมพ์', () => {
   it('ใบแนบ ภ.ง.ด.53: หัวกระดาษ / เดือน / จำนวนแผ่น / รวมทั้งสิ้น', () => {
     const lines = Array.from({ length: 13 }, (_, i) => line(i + 1, '1000', '30'))
     const data: WhtForm = { form: 'pnd53', month: '2026-11', summary: { payees: 13, lines: 13, base: '13000', wht: '390' }, lines, filing: null }
-    const { container } = render(<WhtFormPrint letterhead={letterhead} data={data} />)
-    expect(container.querySelectorAll('article.a4-landscape')).toHaveLength(2)
+    const container = showBuiltin('finance.pnd53', withholdingData(letterhead, data))
+    expect(container.querySelectorAll('.sheet')).toHaveLength(2)
     expect(screen.getAllByText(`ใบแนบ ${t.forms.pnd53}`)).toHaveLength(2)
     expect(screen.getAllByText('เดือนภาษี พฤศจิกายน 2569')).toHaveLength(2)
     expect(screen.getByText('แผ่นที่ 2 / 2')).toBeInTheDocument()
@@ -127,11 +138,11 @@ describe('พิมพ์', () => {
   it('ภ.พ.30 และรายงานภาษีซื้อ', () => {
     const pp30: Pp30 = { month: '2026-10', sales: { base: '10000', tax: '700', documents: 1 }, zero_rated: '0', exempt: '0', purchases: { base: '0', tax: '0', documents: 0 },
       carry_in: '0', net: '700', payable: '700', overpaid: '0', prev_filed: false, filing: null }
-    render(<Pp30Print letterhead={letterhead} data={pp30} />)
+    showBuiltin('finance.pp30', pp30Data(letterhead, pp30))
     expect(screen.getByText(t.formNames.pp30!)).toBeInTheDocument()
     expect(screen.getByText(/ต้องชำระ 700.00/)).toBeInTheDocument()
     const rep: VatReport = { kind: 'input', month: '2026-11', rows: [{ seq: 1, date: '2026-11-10', document_no: 'TI-001', party_name: 'บริษัท เครื่องเขียน จำกัด', tax_id: '0105555000001', branch_no: '00000', base: '2000', tax: '140' }], base: '2000', tax: '140' }
-    render(<VatReportPrint letterhead={letterhead} data={rep} />)
+    showBuiltin('finance.vat_report_input', vatReportData(letterhead, rep))
     expect(screen.getByText(t.vatReport.input)).toBeInTheDocument()
     expect(screen.getByText('TI-001')).toBeInTheDocument()
     expect(screen.getByText(t.vatReport.partyInput)).toBeInTheDocument()

@@ -67,4 +67,17 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	// รูปแบบเลขที่เอกสาร (ทุกชนิดที่ module ลงทะเบียน) — แก้แล้วมีผลกับเอกสารที่ออกเลขหลังจากนี้
 	handle("GET "+base+"/document-numberings", h.ListNumberings)
 	handle("PUT "+base+"/document-numberings/{docType}", h.UpdateNumbering)
+
+	// แม่แบบเอกสารพิมพ์ (HTML + Handlebars) และรูปของแม่แบบ — อ่าน = สมาชิกทุกคน, เขียน = organization.document_template:manage
+	handle("GET "+base+"/document-templates", h.ListDocumentTemplates)
+	handle("POST "+base+"/document-templates", h.CreateDocumentTemplate)
+	handle("GET "+base+"/document-templates/default", h.GetDefaultDocumentTemplate)
+	handle("GET "+base+"/document-templates/{templateID}", h.GetDocumentTemplate)
+	handle("PUT "+base+"/document-templates/{templateID}", h.UpdateDocumentTemplate)
+	handle("DELETE "+base+"/document-templates/{templateID}", h.DeleteDocumentTemplate)
+	handle("PUT "+base+"/document-templates/{templateID}/default", h.SetDefaultDocumentTemplate)
+	handle("GET "+base+"/document-assets", h.ListDocumentAssets)
+	handle("POST "+base+"/document-assets", h.UploadDocumentAsset)
+	handle("DELETE "+base+"/document-assets/{assetID}", h.DeleteDocumentAsset)
+	handle("GET "+base+"/document-assets/{assetID}/content", h.DocumentAssetContent)
 }

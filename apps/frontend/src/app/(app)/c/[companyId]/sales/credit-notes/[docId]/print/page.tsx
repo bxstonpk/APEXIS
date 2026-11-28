@@ -37,6 +37,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
         </div>
       )}
       <PrintDocument
+        docType="sales.credit_note"
         letterhead={letterhead}
         title={creditNotePrintTitle(vat, d.vat_kind)}
         docNo={d.document_no}

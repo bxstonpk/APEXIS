@@ -54,6 +54,13 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrInvalidFiscalYear, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidFiscalStart, Status: http.StatusBadRequest},
 	{Err: domain.ErrInvalidNumbering, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidPaper, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidTemplateDocType, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidTemplateHTML, Status: http.StatusBadRequest},
+	{Err: domain.ErrTemplateDisallowed, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidAssetName, Status: http.StatusBadRequest},
+	{Err: domain.ErrInvalidAssetType, Status: http.StatusBadRequest},
+	{Err: domain.ErrAssetTooLarge, Status: http.StatusBadRequest},
 	// 401 / 403
 	{Err: errUnauthenticated, Status: http.StatusUnauthorized},
 	{Err: domain.ErrForbidden, Status: http.StatusForbidden},
@@ -67,12 +74,15 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrFiscalYearNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrFiscalPeriodNotFound, Status: http.StatusNotFound},
 	{Err: domain.ErrDocumentTypeNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrTemplateNotFound, Status: http.StatusNotFound},
+	{Err: domain.ErrAssetNotFound, Status: http.StatusNotFound},
 	// 409
 	{Err: domain.ErrCodeExists, Status: http.StatusConflict},
 	{Err: domain.ErrBranchExists, Status: http.StatusConflict},
 	{Err: domain.ErrInUse, Status: http.StatusConflict},
 	{Err: domain.ErrFiscalYearExists, Status: http.StatusConflict},
 	{Err: domain.ErrFiscalYearOverlaps, Status: http.StatusConflict},
+	{Err: domain.ErrAssetNameExists, Status: http.StatusConflict},
 	// 422
 	{Err: domain.ErrCompanyInactive, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrDecimalsDecrease, Status: http.StatusUnprocessableEntity},
@@ -81,7 +91,8 @@ var errorMapper = httpx.NewErrorMapper([]httpx.ErrorRule{
 	{Err: domain.ErrProjectEndDateRequired, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodCloseOrder, Status: http.StatusUnprocessableEntity},
 	{Err: domain.ErrPeriodReopenOrder, Status: http.StatusUnprocessableEntity},
-}, requests.ErrValidation, domain.ErrInvalidNumbering)
+	{Err: domain.ErrTemplateInactive, Status: http.StatusUnprocessableEntity},
+}, requests.ErrValidation, domain.ErrInvalidNumbering, domain.ErrTemplateDisallowed)
 
 // serve: อ่าน actor (user + {companyID}) -> fn -> เขียน response (route ใต้ /companies/{companyID})
 // fn คืน body ที่ห่อ envelope แล้ว (one / httpx.ToList) หรือ nil สำหรับ 204

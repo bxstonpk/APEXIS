@@ -124,6 +124,26 @@ prefix: `/api/v1/companies/{companyID}` — อ่านต้องมีสิ
 | Fiscal period | `GET /fiscal-periods`; `GET`, `PATCH /fiscal-periods/{fiscalPeriodID}` | `fiscal_year, status` (open/closed), `date` | `start_date` |
 | เลขที่เอกสาร | `GET /document-numberings`; `PUT /document-numberings/{docType}` | — (ทุกชนิดเอกสาร พร้อม `example`) | `organization.numbering:read\|manage` |
 
+### แม่แบบเอกสารพิมพ์ (ORG-11)
+
+| Method | Path | Permission | หมายเหตุ |
+|---|---|---|---|
+| GET | `/companies/{companyID}/document-templates` | สมาชิก | `?doc_type=&q=&status=&page=&page_size=` — ไม่มี `html` ในรายการ; เรียง `doc_type, is_default DESC, name` |
+| GET | `/companies/{companyID}/document-templates/default?doc_type=` | สมาชิก | แม่แบบค่าเริ่มต้นพร้อม `html` — ไม่มี = 404 `document_template_not_found` (frontend ใช้แม่แบบมาตรฐาน) |
+| GET | `/companies/{companyID}/document-templates/{templateID}` | สมาชิก | พร้อม `html` |
+| POST | `/companies/{companyID}/document-templates` | `organization.document_template:manage` | `{doc_type, name, html, paper, status, is_default}` — 201; `is_default` ตั้งค่าเริ่มต้นใน transaction เดียวกัน |
+| PUT | `/companies/{companyID}/document-templates/{templateID}` | manage | `{name, html, paper, status}` (`doc_type` / `is_default` ไม่เปลี่ยน; ปิดใช้งาน = ไม่เป็นค่าเริ่มต้นแล้ว) |
+| PUT | `/companies/{companyID}/document-templates/{templateID}/default` | manage | ล้างค่าเริ่มต้นเดิมของชนิดนั้นแล้วตั้งใบนี้ (transaction เดียว); แม่แบบปิดใช้งาน = 422 `inactive_template_cannot_be_the_default` |
+| DELETE | `/companies/{companyID}/document-templates/{templateID}` | manage | soft delete — 204 |
+| GET | `/companies/{companyID}/document-assets` | สมาชิก | `{id, name, content_type, size, created_at}` |
+| POST | `/companies/{companyID}/document-assets` | manage | `{name, data}` — `data` เป็น base64 หรือ data URL; ชนิดตรวจจาก magic bytes (PNG / JPEG) หรือเนื้อหา SVG ที่ผ่านกฎเดียวกับแม่แบบ; ≤ 500 KB; ชื่อซ้ำ 409 `asset_name_already_exists` |
+| DELETE | `/companies/{companyID}/document-assets/{assetID}` | manage | ลบจริง — 204 |
+| GET | `/companies/{companyID}/document-assets/{assetID}/content` | สมาชิก | ไฟล์รูป: `Content-Type` ตามชนิด, `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, max-age=86400`, `ETag` (รองรับ `If-None-Match` → 304) |
+
+- **สิทธิ์อ่าน**: อ่านแม่แบบ / รูปใช้แค่การเป็นสมาชิกบริษัท (แบบเดียวกับ letterhead) — ผู้ที่เปิดเอกสารได้ต้องพิมพ์ได้ด้วยแม่แบบของบริษัท สิทธิ์อ่านเอกสารตรวจที่ module เจ้าของเอกสารแล้ว และแม่แบบไม่มีข้อมูลธุรกิจ; `organization.document_template:read` ใช้คุมเมนู / หน้าจัดการแม่แบบ, `manage` คุมการเขียนทั้งหมด
+- **ตรวจตอนบันทึก** (แม่แบบ และ SVG): `<script`, attribute `on*=`, `javascript:` / `vbscript:`, แท็ก iframe / object / embed / frame / frameset / base / meta / link / form / applet, `@import`, `expression(`, `url(//…)` และ URL ภายนอก (`http:` / `https:` / `//`) ใน `src` / `href` / `srcset` / `action` / `poster` / `background` / `xlink:href` → 400 `template_contains_disallowed_content` ข้อความ `template contains disallowed content: <สิ่งที่พบ>`; HTML ว่างหรือเกิน 200 KB → 400
+- `doc_type`: `sales.quotation`, `sales.invoice`, `sales.service_invoice`, `sales.tax_invoice`, `sales.deposit`, `sales.billing_note`, `sales.credit_note`, `purchasing.order`, `purchasing.work_order`, `finance.receipt`, `finance.wht_certificate`, `finance.pnd3`, `finance.pnd53`, `finance.pp30`, `finance.vat_report_output`, `finance.vat_report_input`, `manufacturing.production_order`, `petty_cash.voucher`, `petty_cash.replenishment`; `paper`: `a4_portrait` (ค่าเริ่มต้น) / `a4_landscape` / `a5_portrait`
+
 ### Request body (organization)
 
 ```jsonc

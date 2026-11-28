@@ -9,8 +9,9 @@ import { SESSION_COOKIE, backendUrl, crossOriginError, decodeSession, sameOrigin
  * - backend ตอบ 401 = token ใช้ไม่ได้แล้ว -> ลบ cookie
  */
 const SAFE = new Set(['GET', 'HEAD'])
-const FORWARD_REQUEST_HEADERS = ['accept', 'content-type', 'accept-language']
-const FORWARD_RESPONSE_HEADERS = ['content-type', 'cache-control']
+const FORWARD_REQUEST_HEADERS = ['accept', 'content-type', 'accept-language', 'if-none-match']
+// รูปของแม่แบบเอกสาร (document-assets/.../content): ส่ง CSP / nosniff / ETag ของ backend ต่อให้ browser ด้วย
+const FORWARD_RESPONSE_HEADERS = ['content-type', 'cache-control', 'content-security-policy', 'x-content-type-options', 'etag']
 
 async function forward(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   if (!SAFE.has(request.method) && !sameOrigin(request)) {
