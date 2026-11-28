@@ -103,8 +103,8 @@ export type OpenInvoice = {
   net: string
   gross: string
   outstanding: string
-  /** เอกสารขาย: invoice = ขายสินค้า, service_invoice = ใบแจ้งหนี้ค่าบริการ, deposit = ใบรับเงินมัดจำ */
-  kind?: 'invoice' | 'service_invoice' | 'deposit'
+  /** ขาย: invoice = ขายสินค้า, service_invoice = ใบแจ้งหนี้ค่าบริการ, deposit = ใบรับเงินมัดจำ; จัดซื้อ: goods = ซื้อสินค้า, service = ซื้อบริการ */
+  kind?: 'invoice' | 'service_invoice' | 'deposit' | 'goods' | 'service'
   /** ภาษีขายยังไม่ถึงกำหนด — รับเงินครั้งนี้จะออกใบเสร็จรับเงิน / ใบกำกับภาษี */
   vat_undue?: string
   /** ออกใบกำกับภาษีก่อนรับเงินแล้ว */

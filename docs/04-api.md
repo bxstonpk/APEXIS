@@ -332,6 +332,25 @@ prefix: `/api/v1/companies/{companyID}` — การเขียนทุกต
 
 - ใบแจ้งหนี้มี `paid_amount`, `outstanding` เพิ่ม — ยอดจ่ายมาจากใบสำคัญจ่ายของการเงิน (ดู 4.10)
 
+### ซื้อสินค้า / จ้างบริการ (แยกสาย — ตัดสินใจ 2026-11-28)
+
+ทุกประเภทธุรกิจมีทั้ง 2 สาย; จุดเกิดภาษีซื้อกำหนดที่ชนิดเอกสาร (ม.82/3, ม.86 — ขอคืนภาษีซื้อได้เมื่อได้รับใบกำกับภาษี)
+
+| สาย | เอกสาร (เลขที่ตั้งได้) | Path | ภาษีซื้อ |
+|---|---|---|---|
+| สินค้า | ใบสั่งซื้อ PO → ใบรับสินค้า RC → ซื้อสินค้า PI | `/purchase-orders`, `/goods-receipts`, `/supplier-invoices` | เกิดตามวันที่ใบกำกับ (ส่งมอบสินค้า) |
+| บริการ | ใบสั่งจ้าง WO → ตรวจรับงาน SA → ซื้อบริการ SI | `/work-orders`, `/service-acceptances`, `/supplier-service-invoices` | ลง **ภาษีซื้อยังไม่ถึงกำหนด** จนบันทึกใบกำกับภาษีที่ได้รับ |
+
+- รายการชนิดผิดสาย = 422 `goods_document_service_line` / `service_document_goods_line`
+- ตรวจรับงาน: ไม่มีรายการบัญชี / สต็อก — บันทึกจำนวนที่รับงานต่อบรรทัดใบสั่งจ้าง (ค่าใช้จ่ายลงตอนซื้อบริการ)
+- ซื้อตรง (ไม่ส่ง `order_id`): `supplier_id, price_includes_vat, lines[{item_id, quantity, unit_price, account_id?}]` (+ `warehouse_id` ฝั่งสินค้า) — ระบบสร้างใบสั่ง + ใบรับให้อัตโนมัติ (ใช้เลขที่)
+- ซื้อบริการรับ `tax_invoice_no, tax_invoice_date` (ไม่บังคับ) = ผู้ขายออกใบกำกับมาพร้อมใบแจ้งหนี้ → ภาษีซื้อเกิดทันที
+- `POST /supplier-service-invoices/{id}/tax-invoices {tax_invoice_no, tax_invoice_date, vat?}` บันทึกใบกำกับภาษีที่ได้รับ: Dr ภาษีซื้อ / Cr ภาษีซื้อยังไม่ถึงกำหนด (หลายใบได้, ไม่เกินยอดคงเหลือ, ใบสุดท้ายรับเศษ); `vat` ไม่ส่ง = `vat_suggested` (สัดส่วนที่จ่ายแล้วแต่ยังไม่ได้ใบกำกับ); `PATCH .../tax-invoices/{tiID} {"status":"cancelled"}` กลับรายการ
+- response ซื้อบริการ: `vat_status` (none / claimed / undue / partial), `vat_claimed`, `vat_undue`, `vat_suggested`, `tax_invoices[]`
+- ใบลดหนี้ผู้ขายใช้ได้ทั้ง 2 สาย (`invoice_kind`, `vat_kind`); ซื้อบริการลดได้เฉพาะลดราคา — ภาษีที่ยังไม่ถึงกำหนดลดที่บัญชีภาษีซื้อยังไม่ถึงกำหนด
+- ค่าตั้ง: `undue_input_vat_account_id` (1107020000), `service_expense_account_id` (ค่าเริ่มต้นตามประเภทธุรกิจ)
+- รายงาน: `input-vat` (`kind`: invoice / service_invoice_with_tx / tax_invoice / credit_note — นับเฉพาะที่ได้รับใบกำกับแล้ว), `undue-input-vat?end_date=`, `outstanding-work-orders`; การเงินจ่ายเงินเห็นใบค้างจ่าย `kind` goods / service
+
 ## 4.9 Endpoint — sales
 
 | Resource | Path | Filter เพิ่ม | สิทธิ์ |

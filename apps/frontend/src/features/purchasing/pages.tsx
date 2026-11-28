@@ -11,10 +11,12 @@ import { backendGet } from '@/lib/server/backend'
 import { getCompanyContext } from '@/lib/server/company'
 import { loadList, loadRef } from '@/lib/server/list'
 import { param, type SearchParams } from '@/lib/url'
+import { DirectPurchaseForm } from './DirectPurchaseForm'
 import { PurchaseFulfilForm } from './FulfilForm'
 import {
-  docPerms,
+  flows,
   PURCHASE_DOC_QUERY_KEYS,
+  type PurchaseFlow,
   purchasingApi,
   purchasingDocsApi,
   purchasingPage,
@@ -26,6 +28,21 @@ import {
 } from './types'
 
 /** ส่วนที่ใช้ร่วมกันของหน้าแอปจัดซื้อ (server) */
+
+/** ข้อความหัวหน้าของแต่ละสาย */
+export function flowTexts(flow: PurchaseFlow) {
+  const t = texts.purchasing
+  return flow.kind === 'service'
+    ? { orders: { ...t.orders, ...t.workOrders }, receipts: t.acceptances, invoices: t.serviceInvoices }
+    : { orders: t.orders, receipts: t.receipts, invoices: t.invoices }
+}
+
+/** ป้ายสถานะภาษีซื้อของใบซื้อ */
+export function VatBadge({ status }: { status: string | undefined }) {
+  if (!status) return null
+  const tone = status === 'claimed' ? 'success' : status === 'none' ? 'neutral' : 'warning'
+  return <Badge tone={tone}>{texts.purchasing.vat.statuses[status] ?? status}</Badge>
+}
 
 const TONES: Record<string, 'success' | 'neutral' | 'warning'> = { draft: 'neutral', approved: 'success', posted: 'success', closed: 'neutral', cancelled: 'warning' }
 
@@ -77,11 +94,21 @@ const supplierCell = (s: { name: string }, sub?: string | null) => (
   </span>
 )
 
-export async function OrderList({ companyId, sp, createHref }: { companyId: string; sp: SearchParams; createHref: string | false }) {
+export async function OrderList({
+  companyId,
+  sp,
+  createHref,
+  flow = flows.goods,
+}: {
+  companyId: string
+  sp: SearchParams
+  createHref: string | false
+  flow?: PurchaseFlow
+}) {
   const t = texts.purchasing
-  const path = purchasingPage(companyId, 'orders')
+  const path = purchasingPage(companyId, flow.menu.orders)
   const [list, supplier] = await Promise.all([
-    loadList<PurchaseOrderSummary>(purchasingDocsApi.orders(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
+    loadList<PurchaseOrderSummary>(flow.api.orders(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
     loadRef(purchasingApi.suppliers(companyId), param(sp, 'supplier_id')),
   ])
   const columns: Column<PurchaseOrderSummary>[] = [
@@ -93,41 +120,54 @@ export async function OrderList({ companyId, sp, createHref }: { companyId: stri
   ]
   return (
     <>
-      <ListHeader title={t.orders.heading} createHref={createHref} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={flowTexts(flow).orders.heading} createHref={createHref} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="order" supplier={supplier} />
       <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} createHref={createHref} />
     </>
   )
 }
 
-export async function ReceiptList({ companyId, sp }: { companyId: string; sp: SearchParams }) {
+export async function ReceiptList({ companyId, sp, flow = flows.goods }: { companyId: string; sp: SearchParams; flow?: PurchaseFlow }) {
   const t = texts.purchasing
-  const path = purchasingPage(companyId, 'receipts')
+  const path = purchasingPage(companyId, flow.menu.receipts)
+  const service = flow.kind === 'service'
   const [list, supplier] = await Promise.all([
-    loadList<GoodsReceipt>(purchasingDocsApi.receipts(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
+    loadList<GoodsReceipt>(flow.api.receipts(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
     loadRef(purchasingApi.suppliers(companyId), param(sp, 'supplier_id')),
   ])
   const columns: Column<GoodsReceipt>[] = [
     { key: 'date', header: t.columns.date, sortKey: 'date', render: (d) => <span className="whitespace-nowrap">{formatDate(d.date)}</span> },
     { key: 'no', header: t.columns.no, sortKey: 'document_no', render: (d) => noCell(path, d.id, d.document_no, list.query) },
     { key: 'supplier', header: t.columns.supplier, render: (d) => supplierCell(d.supplier, d.order.order_no) },
-    { key: 'value', header: t.columns.value, align: 'right', render: (d) => <span className="tabular-nums">{formatAmount(d.total_value)}</span> },
+    ...(service
+      ? []
+      : [{ key: 'value', header: t.columns.value, align: 'right', render: (d) => <span className="tabular-nums">{formatAmount(d.total_value)}</span> } as Column<GoodsReceipt>]),
     { key: 'status', header: t.columns.status, render: (d) => <PurchaseStatus kind="posted" status={d.status} /> },
   ]
   return (
     <>
-      <ListHeader title={t.receipts.heading} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={flowTexts(flow).receipts.heading} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="posted" supplier={supplier} />
       <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} />
     </>
   )
 }
 
-export async function InvoiceList({ companyId, sp }: { companyId: string; sp: SearchParams }) {
+export async function InvoiceList({
+  companyId,
+  sp,
+  flow = flows.goods,
+  createHref = false,
+}: {
+  companyId: string
+  sp: SearchParams
+  flow?: PurchaseFlow
+  createHref?: string | false
+}) {
   const t = texts.purchasing
-  const path = purchasingPage(companyId, 'invoices')
+  const path = purchasingPage(companyId, flow.menu.invoices)
   const [list, supplier] = await Promise.all([
-    loadList<SupplierInvoiceSummary>(purchasingDocsApi.invoices(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
+    loadList<SupplierInvoiceSummary>(flow.api.invoices(companyId), sp, PURCHASE_DOC_QUERY_KEYS),
     loadRef(purchasingApi.suppliers(companyId), param(sp, 'supplier_id')),
   ])
   const columns: Column<SupplierInvoiceSummary>[] = [
@@ -142,27 +182,60 @@ export async function InvoiceList({ companyId, sp }: { companyId: string; sp: Se
       align: 'right',
       render: (d) => <span className="font-medium tabular-nums">{d.status === 'cancelled' ? '–' : formatAmount(d.outstanding, { dashZero: true })}</span>,
     },
+    ...(flow.kind === 'service'
+      ? [{ key: 'vat', header: t.vat.fields.vat, hideOnMobile: true, render: (d) => (d.status === 'cancelled' ? '–' : <VatBadge status={d.vat_status} />) } as Column<SupplierInvoiceSummary>]
+      : []),
     { key: 'status', header: t.columns.status, render: (d) => <PurchaseStatus kind="posted" status={d.status} /> },
   ]
   return (
     <>
-      <ListHeader title={t.invoices.heading} count={list.error ? undefined : list.meta.total} />
+      <ListHeader title={flowTexts(flow).invoices.heading} createHref={createHref} count={list.error ? undefined : list.meta.total} />
       <Filters sp={sp} companyId={companyId} kind="posted" supplier={supplier} />
-      <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} />
+      <ListView list={list} path={path} columns={columns} rowKey={(d) => d.id} sort={param(sp, 'sort') || '-date'} createHref={createHref} />
     </>
   )
 }
 
-/** หน้ารับสินค้า / บันทึกใบแจ้งหนี้จาก ?order_id= — ใบสั่งซื้อต้องอนุมัติแล้ว */
-export async function PurchaseFulfilPage({ companyId, orderId, mode }: { companyId: string; orderId: string; mode: 'receipt' | 'invoice' }) {
+/**
+ * หน้ารับสินค้า / ตรวจรับงาน / บันทึกใบแจ้งหนี้จาก ?order_id= — ใบสั่งต้องอนุมัติแล้ว
+ * ไม่มี order_id: ใบแจ้งหนี้ = ซื้อตรงไม่ผ่านใบสั่ง (ฟอร์มกรอกรายการเอง)
+ */
+export async function PurchaseFulfilPage({
+  companyId,
+  orderId,
+  mode,
+  flow = flows.goods,
+}: {
+  companyId: string
+  orderId: string
+  mode: 'receipt' | 'invoice'
+  flow?: PurchaseFlow
+}) {
   const ctx = await getCompanyContext(companyId)
   if (!ctx) return null
-  if (!can(ctx.permissions, mode === 'receipt' ? docPerms.receiptPost : docPerms.invoicePost)) return <NoPermission />
+  if (!can(ctx.permissions, mode === 'receipt' ? flow.perms.receiptPost : flow.perms.invoicePost)) return <NoPermission />
   const t = texts.purchasing
-  const page = mode === 'receipt' ? t.receipts : t.invoices
-  const docsPath = purchasingPage(companyId, mode === 'receipt' ? 'receipts' : 'invoices')
-  if (!orderId) return <MessagePanel title={t.orders.notFound} />
-  const res = await loadItem<PurchaseOrder>(purchasingDocsApi.orders(companyId), orderId, t.orders.notFound)
+  const ft = flowTexts(flow)
+  const page = mode === 'receipt' ? ft.receipts : ft.invoices
+  const docsPath = purchasingPage(companyId, mode === 'receipt' ? flow.menu.receipts : flow.menu.invoices)
+  if (!orderId) {
+    if (mode === 'receipt') return <MessagePanel title={ft.orders.notFound} />
+    return (
+      <FormPage crumb={{ app: texts.apps.purchasing.name, label: page.heading, href: docsPath }} title={ft.invoices.directTitle}>
+        <DirectPurchaseForm
+          flow={flow.kind}
+          apiPath={flow.api.invoices(companyId)}
+          suppliersApi={purchasingApi.suppliers(companyId)}
+          itemsApi={purchasingDocsApi.items(companyId)}
+          itemTypes={flow.itemTypes}
+          warehousesApi={purchasingDocsApi.warehouses(companyId)}
+          docsPath={docsPath}
+          vat={await loadPurchaseVat(companyId)}
+        />
+      </FormPage>
+    )
+  }
+  const res = await loadItem<PurchaseOrder>(flow.api.orders(companyId), orderId, ft.orders.notFound)
   if ('panel' in res) return res.panel
   const o = res.item
   return (
@@ -170,11 +243,12 @@ export async function PurchaseFulfilPage({ companyId, orderId, mode }: { company
       {o.status === 'approved' ? (
         <PurchaseFulfilForm
           mode={mode}
+          service={flow.kind === 'service'}
           order={o}
-          apiPath={mode === 'receipt' ? purchasingDocsApi.receipts(companyId) : purchasingDocsApi.invoices(companyId)}
+          apiPath={mode === 'receipt' ? flow.api.receipts(companyId) : flow.api.invoices(companyId)}
           warehousesApi={purchasingDocsApi.warehouses(companyId)}
           docsPath={docsPath}
-          orderHref={`${purchasingPage(companyId, 'orders')}/${o.id}`}
+          orderHref={`${purchasingPage(companyId, flow.menu.orders)}/${o.id}`}
         />
       ) : (
         <MessagePanel title={t.fulfil.orderNotApproved} />

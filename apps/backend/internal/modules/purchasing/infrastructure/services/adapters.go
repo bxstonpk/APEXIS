@@ -173,7 +173,7 @@ func items(in map[uuid.UUID]integration.Item) map[vo.ItemID]ports.Item {
 	out := make(map[vo.ItemID]ports.Item, len(in))
 	for id, i := range in {
 		out[vo.ItemID(id)] = ports.Item{
-			ID: vo.ItemID(id), Code: i.Code, Name: i.Name, Stock: i.Stock, Active: i.Active,
+			ID: vo.ItemID(id), Code: i.Code, Name: i.Name, Stock: i.Stock, Service: i.Service, Active: i.Active,
 			PurchaseAccountID: optAccount(i.PurchaseAccountID), InventoryAccountID: optAccount(i.InventoryAccountID),
 		}
 	}

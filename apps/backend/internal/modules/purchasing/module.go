@@ -75,6 +75,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, invent
 		Reports:     gormrepo.NewReportRepository(db),
 		Settlements: gormrepo.NewSettlementRepository(db),
 		CreditNotes: gormrepo.NewCreditNoteRepository(db),
+		TaxInvoices: gormrepo.NewTaxInvoiceRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }
@@ -142,7 +143,7 @@ func (m *Module) OpenPayables(ctx context.Context, companyID, supplierID uuid.UU
 	for i, r := range rows {
 		id, _ := uuid.Parse(r.ID)
 		out[i] = integration.OpenInvoice{ID: id, DocumentNo: r.DocumentNo, PartnerRef: r.SupplierInvoiceNo, Date: r.Date, DueDate: r.DueDate,
-			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding}
+			Net: r.Net, Gross: r.Gross, Outstanding: r.Outstanding, Kind: r.Kind} // goods = ซื้อสินค้า, service = ซื้อบริการ
 	}
 	return out, nil
 }

@@ -86,6 +86,10 @@ export type SupplierCreditNoteSummary = {
   supplier: Ref
   invoice: { id: string; document_no: string; supplier_invoice_no: string }
   kind: CreditKind
+  /** goods = ซื้อสินค้า, service = ซื้อบริการ */
+  invoice_kind?: 'goods' | 'service'
+  /** output = ลดภาษีซื้อ, undue = ลดภาษีซื้อยังไม่ถึงกำหนด */
+  vat_kind?: 'output' | 'undue'
   supplier_credit_note_no: string
   credit_note_date: string
   reason: string

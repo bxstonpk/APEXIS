@@ -12,43 +12,45 @@ import (
 	"apexis/backend/internal/platform/listing"
 )
 
-// OrderUseCases: ใบสั่งซื้อ draft -> approved -> closed / cancelled
+// OrderUseCases: ใบสั่งซื้อ (สินค้า) / ใบสั่งจ้าง (บริการ) draft -> approved -> closed / cancelled
+// สองสายใช้กฎเดียวกัน ต่างกันที่ชนิดสินค้าที่รับ, สิทธิ์ และชุดเลขที่ — endpoint ของสายส่ง Kind มา (เอกสารต่างสาย = ไม่พบ)
 type OrderUseCases struct {
 	base
 	orders    repositories.OrderRepository
 	suppliers repositories.SupplierRepository
 }
 
+func kindOf(k vo.PurchaseKind) vo.PurchaseKind { return vo.KindOrDefault(string(k)) }
+
 func (uc *OrderUseCases) Get(ctx context.Context, in dto.ByID[vo.OrderID]) (dto.Order, error) {
-	return read(ctx, uc.base, in.Actor, vo.PermOrderRead, func() (dto.Order, error) { return uc.get(ctx, in.CompanyID, in.ID) })
+	kind := kindOf(in.Kind)
+	return read(ctx, uc.base, in.Actor, kind.Perms().OrderRead, func() (dto.Order, error) {
+		out, err := uc.get(ctx, in.CompanyID, in.ID)
+		if err == nil && out.Kind != string(kind) {
+			return dto.Order{}, domain.ErrOrderNotFound
+		}
+		return out, err
+	})
 }
 
 func (uc *OrderUseCases) List(ctx context.Context, in dto.List[dto.DocumentFilter]) (listing.Result[dto.OrderSummary], error) {
-	return read(ctx, uc.base, in.Actor, vo.PermOrderRead, func() (listing.Result[dto.OrderSummary], error) {
+	in.Filter.Kind = kindOf(in.Filter.Kind)
+	return read(ctx, uc.base, in.Actor, in.Filter.Kind.Perms().OrderRead, func() (listing.Result[dto.OrderSummary], error) {
 		return uc.orders.List(ctx, in.CompanyID, in.Filter)
 	})
 }
 
 // Create สร้าง draft — เก็บเงื่อนไข VAT / เครดิตเทอมของผู้ขาย ณ ตอนนี้ไว้ในใบ
 func (uc *OrderUseCases) Create(ctx context.Context, in dto.Create[entities.OrderData]) (dto.Order, error) {
+	in.Data.Kind = kindOf(in.Data.Kind)
 	var id vo.OrderID
-	err := uc.writeWith(ctx, in.Actor, vo.PermOrderManage, func(ctx context.Context, s ports.CompanySettings) error {
-		terms, err := uc.terms(ctx, in.CompanyID, in.Data)
+	err := uc.writeWith(ctx, in.Actor, in.Data.Kind.Perms().OrderManage, func(ctx context.Context, s ports.CompanySettings) error {
+		o, err := uc.create(ctx, in.Actor, s, in.Data)
 		if err != nil {
-			return err
-		}
-		if err := uc.resolveBranch(ctx, in.CompanyID, &in.Data); err != nil {
-			return err
-		}
-		o, err := entities.NewOrder(in.CompanyID, in.UserID, in.Data, terms, entities.Decimals{Quantity: s.QuantityDecimals, Amount: s.AmountDecimals})
-		if err != nil {
-			return err
-		}
-		if err := uc.checkItems(ctx, in.CompanyID, o); err != nil {
 			return err
 		}
 		id = o.ID()
-		return uc.orders.Create(ctx, o)
+		return nil
 	})
 	if err != nil {
 		return dto.Order{}, err
@@ -56,10 +58,42 @@ func (uc *OrderUseCases) Create(ctx context.Context, in dto.Create[entities.Orde
 	return uc.get(ctx, in.CompanyID, id)
 }
 
+// create: ภายใน transaction ที่ตรวจสิทธิ์แล้ว (ใช้ร่วมกับซื้อตรงไม่ผ่านใบสั่ง)
+func (uc *OrderUseCases) create(ctx context.Context, a dto.Actor, s ports.CompanySettings, d entities.OrderData) (*entities.Order, error) {
+	terms, err := uc.terms(ctx, a.CompanyID, d)
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.resolveBranch(ctx, a.CompanyID, &d); err != nil {
+		return nil, err
+	}
+	o, err := entities.NewOrder(a.CompanyID, a.UserID, d, terms, entities.Decimals{Quantity: s.QuantityDecimals, Amount: s.AmountDecimals})
+	if err != nil {
+		return nil, err
+	}
+	if err := uc.checkItems(ctx, a.CompanyID, o); err != nil {
+		return nil, err
+	}
+	return o, uc.orders.Create(ctx, o)
+}
+
+// find: ใบของบริษัทพร้อม lock — ต่างสายกับ endpoint = ไม่พบ
+func (uc *OrderUseCases) find(ctx context.Context, companyID vo.CompanyID, id vo.OrderID, kind vo.PurchaseKind) (*entities.Order, error) {
+	o, err := uc.orders.FindForUpdate(ctx, companyID, id)
+	if err != nil {
+		return nil, err
+	}
+	if o.Kind() != kind {
+		return nil, domain.ErrOrderNotFound
+	}
+	return o, nil
+}
+
 // Update แทนที่ draft ทั้งก้อน — ผู้ขายเดิม: คงอัตรา VAT ที่เก็บไว้ (เปลี่ยนได้แค่รวม / แยก VAT); เปลี่ยนผู้ขาย: ใช้เงื่อนไขของผู้ขายใหม่
 func (uc *OrderUseCases) Update(ctx context.Context, in dto.Update[vo.OrderID, entities.OrderData]) (dto.Order, error) {
-	err := uc.writeWith(ctx, in.Actor, vo.PermOrderManage, func(ctx context.Context, s ports.CompanySettings) error {
-		o, err := uc.orders.FindForUpdate(ctx, in.CompanyID, in.ID)
+	kind := kindOf(in.Data.Kind)
+	err := uc.writeWith(ctx, in.Actor, kind.Perms().OrderManage, func(ctx context.Context, s ports.CompanySettings) error {
+		o, err := uc.find(ctx, in.CompanyID, in.ID, kind)
 		if err != nil {
 			return err
 		}
@@ -96,8 +130,9 @@ func (uc *OrderUseCases) Update(ctx context.Context, in dto.Update[vo.OrderID, e
 
 // Delete ลบ draft (ลบจริง)
 func (uc *OrderUseCases) Delete(ctx context.Context, in dto.ByID[vo.OrderID]) error {
-	return uc.write(ctx, in.Actor, vo.PermOrderManage, func(ctx context.Context) error {
-		o, err := uc.orders.FindForUpdate(ctx, in.CompanyID, in.ID)
+	kind := kindOf(in.Kind)
+	return uc.write(ctx, in.Actor, kind.Perms().OrderManage, func(ctx context.Context) error {
+		o, err := uc.find(ctx, in.CompanyID, in.ID, kind)
 		if err != nil {
 			return err
 		}
@@ -113,15 +148,16 @@ type SetOrderStatus struct {
 	Status vo.OrderStatus
 }
 
-// SetStatus: approved (สิทธิ์ approve: ผู้ขาย / สินค้าต้อง active, ออกเลขที่ตามปีบัญชีของวันที่ใบสั่งซื้อ),
-// closed (หยุดรับสินค้า), cancelled (ยังไม่มีการรับ / แจ้งหนี้)
+// SetStatus: approved (สิทธิ์ approve: ผู้ขาย / สินค้าต้อง active, ออกเลขที่ตามปีบัญชีของวันที่ใบสั่ง),
+// closed (หยุดรับ), cancelled (ยังไม่มีการรับ / แจ้งหนี้)
 func (uc *OrderUseCases) SetStatus(ctx context.Context, in SetOrderStatus) (dto.Order, error) {
-	perm := vo.PermOrderManage
+	kind := kindOf(in.Kind)
+	perm := kind.Perms().OrderManage
 	if in.Status == vo.OrderApproved {
-		perm = vo.PermOrderApprove
+		perm = kind.Perms().OrderApprove
 	}
 	err := uc.write(ctx, in.Actor, perm, func(ctx context.Context) error {
-		o, err := uc.orders.FindForUpdate(ctx, in.CompanyID, in.ID)
+		o, err := uc.find(ctx, in.CompanyID, in.ID, kind)
 		if err != nil {
 			return err
 		}
@@ -164,7 +200,7 @@ func (uc *OrderUseCases) approve(ctx context.Context, a dto.Actor, o *entities.O
 	if err != nil {
 		return err
 	}
-	no, err := uc.number(ctx, a.CompanyID, vo.DocOrder, o.Data().Date, p.FiscalYear)
+	no, err := uc.number(ctx, a.CompanyID, o.Kind().OrderDoc(), o.Data().Date, p.FiscalYear)
 	if err != nil {
 		return err
 	}
@@ -201,14 +237,28 @@ func (uc *OrderUseCases) resolveBranch(ctx context.Context, companyID vo.Company
 	return nil
 }
 
-// checkItems: สินค้าทุกบรรทัดต้องมีอยู่และ active — 1 query ไม่ว่ามีกี่บรรทัด
+// checkItems: สินค้าทุกบรรทัดต้องมีอยู่, active และตรงสายของใบ (สินค้า / บริการ) — 1 query ไม่ว่ามีกี่บรรทัด
 func (uc *OrderUseCases) checkItems(ctx context.Context, companyID vo.CompanyID, o *entities.Order) error {
 	ids := o.ItemIDs()
 	found, err := uc.inventory.Items(ctx, companyID, ids)
 	if err != nil {
 		return err
 	}
-	return items(found, ids, true)
+	if err := items(found, ids, true); err != nil {
+		return err
+	}
+	return itemKinds(found, ids, o.Kind())
+}
+
+// itemKinds: สินค้าทุกตัวต้องตรงสายของเอกสาร
+func itemKinds(found map[vo.ItemID]ports.Item, ids []vo.ItemID, kind vo.PurchaseKind) error {
+	for _, id := range ids {
+		i := found[id]
+		if err := entities.CheckLineKind(kind, i.Service, i.Code); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (uc *OrderUseCases) get(ctx context.Context, companyID vo.CompanyID, id vo.OrderID) (dto.Order, error) {

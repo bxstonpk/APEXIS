@@ -38,6 +38,15 @@ func (r resp) data() obj  { return r.body["data"].(obj) }
 func (r resp) id() string { return r.data()["id"].(string) }
 func (r resp) total() int { return int(r.body["meta"].(obj)["total"].(float64)) }
 
+// errorCode: code ของ error body ("" = ไม่มี)
+func (r resp) errorCode() string {
+	if e, ok := r.body["error"].(obj); ok {
+		c, _ := e["code"].(string)
+		return c
+	}
+	return ""
+}
+
 func objs(v any) []obj {
 	var out []obj
 	for _, x := range v.([]any) {
@@ -92,7 +101,7 @@ func setup(t *testing.T) api {
 		t.Fatal(err)
 	}
 	for _, tbl := range []string{
-		"purchasing_credit_note_lines", "purchasing_credit_notes", "purchasing_invoice_settlements",
+		"purchasing_tax_invoices", "purchasing_credit_note_lines", "purchasing_credit_notes", "purchasing_invoice_settlements",
 		"purchasing_invoice_lines", "purchasing_invoices", "purchasing_receipt_lines", "purchasing_receipts",
 		"purchasing_order_lines", "purchasing_orders", "purchasing_supplier_branches", "purchasing_suppliers", "purchasing_settings", "purchasing_sequences", "purchasing_number_sequences",
 		"inventory_period_closings", "inventory_accounting_systems", "inventory_settings",
@@ -165,7 +174,9 @@ func TestPurchasingFlow(t *testing.T) {
 	pcs := a.expect(a.do("POST", base+"/uoms", owner, obj{"code": "PCS", "name": "ชิ้น"}), 201, "uom").id()
 	raw := a.expect(a.do("POST", base+"/item-categories", owner, obj{"code": "RAW", "name": "วัตถุดิบ", "inventory_account_id": invAcc, "purchase_account_id": purchaseAcc}), 201, "category").id()
 	itemA := a.expect(a.do("POST", base+"/items", owner, obj{"code": "A", "name": "สินค้า A", "uom_id": pcs, "category_id": raw}), 201, "item A").id()
-	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าขนส่ง", "type": "service", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
+	// สินค้าไม่นับสต็อก (ใบสั่งซื้อรับเฉพาะสินค้า — บริการใช้ใบสั่งจ้าง)
+	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "กล่องบรรจุ", "type": "non_stock", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "non-stock item").id()
+	realSvc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "FRT", "name": "ค่าขนส่ง", "type": "service", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service item").id()
 	wh := a.expect(a.do("POST", base+"/warehouses", owner, obj{"code": "WH", "name": "คลัง"}), 201, "warehouse").id()
 	a.expect(a.do("PUT", base+"/inventory-settings/accounting-systems/2026", owner, obj{"system": "perpetual"}), 200, "perpetual 2026 (default = periodic)")
 
@@ -204,6 +215,12 @@ func TestPurchasingFlow(t *testing.T) {
 		return obj{"supplier_id": sup, "date": date, "price_includes_vat": inclusive, "lines": lines}
 	}
 	a.expect(a.do("POST", base+"/purchase-orders", owner, order(plainSup, "2026-02-01", true, line(itemA, "1", "1"))), 422, "VAT-inclusive price for non-VAT supplier")
+	if e := a.expect(a.do("POST", base+"/purchase-orders", owner, order(vatSup, "2026-02-01", false, line(realSvc, "1", "1"))), 422, "service item on PO"); e.errorCode() != "goods_document_service_line" {
+		t.Fatalf("service on PO code = %v", e.errorCode())
+	}
+	if e := a.expect(a.do("POST", base+"/work-orders", owner, order(vatSup, "2026-02-01", false, line(itemA, "1", "1"))), 422, "goods item on work order"); e.errorCode() != "service_document_goods_line" {
+		t.Fatalf("goods on WO code = %v", e.errorCode())
+	}
 	po := a.expect(a.do("POST", base+"/purchase-orders", owner, order(vatSup, "2026-02-01", false, line(itemA, "10", "100"), line(svc, "1", "500"))), 201, "PO draft").data()
 	if po["order_no"] != nil || po["status"] != "draft" || po["vat_rate"] != "7" || po["totals"].(obj)["gross"] != "1605" ||
 		objs(po["lines"])[0]["item"].(obj)["code"] != "A" {

@@ -54,13 +54,16 @@ type Settings struct {
 	InputVatAccountID        *string `json:"input_vat_account_id"`
 	PriceVarianceAccountID   *string `json:"price_variance_account_id"`
 	PurchaseReturnsAccountID *string `json:"purchase_returns_account_id"`
+	UndueInputVatAccountID   *string `json:"undue_input_vat_account_id"`
+	ServiceExpenseAccountID  *string `json:"service_expense_account_id"`
 }
 
 func FromSettings(s dto.Settings) Settings {
 	return Settings{
 		VatRate: str(s.VatRate), JournalID: s.JournalID, GRIRAccountID: s.GRIRAccountID, APAccountID: s.APAccountID,
 		InputVatAccountID: s.InputVatAccountID, PriceVarianceAccountID: s.PriceVarianceAccountID,
-		PurchaseReturnsAccountID: s.PurchaseReturnsAccountID,
+		PurchaseReturnsAccountID: s.PurchaseReturnsAccountID, UndueInputVatAccountID: s.UndueInputVatAccountID,
+		ServiceExpenseAccountID: s.ServiceExpenseAccountID,
 	}
 }
 
@@ -108,6 +111,7 @@ func branchList(in []dto.SupplierBranch) []Branch {
 // ---------- ใบสั่งซื้อ ----------
 
 type OrderSummary struct {
+	Kind             string  `json:"kind"` // goods = ใบสั่งซื้อ, service = ใบสั่งจ้าง
 	ID               string  `json:"id"`
 	OrderNo          *string `json:"order_no"` // null จนกว่าจะอนุมัติ
 	Date             string  `json:"date"`
@@ -123,7 +127,7 @@ type OrderSummary struct {
 
 func FromOrderSummary(o dto.OrderSummary) OrderSummary {
 	out := OrderSummary{
-		ID: o.ID, Date: date(o.Date), DeliveryDate: optDate(o.DeliveryDate), Supplier: ref(o.Supplier), SupplierBranchNo: o.SupplierBranchNo, Reference: o.Reference,
+		Kind: o.Kind, ID: o.ID, Date: date(o.Date), DeliveryDate: optDate(o.DeliveryDate), Supplier: ref(o.Supplier), SupplierBranchNo: o.SupplierBranchNo, Reference: o.Reference,
 		VatRate: str(o.VatRate), PriceIncludesVat: o.PriceIncludesVat, Totals: totals(o.Totals), Status: o.Status,
 	}
 	if o.OrderNo != "" {
@@ -175,6 +179,7 @@ func FromOrder(o dto.Order) Order {
 // ---------- ใบรับสินค้า / ใบแจ้งหนี้ ----------
 
 type DocumentSummary struct {
+	Kind        string     `json:"kind"` // goods | service (ใบลดหนี้: สายของใบแจ้งหนี้เดิม)
 	ID          string     `json:"id"`
 	DocumentNo  string     `json:"document_no"`
 	Date        string     `json:"date"`
@@ -193,7 +198,7 @@ type OrderRef struct {
 
 func docSummary(d dto.DocumentSummary) DocumentSummary {
 	return DocumentSummary{
-		ID: d.ID, DocumentNo: d.DocumentNo, Date: date(d.Date), Order: OrderRef{ID: d.Order.ID, OrderNo: d.Order.Code},
+		Kind: d.Kind, ID: d.ID, DocumentNo: d.DocumentNo, Date: date(d.Date), Order: OrderRef{ID: d.Order.ID, OrderNo: d.Order.Code},
 		Supplier: ref(d.Supplier), Status: d.Status, EntryID: d.EntryID, EntryNo: d.EntryNo, CancelledAt: d.CancelledAt,
 	}
 }
@@ -253,14 +258,41 @@ type InvoiceSummary struct {
 	Paid              string `json:"paid_amount"`     // จ่ายด้วยใบจ่ายเงิน
 	Credited          string `json:"credited_amount"` // ลดหนี้ (รวม VAT)
 	Outstanding       string `json:"outstanding"`
+	// ภาษีซื้อ: vat_status none | claimed (ใช้สิทธิได้ทั้งใบ) | undue (รอใบกำกับ) | partial
+	TaxInvoiceReceived bool    `json:"tax_invoice_received"`
+	VatStatus          string  `json:"vat_status"`
+	VatClaimed         string  `json:"vat_claimed"`
+	VatUndue           string  `json:"vat_undue"`
+	TaxInvoiceNo       string  `json:"tax_invoice_no"`   // ซื้อบริการ: ใบกำกับที่มาพร้อมใบแจ้งหนี้
+	TaxInvoiceDate     *string `json:"tax_invoice_date"` // ซื้อบริการ: วันที่ในใบกำกับที่มาพร้อมใบแจ้งหนี้
 }
 
 func FromInvoiceSummary(i dto.InvoiceSummary) InvoiceSummary {
+	claimed := i.VatRecognized
+	if i.TaxInvoiceReceived {
+		claimed = i.Totals.Vat
+	}
 	return InvoiceSummary{
 		DocumentSummary: docSummary(i.DocumentSummary), SupplierInvoiceNo: i.SupplierInvoiceNo,
 		InvoiceDate: date(i.InvoiceDate), DueDate: date(i.DueDate), Totals: totals(i.Totals),
 		Paid: str(i.Paid), Credited: str(i.Credited), Outstanding: str(i.Outstanding),
+		TaxInvoiceReceived: i.TaxInvoiceReceived, VatStatus: i.VatStatus, VatClaimed: str(claimed), VatUndue: str(i.VatUndue),
+		TaxInvoiceNo: i.TaxInvoiceNo, TaxInvoiceDate: optDate(i.TaxInvoiceDate),
 	}
+}
+
+// TaxInvoice คือใบกำกับภาษีที่ได้รับจากผู้ขายภายหลัง (ซื้อบริการ)
+type TaxInvoice struct {
+	ID             string     `json:"id"`
+	TaxInvoiceNo   string     `json:"tax_invoice_no"`
+	TaxInvoiceDate string     `json:"tax_invoice_date"`
+	Date           string     `json:"date"` // วันที่ลงบัญชี (เดือนภาษีที่ใช้สิทธิ)
+	Base           string     `json:"base"`
+	Vat            string     `json:"vat"`
+	EntryID        *string    `json:"entry_id"`
+	EntryNo        string     `json:"entry_no"`
+	Status         string     `json:"status"`
+	CancelledAt    *time.Time `json:"cancelled_at"`
 }
 
 type InvoiceLine struct {
@@ -293,13 +325,27 @@ type Invoice struct {
 	PriceIncludesVat bool          `json:"price_includes_vat"`
 	CreatedBy        string        `json:"created_by"`
 	Lines            []InvoiceLine `json:"lines"`
+	TaxInvoices      []TaxInvoice  `json:"tax_invoices"`  // ใบกำกับที่ได้รับภายหลัง (รวมที่ยกเลิก)
+	VatSuggested     string        `json:"vat_suggested"` // ภาษีตั้งต้นของใบกำกับถัดไป (ตามสัดส่วนที่จ่ายแล้ว / ที่เหลือทั้งหมด; 0 = ไม่มีที่รอ)
 }
 
 func FromInvoice(i dto.Invoice) Invoice {
 	out := Invoice{
 		InvoiceSummary: FromInvoiceSummary(i.InvoiceSummary), Description: i.Description, VatRate: str(i.VatRate),
 		PriceIncludesVat: i.PriceIncludesVat, CreatedBy: i.CreatedBy, Lines: make([]InvoiceLine, len(i.Lines)),
-		BillFrom: BillFrom{Name: i.BillFrom.Name, TaxID: i.BillFrom.TaxID, BranchNo: i.BillFrom.BranchNo, Address: i.BillFrom.Address},
+		BillFrom:    BillFrom{Name: i.BillFrom.Name, TaxID: i.BillFrom.TaxID, BranchNo: i.BillFrom.BranchNo, Address: i.BillFrom.Address},
+		TaxInvoices: make([]TaxInvoice, len(i.TaxInvoices)), VatSuggested: str(i.DefaultVat),
+	}
+	for n, t := range i.TaxInvoices {
+		var entryID *string
+		if t.EntryID != nil {
+			s := t.EntryID.String()
+			entryID = &s
+		}
+		out.TaxInvoices[n] = TaxInvoice{
+			ID: t.ID.String(), TaxInvoiceNo: t.TaxInvoiceNo, TaxInvoiceDate: date(t.TaxInvoiceDate), Date: date(t.Date),
+			Base: str(t.Base), Vat: str(t.Vat), EntryID: entryID, EntryNo: t.EntryNo, Status: string(t.Status), CancelledAt: t.CancelledAt,
+		}
 	}
 	for n, l := range i.Lines {
 		line := InvoiceLine{
@@ -327,7 +373,9 @@ type InvoiceRef struct {
 type CreditNoteSummary struct {
 	DocumentSummary
 	Invoice              InvoiceRef `json:"invoice"`
-	Kind                 string     `json:"kind"` // return | allowance
+	Kind                 string     `json:"kind"`         // return | allowance (บังสายเอกสารของ DocumentSummary)
+	InvoiceKind          string     `json:"invoice_kind"` // สายของใบแจ้งหนี้เดิม: goods | service
+	VatKind              string     `json:"vat_kind"`     // output = ลดภาษีซื้อ, undue = ลดภาษีซื้อยังไม่ถึงกำหนด
 	SupplierCreditNoteNo string     `json:"supplier_credit_note_no"`
 	CreditNoteDate       string     `json:"credit_note_date"`
 	Reason               string     `json:"reason"`
@@ -338,7 +386,7 @@ func FromCreditNoteSummary(c dto.CreditNoteSummary) CreditNoteSummary {
 	return CreditNoteSummary{
 		DocumentSummary: docSummary(c.DocumentSummary),
 		Invoice:         InvoiceRef{ID: c.Invoice.ID, DocumentNo: c.Invoice.Code, SupplierInvoiceNo: c.Invoice.Name},
-		Kind:            c.Kind, SupplierCreditNoteNo: c.SupplierCreditNoteNo, CreditNoteDate: date(c.CreditNoteDate),
+		Kind:            c.Kind, InvoiceKind: c.DocumentSummary.Kind, VatKind: c.VatKind, SupplierCreditNoteNo: c.SupplierCreditNoteNo, CreditNoteDate: date(c.CreditNoteDate),
 		Reason: c.Reason, Totals: totals(c.Totals),
 	}
 }
@@ -466,6 +514,57 @@ func FromAging(book string, a dto.Aging) AgingBody {
 	return AgingBody{
 		Data: Aging{Book: book, AsOf: date(a.AsOf), Rows: rows, Totals: agingAmounts(a.Totals)},
 		Meta: httpx.Meta{Page: a.Rows.Page.Number, PageSize: a.Rows.Page.Size, Total: a.Rows.Total},
+	}
+}
+
+// ---------- ภาษีซื้อยังไม่ถึงกำหนด ----------
+
+type UndueInputVatRow struct {
+	Invoice       InvoiceRef `json:"invoice"`
+	Date          string     `json:"date"`
+	Supplier      Ref        `json:"supplier"`
+	Gross         string     `json:"gross"`
+	VatTotal      string     `json:"vat_total"`
+	VatClaimed    string     `json:"vat_claimed"`  // ได้รับใบกำกับแล้ว
+	VatCredited   string     `json:"vat_credited"` // ลดด้วยใบลดหนี้ (ส่วนที่ยังไม่ถึงกำหนด)
+	VatUndue      string     `json:"vat_undue"`
+}
+
+type UndueInputVatTotals struct {
+	Gross       string `json:"gross"`
+	VatTotal    string `json:"vat_total"`
+	VatClaimed  string `json:"vat_claimed"`
+	VatCredited string `json:"vat_credited"`
+	VatUndue    string `json:"vat_undue"`
+}
+
+type UndueInputVat struct {
+	Book    string              `json:"book"`
+	EndDate string              `json:"end_date"`
+	Rows    []UndueInputVatRow  `json:"rows"`
+	Totals  UndueInputVatTotals `json:"totals"`
+}
+
+type UndueInputVatBody struct {
+	Data UndueInputVat `json:"data"`
+	Meta httpx.Meta    `json:"meta"`
+}
+
+func FromUndueInputVat(book string, u dto.UndueInputVat) UndueInputVatBody {
+	rows := make([]UndueInputVatRow, len(u.Rows.Items))
+	for i, r := range u.Rows.Items {
+		rows[i] = UndueInputVatRow{
+			Invoice: InvoiceRef{ID: r.Invoice.ID, DocumentNo: r.Invoice.Code, SupplierInvoiceNo: r.Invoice.Name}, Date: date(r.Date),
+			Supplier: ref(r.Supplier), Gross: str(r.Gross), VatTotal: str(r.VatTotal), VatClaimed: str(r.VatRecognized),
+			VatCredited: str(r.VatCredited), VatUndue: str(r.VatUndue),
+		}
+	}
+	t := u.Totals
+	return UndueInputVatBody{
+		Data: UndueInputVat{Book: book, EndDate: date(u.End), Rows: rows, Totals: UndueInputVatTotals{
+			Gross: str(t.Gross), VatTotal: str(t.VatTotal), VatClaimed: str(t.VatRecognized), VatCredited: str(t.VatCredited), VatUndue: str(t.VatUndue),
+		}},
+		Meta: httpx.Meta{Page: u.Rows.Page.Number, PageSize: u.Rows.Page.Size, Total: u.Rows.Total},
 	}
 }
 

@@ -43,8 +43,12 @@ export function SalesDocForm({
   listHref,
   vat,
   doc,
+  itemTypes,
 }: {
-  kind: 'quotation' | 'order' | 'purchase-order'
+  /** purchase-order = ใบสั่งซื้อ (สินค้า), work-order = ใบสั่งจ้าง (บริการ) — ฟอร์มเดียวกัน */
+  kind: 'quotation' | 'order' | 'purchase-order' | 'work-order'
+  /** ชนิดสินค้าที่เลือกได้ (query type=) เช่น service / stock,non_stock — ไม่ส่ง = ทุกชนิด */
+  itemTypes?: string
   apiPath: string
   /** API ของคู่ค้า: ลูกค้า (ขาย) / ผู้ขาย (ซื้อ) */
   partiesApi: string
@@ -58,7 +62,8 @@ export function SalesDocForm({
   const tl = t.lines
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
-  const purchase = kind === 'purchase-order'
+  const purchase = kind === 'purchase-order' || kind === 'work-order'
+  const itemParams: Record<string, string> = itemTypes ? { status: 'active', type: itemTypes } : { status: 'active' }
   const tp = texts.purchasing.orders
   const quotation = kind === 'quotation' ? (doc as Quotation | undefined) : undefined
   const order = kind === 'quotation' ? undefined : (doc as Order | PurchaseOrder | undefined)
@@ -246,7 +251,7 @@ export function SalesDocForm({
                         label={label(tl.item)}
                         hideLabel
                         source={itemsApi}
-                        params={{ status: 'active' }}
+                        params={itemParams}
                         value={l.item}
                         onChange={(item) => up(l.key, { item })}
                         error={errors[`item-${l.key}`]}

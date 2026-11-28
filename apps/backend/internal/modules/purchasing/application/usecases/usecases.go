@@ -38,6 +38,7 @@ type Deps struct {
 	Reports     repositories.ReportRepository
 	Settlements repositories.SettlementRepository
 	CreditNotes repositories.CreditNoteRepository
+	TaxInvoices repositories.TaxInvoiceRepository
 	Clock       func() time.Time // optional
 }
 
@@ -57,12 +58,15 @@ func New(d Deps) *UseCases {
 		d.Clock = func() time.Time { return time.Now().UTC() }
 	}
 	b := base{tx: d.Tx, auth: d.Auth, org: d.Org, ledger: d.Ledger, inventory: d.Inventory, settings: d.Settings, seq: d.Sequence, now: d.Clock}
+	orders := &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers}
+	receipts := &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders}
 	return &UseCases{
-		Settings:    &SettingsUseCases{base: b},
-		Suppliers:   &SupplierUseCases{base: b, repo: d.Suppliers},
-		Orders:      &OrderUseCases{base: b, orders: d.Orders, suppliers: d.Suppliers},
-		Receipts:    &ReceiptUseCases{base: b, receipts: d.Receipts, orders: d.Orders},
-		Invoices:    &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, suppliers: d.Suppliers, credits: d.CreditNotes},
+		Settings:  &SettingsUseCases{base: b},
+		Suppliers: &SupplierUseCases{base: b, repo: d.Suppliers},
+		Orders:    orders,
+		Receipts:  receipts,
+		Invoices: &InvoiceUseCases{base: b, invoices: d.Invoices, orders: d.Orders, suppliers: d.Suppliers, credits: d.CreditNotes,
+			taxInvoices: d.TaxInvoices, orderUC: orders, receiptUC: receipts},
 		Reports:     &ReportUseCases{base: b, reports: d.Reports},
 		Settlements: &SettlementUseCases{base: b, invoices: d.Invoices, suppliers: d.Suppliers, settlements: d.Settlements},
 		CreditNotes: &CreditNoteUseCases{base: b, notes: d.CreditNotes, invoices: d.Invoices, settlements: d.Settlements},

@@ -43,9 +43,15 @@ export type PurchasingSettings = {
   input_vat_account_id: string | null
   price_variance_account_id: string | null
   purchase_returns_account_id: string | null
+  undue_input_vat_account_id: string | null
+  service_expense_account_id: string | null
 }
 
+/** สายเอกสารจัดซื้อ: goods = ซื้อสินค้า, service = จ้างบริการ (backend แยกด้วย kind) */
+export type PurchaseKind = 'goods' | 'service'
+
 export type PurchaseOrderSummary = {
+  kind?: PurchaseKind
   id: string
   order_no: string | null
   date: string
@@ -82,6 +88,7 @@ export type PurchaseOrder = PurchaseOrderSummary & {
 }
 
 export type PostedDoc = {
+  kind?: PurchaseKind
   id: string
   document_no: string
   date: string
@@ -113,9 +120,32 @@ export type SupplierInvoiceSummary = PostedDoc & {
   /** ลดหนี้แล้ว (รวม VAT) — outstanding = ยอดรวม − จ่าย − ลดหนี้ */
   credited_amount: string
   outstanding: string
+  /** ภาษีซื้อ: claimed = ใช้สิทธิแล้ว, undue = รอใบกำกับ, partial = ได้รับบางส่วน, none = ไม่มี VAT */
+  vat_status?: 'claimed' | 'undue' | 'partial' | 'none'
+  vat_claimed?: string
+  vat_undue?: string
+  tax_invoice_no?: string
+  tax_invoice_date?: string | null
+}
+
+/** ใบกำกับภาษีที่ได้รับจากผู้ขายภายหลัง (ซื้อบริการ) */
+export type ReceivedTaxInvoice = {
+  id: string
+  tax_invoice_no: string
+  tax_invoice_date: string
+  date: string
+  base: string
+  vat: string
+  entry_id: string | null
+  entry_no: string
+  status: 'posted' | 'cancelled'
+  cancelled_at: string | null
 }
 
 export type SupplierInvoice = SupplierInvoiceSummary & {
+  tax_invoices?: ReceivedTaxInvoice[]
+  /** ภาษีตั้งต้นของใบกำกับถัดไป (0 = ไม่มีที่รอ) */
+  vat_suggested?: string
   bill_from: { name: string; tax_id: string; branch_no: string; address: string }
   description: string
   vat_rate: string
@@ -162,7 +192,7 @@ export type InputVatRow = {
   date: string
   document_id: string
   document_no: string
-  kind: 'invoice' | 'credit_note'
+  kind: 'invoice' | 'service_invoice_with_tx' | 'tax_invoice' | 'credit_note'
   tax_invoice_no: string
   tax_invoice_date: string
   reference_no: string
@@ -173,6 +203,78 @@ export type InputVatRow = {
   tax: string
 }
 export type InputVatReport = { book: string; start_date: string; end_date: string; rows: InputVatRow[]; total_base: string; total_tax: string }
+
+/** GET /reports?book=undue-input-vat */
+export type UndueInputVatReport = {
+  book: string
+  end_date: string
+  rows: {
+    invoice: { id: string; document_no: string; supplier_invoice_no: string }
+    date: string
+    supplier: Ref
+    gross: string
+    vat_total: string
+    vat_claimed: string
+    vat_credited: string
+    vat_undue: string
+  }[]
+  totals: { gross: string; vat_total: string; vat_claimed: string; vat_credited: string; vat_undue: string }
+}
+
+/**
+ * สายเอกสาร — หน้า / API / สิทธิ์ / ข้อความของสายซื้อสินค้า (ใบสั่งซื้อ -> ใบรับสินค้า -> ซื้อสินค้า)
+ * และสายจ้างบริการ (ใบสั่งจ้าง -> ตรวจรับงาน -> ซื้อบริการ) — หน้าเดียวกันรับ flow
+ */
+export type PurchaseFlow = {
+  kind: PurchaseKind
+  /** เมนู (path ต่อจาก /purchasing/) */
+  menu: { orders: string; receipts: string; invoices: string }
+  api: { orders: (c: string) => string; receipts: (c: string) => string; invoices: (c: string) => string }
+  perms: { orderRead: string; orderManage: string; orderApprove: string; receiptRead: string; receiptPost: string; invoiceRead: string; invoicePost: string }
+  /** ชนิดสินค้าที่เลือกได้ (query type=) */
+  itemTypes: string
+}
+
+export const flows: Record<PurchaseKind, PurchaseFlow> = {
+  goods: {
+    kind: 'goods',
+    menu: { orders: 'orders', receipts: 'receipts', invoices: 'invoices' },
+    api: {
+      orders: (c) => `/companies/${c}/purchase-orders`,
+      receipts: (c) => `/companies/${c}/goods-receipts`,
+      invoices: (c) => `/companies/${c}/supplier-invoices`,
+    },
+    perms: {
+      orderRead: 'purchasing.order:read',
+      orderManage: 'purchasing.order:manage',
+      orderApprove: 'purchasing.order:approve',
+      receiptRead: 'purchasing.receipt:read',
+      receiptPost: 'purchasing.receipt:post',
+      invoiceRead: 'purchasing.invoice:read',
+      invoicePost: 'purchasing.invoice:post',
+    },
+    itemTypes: 'stock,non_stock',
+  },
+  service: {
+    kind: 'service',
+    menu: { orders: 'work-orders', receipts: 'service-acceptances', invoices: 'service-invoices' },
+    api: {
+      orders: (c) => `/companies/${c}/work-orders`,
+      receipts: (c) => `/companies/${c}/service-acceptances`,
+      invoices: (c) => `/companies/${c}/supplier-service-invoices`,
+    },
+    perms: {
+      orderRead: 'purchasing.work_order:read',
+      orderManage: 'purchasing.work_order:manage',
+      orderApprove: 'purchasing.work_order:approve',
+      receiptRead: 'purchasing.service_acceptance:read',
+      receiptPost: 'purchasing.service_acceptance:post',
+      invoiceRead: 'purchasing.service_invoice:read',
+      invoicePost: 'purchasing.service_invoice:post',
+    },
+    itemTypes: 'service',
+  },
+}
 
 export const docPerms = {
   orderRead: 'purchasing.order:read',

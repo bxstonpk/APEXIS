@@ -26,7 +26,7 @@ func TestSupplierBranches(t *testing.T) {
 	a.expect(a.do("PUT", base+"/purchasing-settings", owner, obj{"vat_rate": "7", "journal_id": jv, "grir_account_id": grirAcc, "ap_account_id": apAcc,
 		"input_vat_account_id": vatAcc, "price_variance_account_id": varianceAcc}), 200, "settings")
 	pcs := a.expect(a.do("POST", base+"/uoms", owner, obj{"code": "JOB", "name": "งาน"}), 201, "uom").id()
-	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "บริการ", "type": "service", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
+	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "บริการ", "type": "non_stock", "uom_id": pcs, "purchase_account_id": purchaseAcc}), 201, "service").id()
 
 	const tax = "0105551234567"
 	bangna := obj{"house_no": "9", "street": "บางนา-ตราด", "sub_district": "บางนา", "district": "บางนา", "province": "กรุงเทพมหานคร", "postal_code": "10260"}

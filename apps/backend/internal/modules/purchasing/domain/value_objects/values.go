@@ -207,13 +207,16 @@ func ParseCreditNoteKind(raw string) (CreditNoteKind, error) {
 type DocType string
 
 const (
-	DocOrder      DocType = "purchasing.order"
-	DocReceipt    DocType = "purchasing.receipt"
-	DocInvoice    DocType = "purchasing.invoice"
-	DocCreditNote DocType = "purchasing.credit_note"
+	DocOrder             DocType = "purchasing.order"
+	DocReceipt           DocType = "purchasing.receipt"
+	DocInvoice           DocType = "purchasing.invoice"
+	DocCreditNote        DocType = "purchasing.credit_note"
+	DocWorkOrder         DocType = "purchasing.work_order"
+	DocServiceAcceptance DocType = "purchasing.service_acceptance"
+	DocServiceInvoice    DocType = "purchasing.service_invoice"
 )
 
-var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice, DocCreditNote}
+var DocTypes = []DocType{DocOrder, DocReceipt, DocInvoice, DocWorkOrder, DocServiceAcceptance, DocServiceInvoice, DocCreditNote}
 
 // Prefix คือ prefix เริ่มต้นของเลขที่ (บริษัทเปลี่ยนได้)
 func (t DocType) Prefix() string {
@@ -226,6 +229,12 @@ func (t DocType) Prefix() string {
 		return "PI"
 	case DocCreditNote:
 		return "PCN"
+	case DocWorkOrder:
+		return "WO"
+	case DocServiceAcceptance:
+		return "SA"
+	case DocServiceInvoice:
+		return "SI"
 	default:
 		return "PV"
 	}
@@ -238,12 +247,59 @@ func (t DocType) Name() string {
 	case DocReceipt:
 		return "ใบรับสินค้า"
 	case DocInvoice:
-		return "ใบแจ้งหนี้ผู้ขาย"
+		return "ซื้อสินค้า (ใบแจ้งหนี้ / ใบกำกับภาษีผู้ขาย)"
 	case DocCreditNote:
 		return "ใบลดหนี้ผู้ขาย"
+	case DocWorkOrder:
+		return "ใบสั่งจ้าง"
+	case DocServiceAcceptance:
+		return "ใบตรวจรับงาน"
+	case DocServiceInvoice:
+		return "ซื้อบริการ (ใบแจ้งหนี้ค่าบริการผู้ขาย)"
 	default:
 		return "ใบจ่ายชำระ"
 	}
+}
+
+// PurchaseKind คือสายของเอกสารจัดซื้อ — เอกสารแต่ละใบเป็นสายเดียว (จุดเกิดภาษีซื้อต่างกัน)
+//
+//	goods   = ซื้อสินค้า (สินค้านับสต็อก / ไม่นับสต็อก): ใบสั่งซื้อ -> ใบรับสินค้า -> ซื้อสินค้า — ภาษีซื้อเกิดตามใบกำกับที่มากับสินค้า
+//	service = จ้างบริการ (สินค้าชนิดบริการ): ใบสั่งจ้าง -> ใบตรวจรับงาน -> ซื้อบริการ — ภาษีซื้อรอใบกำกับที่ผู้ขายออกเมื่อได้รับเงิน (ม.78/1, ม.82/3)
+type PurchaseKind string
+
+const (
+	KindGoods   PurchaseKind = "goods"
+	KindService PurchaseKind = "service"
+)
+
+// OrderDoc / ReceiptDoc / InvoiceDoc คือชนิดเลขที่ของเอกสารแต่ละสาย
+func (k PurchaseKind) OrderDoc() DocType {
+	if k == KindService {
+		return DocWorkOrder
+	}
+	return DocOrder
+}
+
+func (k PurchaseKind) ReceiptDoc() DocType {
+	if k == KindService {
+		return DocServiceAcceptance
+	}
+	return DocReceipt
+}
+
+func (k PurchaseKind) InvoiceDoc() DocType {
+	if k == KindService {
+		return DocServiceInvoice
+	}
+	return DocInvoice
+}
+
+// KindOrDefault: ค่าว่าง (ข้อมูลเดิมก่อนแยกสาย) = สินค้า
+func KindOrDefault(raw string) PurchaseKind {
+	if raw == string(KindService) {
+		return KindService
+	}
+	return KindGoods
 }
 
 // TaxType ของผู้ขาย — กำหนดแบบยื่นภาษีหัก ณ ที่จ่าย: individual = ภ.ง.ด.3, juristic = ภ.ง.ด.53

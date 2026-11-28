@@ -216,13 +216,14 @@ func TestPayments(t *testing.T) {
 	pcs := a.expect(a.do("POST", base+"/uoms", owner, obj{"code": "PCS", "name": "ชิ้น"}), 201, "uom").id()
 	svc := a.expect(a.do("POST", base+"/items", owner, obj{"code": "SVC", "name": "ค่าบริการ", "type": "service", "uom_id": pcs, "purchase_account_id": expense}), 201, "service").id()
 	sup := a.expect(a.do("POST", base+"/suppliers", owner, obj{"code": "V", "name": "V Co.", "tax_id": "0105551234567", "payment_term_days": 0, "vat_registered": true, "tax_type": "juristic"}), 201, "supplier").id()
-	po := a.expect(a.do("POST", base+"/purchase-orders", owner, obj{"supplier_id": sup, "date": "2026-03-01", "lines": []obj{{"item_id": svc, "quantity": "2", "unit_price": "5000"}}}), 201, "PO").id()
-	a.expect(a.do("PATCH", base+"/purchase-orders/"+po, owner, obj{"status": "approved"}), 200, "approve")
-	a.expect(a.do("POST", base+"/goods-receipts", owner, obj{"order_id": po, "date": "2026-03-01", "lines": []obj{{"order_line_no": 1, "quantity": "2"}}}), 201, "receipt")
+	// สายจ้างบริการ: ใบสั่งจ้าง -> ตรวจรับงาน -> ซื้อบริการ (ผู้ขายออกใบกำกับมาพร้อมใบแจ้งหนี้ = ใช้สิทธิภาษีซื้อทันที)
+	po := a.expect(a.do("POST", base+"/work-orders", owner, obj{"supplier_id": sup, "date": "2026-03-01", "lines": []obj{{"item_id": svc, "quantity": "2", "unit_price": "5000"}}}), 201, "WO").id()
+	a.expect(a.do("PATCH", base+"/work-orders/"+po, owner, obj{"status": "approved"}), 200, "approve")
+	a.expect(a.do("POST", base+"/service-acceptances", owner, obj{"order_id": po, "date": "2026-03-01", "lines": []obj{{"order_line_no": 1, "quantity": "2"}}}), 201, "acceptance")
 	invoice := func(no string) string {
 		t.Helper()
-		return a.expect(a.do("POST", base+"/supplier-invoices", owner, obj{"order_id": po, "supplier_invoice_no": no, "date": "2026-03-01",
-			"lines": []obj{{"order_line_no": 1, "quantity": "1"}}}), 201, "invoice "+no).id()
+		return a.expect(a.do("POST", base+"/supplier-service-invoices", owner, obj{"order_id": po, "supplier_invoice_no": no, "date": "2026-03-01",
+			"tax_invoice_no": no, "lines": []obj{{"order_line_no": 1, "quantity": "1"}}}), 201, "invoice "+no).id()
 	}
 	invA, invB := invoice("A-1"), invoice("B-1")
 	if open := objs(a.expect(a.do("GET", base+"/payments/open-invoices?supplier_id="+sup, owner, nil), 200, "open invoices").body["data"]); len(open) != 2 || open[0]["outstanding"] != "5350" {
@@ -240,12 +241,12 @@ func TestPayments(t *testing.T) {
 	p := a.expect(a.do("POST", base+"/payments", owner, withSupplier(payment(lines, method(cash, "2000"), method(bank, "5875")))), 201, "payment").data()
 	pl := objs(p["lines"])
 	if p["document_no"] != "PV2603-00001" || p["amount"] != "8025" || p["wht"] != "150" || p["net"] != "7875" || p["party"].(obj)["tax_type"] != "juristic" ||
-		p["entry_no"] != "PJ6903-0004" || pl[0]["wht_base"] != "5000" || pl[0]["wht_rate"] != "3" || pl[0]["invoice"].(obj)["name"] != "A-1" ||
+		p["entry_no"] != "PJ6903-0003" || pl[0]["wht_base"] != "5000" || pl[0]["wht_rate"] != "3" || pl[0]["invoice"].(obj)["name"] != "A-1" ||
 		objs(p["methods"])[1]["cash_account"].(obj)["code"] != "BBL" || pl[0]["wht_type"].(obj)["income_type"] != "3_tres" || pl[1]["wht_type"] != nil ||
 		p["wht_certificate_no"] != "WT2026-000001" {
 		t.Fatalf("payment = %v", p)
 	}
-	// รายการที่ 4 ของสมุด PJ ในเดือนนี้ (รับสินค้า + แจ้งหนี้ 2 ใบลงก่อน) — 1 ผังบัญชี = 1 บรรทัด
+	// รายการที่ 3 ของสมุด PJ ในเดือนนี้ (ซื้อบริการ 2 ใบลงก่อน — ใบตรวจรับงานไม่ลงบัญชี) — 1 ผังบัญชี = 1 บรรทัด
 	entry := a.expect(a.do("GET", base+"/journal-entries/"+p["entry_id"].(string), owner, nil), 200, "payment entry").data()
 	got := map[string]string{}
 	for _, l := range objs(entry["lines"]) {
@@ -258,12 +259,12 @@ func TestPayments(t *testing.T) {
 	}
 	outstanding := func(id string) string {
 		t.Helper()
-		return a.expect(a.do("GET", base+"/supplier-invoices/"+id, owner, nil), 200, "invoice").data()["outstanding"].(string)
+		return a.expect(a.do("GET", base+"/supplier-service-invoices/"+id, owner, nil), 200, "invoice").data()["outstanding"].(string)
 	}
 	if outstanding(invA) != "0" || outstanding(invB) != "2675" {
 		t.Fatalf("outstanding A=%s B=%s", outstanding(invA), outstanding(invB))
 	}
-	a.expect(a.do("PATCH", base+"/supplier-invoices/"+invB, owner, obj{"status": "cancelled"}), 422, "cancel paid invoice")
+	a.expect(a.do("PATCH", base+"/supplier-service-invoices/"+invB, owner, obj{"status": "cancelled"}), 422, "cancel paid invoice")
 
 	// ---------- จ่ายเงินอื่น: ค่าบริการบุคคลธรรมดา 2,500 หัก 3% (ภ.ง.ด.3) ----------
 	other := obj{"kind": "other", "date": "2026-03-12", "payee": obj{"name": "นาย ก"},

@@ -48,6 +48,14 @@ func (uc *ReportUseCases) InputVat(ctx context.Context, in dto.List[dto.InputVat
 	})
 }
 
+// UndueInputVat: ภาษีซื้อยังไม่ถึงกำหนด ณ วันที่ (ซื้อบริการที่ยังรอใบกำกับภาษีจากผู้ขาย)
+func (uc *ReportUseCases) UndueInputVat(ctx context.Context, in dto.List[dto.UndueInputVatFilter]) (dto.UndueInputVat, error) {
+	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.UndueInputVat, error) {
+		rows, t, err := uc.reports.UndueInputVat(ctx, in.CompanyID, in.Filter)
+		return dto.UndueInputVat{End: in.Filter.End, Rows: rows, Totals: t}, err
+	})
+}
+
 // VatTotals: ยอดรวมภาษีซื้อของช่วงวันที่ — ไม่ตรวจสิทธิ์ (finance เรียกหลังตรวจ finance.report:read แล้ว)
 func (uc *ReportUseCases) VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error) {
 	return uc.reports.VatTotals(ctx, companyID, start, end)

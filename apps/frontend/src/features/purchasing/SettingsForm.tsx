@@ -11,7 +11,15 @@ import { showToast } from '@/lib/toast'
 import { focusFirstInvalid, requiredMessage } from '@/lib/validation'
 import type { PurchasingSettings, Ref } from './types'
 
-type AccountKey = 'journal_id' | 'grir_account_id' | 'ap_account_id' | 'input_vat_account_id' | 'price_variance_account_id' | 'purchase_returns_account_id'
+type AccountKey =
+  | 'journal_id'
+  | 'grir_account_id'
+  | 'ap_account_id'
+  | 'input_vat_account_id'
+  | 'undue_input_vat_account_id'
+  | 'price_variance_account_id'
+  | 'purchase_returns_account_id'
+  | 'service_expense_account_id'
 
 /** ค่าตั้งการจัดซื้อ — อัตรา VAT (ใช้เมื่อผู้ขายจด VAT) + สมุด / บัญชีที่ลงรายการ */
 export function PurchasingSettingsForm({
@@ -75,8 +83,10 @@ export function PurchasingSettingsForm({
         {account('grir_account_id', f.grir, 'liability')}
         {account('ap_account_id', f.ap, 'liability')}
         {account('input_vat_account_id', f.inputVat, 'asset')}
+        {account('undue_input_vat_account_id', f.undueInputVat, 'asset')}
         {account('price_variance_account_id', f.priceVariance, 'expense')}
         {account('purchase_returns_account_id', f.purchaseReturns, 'expense')}
+        {account('service_expense_account_id', f.serviceExpense, 'expense')}
       </FormSection>
       {canManage && (
         <FormBar>
