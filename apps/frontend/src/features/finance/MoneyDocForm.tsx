@@ -38,7 +38,12 @@ export type MoneyDocApi = {
   whtTypes?: string // จ่ายเงินเท่านั้น
   /** รับชำระหนี้ลูกค้า: ใบวางบิลของลูกค้า (GET /billing-notes?customer_id=&status=open) */
   billingNotes?: string
+  /** จ่ายเงิน: คำขอเงินสดย่อยที่รอจ่าย (GET /payments/petty-cash-requests) — มี = แสดงชนิด "ชดเชยเงินสดย่อย" */
+  pettyCash?: string
 }
+
+/** คำขอเงินสดย่อยที่รอการเงินจ่าย (ตั้งวงเงิน / เพิ่มวงเงิน / เบิกชดเชย) */
+export type PettyCashRequest = { id: string; document_no: string; fund_code: string; fund_name: string; kind: string; date: string; amount: string }
 
 type Selected = { on: boolean; amount: string; wht: string; whtType: string }
 type OtherLine = { key: number; account: Ref | null; description: string; amount: string; wht: string; whtType: string }
@@ -84,7 +89,9 @@ export function MoneyDocForm({
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const partyKind = mode === 'receipt' ? 'customer' : 'supplier'
-  const kinds = mode === 'receipt' ? t.kinds.receipt : t.kinds.payment
+  const kinds = Object.fromEntries(
+    Object.entries(mode === 'receipt' ? t.kinds.receipt : t.kinds.payment).filter(([k]) => k !== 'petty_cash' || !!api.pettyCash),
+  )
   const partyLabel = mode === 'receipt' ? t.fields.customer : t.fields.supplier
 
   const [kind, setKind] = useState<string>(partyKind)
@@ -104,6 +111,15 @@ export function MoneyDocForm({
   const [busy, setBusy] = useState(false)
 
   const isParty = kind === partyKind
+  const isPetty = kind === 'petty_cash'
+  const [requests, setRequests] = useState<PettyCashRequest[] | null>(null)
+  const [requestId, setRequestId] = useState('')
+  const request = requests?.find((r) => r.id === requestId) ?? null
+
+  useEffect(() => {
+    if (!isPetty || !api.pettyCash || requests) return
+    apiRequest<PettyCashRequest[]>(api.pettyCash).then(setRequests, () => setRequests([]))
+  }, [isPetty, api.pettyCash, requests])
 
   useEffect(() => {
     if (!api.whtTypes) return
@@ -152,7 +168,11 @@ export function MoneyDocForm({
   const rateOf = (id: string) => toUnits(whtTypes.find((w) => w.id === id)?.rate ?? '0')
 
   // ---------- ยอดรวม ----------
-  const lineTotals = isParty
+  const lineTotals = isPetty
+    ? request
+      ? [{ amount: toUnits(request.amount), wht: 0n }]
+      : []
+    : isParty
     ? (invoices ?? [])
         .filter((inv) => selected[inv.id]?.on)
         .map((inv) => {
@@ -180,6 +200,13 @@ export function MoneyDocForm({
   function validate() {
     const e: Record<string, string> = {}
     if (!head.date) e.date = requiredMessage(t.fields.date)
+    if (isPetty) {
+      if (!request) e.request = t.errors.pettyCashRequired
+      Object.assign(e, validateMethods(methods))
+      if (request && !balanced) e.methods = t.errors.methodsMismatch
+      setErrors(e)
+      return Object.keys(e).length === 0
+    }
     if (isParty && !party) e.party = format(t.errors.partyRequired, { field: partyLabel })
     if (!isParty && !payee.name.trim()) e.payee = format(t.errors.nameRequired, { field: mode === 'receipt' ? t.fields.payerName : t.fields.payeeName })
     if (isParty) {
@@ -215,7 +242,9 @@ export function MoneyDocForm({
       description: head.description.trim(),
       methods: methodsBody(methods),
     }
-    if (isParty) {
+    if (isPetty) {
+      body.petty_cash_request_id = request!.id
+    } else if (isParty) {
       body[`${partyKind}_id`] = party!.id
       if (note) body.billing_note_id = note
       body.lines = (invoices ?? [])
@@ -275,6 +304,41 @@ export function MoneyDocForm({
         <TextField label={t.fields.description} value={head.description} maxLength={500} onChange={(e) => setHead((h) => ({ ...h, description: e.target.value }))} />
       </FormSection>
 
+      {isPetty ? (
+        <FormSection title={t.sections.pettyCash}>
+          <SelectField
+            label={t.fields.pettyCashRequest}
+            required
+            value={requestId}
+            error={errors.request}
+            className="sm:col-span-2"
+            options={[
+              { value: '', label: requests === null ? t.pettyCashRequests.loading : requests.length ? t.pettyCashRequests.pick : t.pettyCashRequests.none },
+              ...(requests ?? []).map((r) => ({
+                value: r.id,
+                label: `${r.document_no} · ${r.fund_code} ${r.fund_name} · ${t.pettyCashKinds[r.kind] ?? r.kind} · ${formatAmount(r.amount)}`,
+              })),
+            ]}
+            onChange={(e) => setRequestId(e.target.value)}
+          />
+          {request && (
+            <dl className="grid gap-x-6 gap-y-2 text-sm sm:col-span-2 sm:grid-cols-3">
+              {(
+                [
+                  [t.fields.date, formatDate(request.date)],
+                  [t.fields.pettyCashFund, `${request.fund_code} ${request.fund_name}`],
+                  [t.totals.amount, formatAmount(request.amount)],
+                ] as const
+              ).map(([k, v]) => (
+                <div key={k}>
+                  <dt className="text-[13px] text-ink-muted">{k}</dt>
+                  <dd className="font-medium tabular-nums">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </FormSection>
+      ) : (
       <FormSection title={t.sections.party}>
         {isParty ? (
           <>
@@ -329,7 +393,9 @@ export function MoneyDocForm({
           </>
         )}
       </FormSection>
+      )}
 
+      {!isPetty && (
       <section aria-labelledby="doc-lines" className="flex min-w-0 flex-col gap-3">
         <h2 id="doc-lines" className="text-[15px] font-semibold">
           {isParty ? t.sections.invoices : t.sections.lines}
@@ -543,6 +609,7 @@ export function MoneyDocForm({
           </p>
         )}
       </section>
+      )}
 
       <section aria-labelledby="doc-methods" className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex flex-col gap-3">

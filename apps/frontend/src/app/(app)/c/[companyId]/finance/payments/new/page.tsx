@@ -27,6 +27,7 @@ export default async function Page({ params }: { params: Promise<{ companyId: st
           accounts: financeApi.accounts(companyId),
           cashAccounts: financeApi.cashAccounts(companyId),
           whtTypes: financeApi.paymentWhtTypes(companyId),
+          pettyCash: `${financeApi.payments(companyId)}/petty-cash-requests`,
         }}
       />
     </FormPage>

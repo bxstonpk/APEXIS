@@ -8,6 +8,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   UsersRound,
+  Wallet,
 } from 'lucide-react'
 import { can } from '@/lib/permissions'
 import type { BusinessType } from './businessTypes'
@@ -132,6 +133,17 @@ export const apps: readonly AppDefinition[] = [
       { path: 'reports', permission: 'finance.report:read' },
       { path: 'wht-types', permission: 'finance.settings:read' },
       { path: 'settings', permission: 'finance.settings:read' },
+    ],
+  },
+  {
+    key: 'petty-cash',
+    icon: Wallet,
+    tone: 'bg-app-pettycash',
+    menu: [
+      { path: 'vouchers', permission: 'petty_cash.voucher:read' },
+      { path: 'replenishments', permission: 'petty_cash.replenishment:read' },
+      { path: 'funds', permission: 'petty_cash.fund:read' },
+      { path: 'reports', permission: 'petty_cash.report:read' },
     ],
   },
   {
