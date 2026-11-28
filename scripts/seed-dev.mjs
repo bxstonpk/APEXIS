@@ -239,11 +239,60 @@ async function construction() {
   console.log('✓ DEMO-CON ธุรกิจรับเหมาก่อสร้าง')
 }
 
+// ---------- เงินสดย่อย (ทุกบริษัทตัวอย่าง — เพิ่มให้บริษัทที่มีอยู่แล้วได้ ข้ามถ้ามีกองทุน PC-HO แล้ว) ----------
+// ตั้งกองทุน → ขอตั้งวงเงิน → การเงินจ่าย → ใบสำคัญจ่าย 3 ใบ (มีใบกำกับภาษี 1 ใบ) → ขอเบิกชดเชย → การเงินจ่าย
+// → ใบสำคัญจ่ายที่อนุมัติแล้วแต่ยังไม่ได้ขอเบิกอีก 1 ใบ
+async function pettyCash(code) {
+  const co = list(await req('GET', `/me/companies?q=${code}&page_size=50`)).find((c) => c.code === code)
+  if (!co) return
+  const C = `/companies/${co.id}`
+  if (list(await req('GET', `${C}/petty-cash-funds?q=PC-HO&page_size=5`)).some((f) => f.code === 'PC-HO')) {
+    console.log(`- ${code} เงินสดย่อยมีอยู่แล้ว ข้าม`)
+    return
+  }
+  const me = await req('GET', '/me')
+  const gl = async (c) => list(await req('GET', `${C}/accounts?q=${c}&page_size=5`)).find((a) => a.code === c)
+  const bank = list(await req('GET', `${C}/cash-accounts?q=KBANK&page_size=5`)).find((a) => a.code === 'KBANK')
+  const [postage, travel, supplies] = [await gl('5309080000'), await gl('5308020000'), await gl('5309050000')]
+  const fund = await req('POST', `${C}/petty-cash-funds`, { code: 'PC-HO', name: 'เงินสดย่อยสำนักงานใหญ่', custodian_user_id: me.id, imprest_amount: '20000', status: 'active' })
+  const payRequest = (r, date) =>
+    req('POST', `${C}/payments`, { kind: 'petty_cash', petty_cash_request_id: r.id, date, methods: [{ cash_account_id: bank.id, amount: r.amount, reference: 'โอนเข้าบัญชีผู้ถือเงินสดย่อย' }] })
+  const est = await req('POST', `${C}/petty-cash-replenishments`, { fund_id: fund.id, kind: 'establish', date: day(1), description: 'ตั้งวงเงินสดย่อยสำนักงานใหญ่' })
+  await payRequest(est, day(2))
+  const voucher = async (date, payee, description, lines, vat) => {
+    const v = await req('POST', `${C}/petty-cash-vouchers`, {
+      fund_id: fund.id, date, payee, description, lines,
+      vat_rate: vat ? '7' : '0', price_includes_vat: true, tax_invoice: vat ?? null,
+    })
+    await req('POST', `${C}/petty-cash-vouchers/${v.id}/approve`, {})
+    return v
+  }
+  await voucher(day(4), { name: 'ไปรษณีย์ไทย สาขาห้วยขวาง' }, 'ส่งเอกสารวางบิลลูกค้า', [{ account_id: postage.id, description: 'ค่าส่ง EMS 6 ฉบับ', amount: '384' }])
+  await voucher(day(7), { name: 'นายวิชัย ขับดี' }, 'ค่าแท็กซี่ไปพบลูกค้า', [{ account_id: travel.id, description: 'แท็กซี่ ไป-กลับ สีลม', amount: '420' }])
+  await voucher(day(10), { name: 'บริษัท ออฟฟิศเมท จำกัด', tax_id: '0105560000555', branch_no: '00000' }, 'วัสดุสำนักงานประจำเดือน', [
+    { account_id: supplies.id, description: 'กระดาษ A4 5 รีม', amount: '650' },
+    { account_id: supplies.id, description: 'หมึกพิมพ์', amount: '1490' },
+  ], { no: 'IV6611-0042', date: day(10) })
+  const rep = await req('POST', `${C}/petty-cash-replenishments`, { fund_id: fund.id, kind: 'replenish', date: day(14), description: 'เบิกชดเชยรอบครึ่งเดือนแรก', voucher_ids: list(await req('GET', `${C}/petty-cash-vouchers?fund_id=${fund.id}&unrequested=true&page_size=50`)).map((v) => v.id) })
+  await payRequest(rep, day(15))
+  await voucher(day(18), { name: 'ร้านเครื่องเขียนสยาม' }, 'วัสดุสิ้นเปลืองเพิ่มเติม', [{ account_id: supplies.id, description: 'แฟ้มและปากกา', amount: '275' }])
+  console.log(`✓ ${code} เงินสดย่อย`)
+}
+
 for (const fn of [trading, service, manufacturing, construction]) {
   try {
     await fn()
   } catch (e) {
     console.error(`✗ ${fn.name}: ${e.message}`)
+    process.exitCode = 1
+  }
+}
+
+for (const code of ['DEMO-TRD', 'DEMO-SVC', 'DEMO-MFG', 'DEMO-CON']) {
+  try {
+    await pettyCash(code)
+  } catch (e) {
+    console.error(`✗ pettyCash ${code}: ${e.message}`)
     process.exitCode = 1
   }
 }
