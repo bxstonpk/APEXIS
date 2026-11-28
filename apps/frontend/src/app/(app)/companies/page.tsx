@@ -85,8 +85,7 @@ async function Companies({ params, user }: { params: SearchParams; user: { name:
             <p className="text-[13px] font-medium text-ink-muted">{format(texts.launcher.greeting, { name: user.name })}</p>
             <h1 className="mt-1 text-[26px] leading-tight font-semibold tracking-tight">{t.heading}</h1>
             <p className="mt-1.5 text-sm text-ink-muted">
-              {t.description}
-              {meta.total > 0 && <span className="text-ink-subtle"> · {format(t.count, { n: meta.total.toLocaleString('th-TH') })}</span>}
+              {meta.total > 0 && format(t.count, { n: meta.total.toLocaleString('th-TH') })}
             </p>
           </div>
           {hasCompanies && (

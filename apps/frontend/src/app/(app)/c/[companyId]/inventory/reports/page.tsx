@@ -205,7 +205,6 @@ export default async function Page({ params, searchParams }: Props) {
         <TextField name="end_date" type="date" label={book === 'stock-on-hand' ? t.fields.asOf : t.fields.end} defaultValue={end} />
         <Button type="submit">{texts.reports.run}</Button>
       </Form>
-      {needItem && <Alert>{t.pickItem}</Alert>}
       {res && 'error' in res && <Alert tone="error">{res.error}</Alert>}
       {table}
       {res && 'meta' in res && res.meta && res.meta.total > res.meta.page_size && (
