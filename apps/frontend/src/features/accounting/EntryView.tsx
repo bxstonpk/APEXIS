@@ -82,6 +82,19 @@ export function EntryView({
             [t.fields.journal, `${entry.journal.code} · ${entry.journal.name}`],
             [t.fields.reference, entry.reference || '–'],
             [t.fields.description, entry.description || '–'],
+            ...(entry.adjusting_period ? [[t.meta.period, t.meta.adjustingPeriod] as const] : []),
+            ...(entry.is_closing ? [[t.meta.template, t.meta.closing] as const] : []),
+            ...(entry.template ? [[t.meta.template, texts.adjustments.templates[entry.template] ?? entry.template] as const] : []),
+            ...(entry.auto_reversal
+              ? [
+                  [
+                    t.meta.autoReversal,
+                    <Link className="font-mono text-primary hover:underline" href={`${entriesPath}/${entry.auto_reversal.id}`}>
+                      {entry.auto_reversal.entry_no ?? format(t.meta.pending, { date: formatDate(entry.auto_reversal.date) })}
+                    </Link>,
+                  ] as const,
+                ]
+              : []),
             ...(entry.reversal_of_id
               ? [[t.meta.reversalOf, <Link className="text-primary hover:underline" href={`${entriesPath}/${entry.reversal_of_id}`}>{t.meta.openEntry}</Link>] as const]
               : []),
@@ -157,7 +170,8 @@ export function EntryView({
           <h2 className="flex items-center gap-2 text-[15px] font-semibold">
             <Undo2 aria-hidden className="size-4" />
             {t.actions.reverseTitle}
-          </h2>          <div className="mt-4 grid gap-4 sm:grid-cols-[12rem_1fr]">
+          </h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-[12rem_1fr]">
             <TextField label={t.actions.reverseDate} required type="date" value={rev.date} error={dateError} onChange={(e) => setRev((r) => ({ ...r, date: e.target.value }))} />
             <TextField
               label={t.actions.reverseDescription}
@@ -183,7 +197,7 @@ export function EntryView({
           <ButtonLink href={listHref} variant="secondary">
             {texts.common.back}
           </ButtonLink>
-          {canPost && entry.status === 'posted' && !reversing && (
+          {canPost && entry.status === 'posted' && !entry.is_closing && !reversing && (
             <Button variant="secondary" onClick={() => setReversing(true)}>
               <Undo2 aria-hidden />
               {t.actions.reverse}

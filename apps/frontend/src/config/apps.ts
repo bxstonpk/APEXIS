@@ -133,9 +133,11 @@ export const apps: readonly AppDefinition[] = [
     menu: [
       { path: 'dashboard', permission: 'ledger.report:read' },
       { path: 'entries', permission: 'ledger.entry:read' },
+      { path: 'adjustments', permission: 'ledger.entry:read' },
       { path: 'accounts', permission: 'ledger.account:read' },
       { path: 'journals', permission: 'ledger.journal:read' },
       { path: 'reports', permission: 'ledger.report:read' },
+      { path: 'year-end', permission: 'ledger.report:read' },
     ],
   },
   {
