@@ -179,6 +179,7 @@ export const apps: readonly AppDefinition[] = [
       { path: 'project-sites', permission: 'organization.project_site:read' },
       { path: 'fiscal-years', permission: 'organization.fiscal_period:read' },
       { path: 'numbering', permission: 'organization.numbering:read' },
+      { path: 'templates', permission: 'organization.document_template:read' },
       { path: 'company', permission: 'organization.company:read' },
     ],
   },

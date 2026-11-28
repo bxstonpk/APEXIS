@@ -168,6 +168,7 @@ export async function BillingNotePrintPage({ companyId, docId }: { companyId: st
         </div>
       )}
       <PrintDocument
+        docType="sales.billing_note"
         letterhead={letterhead}
         title={p.billingNote}
         docNo={d.document_no}

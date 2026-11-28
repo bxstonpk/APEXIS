@@ -167,6 +167,7 @@ export async function DepositPrintPage({ companyId, docId }: { companyId: string
         </div>
       )}
       <PrintDocument
+        docType="sales.deposit"
         letterhead={letterhead}
         title={vat ? p.deposit : p.depositNoVat}
         docNo={d.document_no}

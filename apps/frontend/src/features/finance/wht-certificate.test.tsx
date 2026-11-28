@@ -1,9 +1,11 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { texts } from '@/config'
+import { builtinTemplate } from '@/features/print-templates/builtin'
+import { renderTemplate, sanitize } from '@/features/print-templates/engine'
 import type { Letterhead } from '@/features/sales/types'
 import type { Payment } from './types'
-import { WhtCertificate } from './WhtCertificate'
+import { whtCertificateData } from './WhtCertificate'
 
 const letterhead: Letterhead = {
   name: 'Demo',
@@ -48,17 +50,20 @@ const payment: Payment = {
 
 describe('WhtCertificate', () => {
   it('พิมพ์ 2 ฉบับ, ภ.ง.ด.53 สำหรับนิติบุคคล, รวมยอดตามประเภทเงินได้ และยอดรวม', () => {
-    const { container } = render(<WhtCertificate letterhead={letterhead} payment={payment} />)
+    // แม่แบบมาตรฐาน finance.wht_certificate + ข้อมูลพิมพ์ (หน้าจริงแสดงใน iframe)
+    const container = document.createElement('div')
+    container.innerHTML = sanitize(renderTemplate(builtinTemplate('finance.wht_certificate').html, whtCertificateData(letterhead, payment)))
+    document.body.appendChild(container)
     const c = texts.finance.whtCertificate
-    const sheets = container.querySelectorAll('article')
+    const sheets = container.querySelectorAll('.sheet')
     expect(sheets).toHaveLength(2)
     const first = within(sheets[0] as HTMLElement)
     expect(first.getByText(c.copy1)).toBeInTheDocument()
     expect(first.getAllByText('WT2026-000001').length).toBeGreaterThan(0)
     // ลำดับที่ในใบแนบ ภ.ง.ด. (คำนวณที่ backend)
     expect(first.getByText('17')).toBeInTheDocument()
-    // ช่องที่เลือก = ภ.ง.ด.53
-    const checked = first.getAllByText(c.checked).map((el) => el.parentElement!.textContent)
+    // ช่องที่เลือก = ภ.ง.ด.53 (มีเครื่องหมาย ✓)
+    const checked = [...(sheets[0] as HTMLElement).querySelectorAll('.check')].filter((el) => el.querySelector('.tick')?.textContent === '✓').map((el) => el.textContent)
     expect(checked.some((t) => t?.includes(c.forms.pnd53!))).toBe(true)
     expect(checked.some((t) => t?.includes(c.forms.pnd3!))).toBe(false)
     // 3 เตรส รวมค่าบริการ + ค่าเช่า = 14,000 / 500; 40(2) = 3,000 / 90

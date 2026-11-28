@@ -100,7 +100,7 @@ export async function OrderViewPage({ companyId, docId, sp, flow }: DocProps) {
         primary: true,
       })
   }
-  if (o.order_no && !service) actions.push({ kind: 'link', href: `${path}/${o.id}/print`, label: a.print, icon: 'print' })
+  if (o.order_no) actions.push({ kind: 'link', href: `${path}/${o.id}/print`, label: a.print, icon: 'print' })
 
   return (
     <FormPage
