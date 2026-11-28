@@ -55,13 +55,18 @@ export function RequestForm({
     }
     let live = true
     setRows(null)
-    apiRequest<VoucherRow[]>(`${vouchersApi}?fund_id=${encodeURIComponent(fund.id)}&unrequested=true&sort=date&page_size=200`).then(
+    // page_size สูงสุดของ API = 100
+    apiRequest<VoucherRow[]>(`${vouchersApi}?fund_id=${encodeURIComponent(fund.id)}&unrequested=true&sort=date&page_size=100`).then(
       (r) => {
         if (!live) return
         setRows(r)
         setPicked(new Set(r.map((x) => x.id)))
       },
-      () => live && setRows([]),
+      (err) => {
+        if (!live) return
+        setRows([])
+        setFormError(errorMessage(err))
+      },
     )
     return () => {
       live = false
