@@ -209,6 +209,30 @@ type SequenceModel struct {
 
 func (SequenceModel) TableName() string { return "finance_number_sequences" }
 
+// TaxFilingModel คือบันทึกการยื่นแบบภาษีรายเดือน — 1 แบบ / 1 เดือนยังไม่ยกเลิกได้ 1 แถว (unique partial index)
+// tax_month = วันที่ 1 ของเดือนภาษี
+type TaxFilingModel struct {
+	ID           uuid.UUID       `gorm:"type:uuid;primaryKey"`
+	CompanyID    uuid.UUID       `gorm:"type:uuid;not null;uniqueIndex:uq_fin_tax_filings_active,priority:1,where:status = 'filed';index:idx_fin_tax_filings_month,priority:1"`
+	Form         string          `gorm:"size:10;not null;uniqueIndex:uq_fin_tax_filings_active,priority:2,where:status = 'filed';check:chk_fin_tax_filings_form,form IN ('pnd3','pnd53','pp30')"`
+	TaxMonth     time.Time       `gorm:"type:date;not null;uniqueIndex:uq_fin_tax_filings_active,priority:3,where:status = 'filed';index:idx_fin_tax_filings_month,priority:2"`
+	FiledDate    time.Time       `gorm:"type:date;not null"`
+	Amount       decimal.Decimal `gorm:"type:numeric(24,6);not null;check:chk_fin_tax_filings_amounts,amount >= 0 AND surcharge >= 0 AND penalty >= 0 AND carry_forward >= 0"`
+	Surcharge    decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
+	Penalty      decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
+	CarryForward decimal.Decimal `gorm:"type:numeric(24,6);not null;default:0"`
+	Reference    string          `gorm:"size:100;not null;default:''"`
+	Note         string          `gorm:"size:500;not null;default:''"`
+	PaymentID    *uuid.UUID      `gorm:"type:uuid"`
+	Status       string          `gorm:"size:20;not null;check:chk_fin_tax_filings_status,status IN ('filed','cancelled')"`
+	CreatedBy    uuid.UUID       `gorm:"type:uuid;not null"`
+	CreatedAt    time.Time       `gorm:"not null"`
+	CancelledBy  *uuid.UUID      `gorm:"type:uuid"`
+	CancelledAt  *time.Time
+}
+
+func (TaxFilingModel) TableName() string { return "finance_tax_filings" }
+
 // AutoMigrate สร้าง / อัปเดตตาราง — ทะเบียนเงินจากตารางเดิมของ cashbank เปลี่ยนชื่อเป็นของ finance (คงข้อมูล)
 // สำหรับ production แนะนำเปลี่ยนเป็น versioned migration
 func AutoMigrate(db *gorm.DB) error {
@@ -227,6 +251,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&CashAccountModel{}, &SettingsModel{}, &WhtTypeModel{},
 		&ReceiptModel{}, &ReceiptLineModel{}, &ReceiptMethodModel{},
 		&PaymentModel{}, &PaymentLineModel{}, &PaymentMethodModel{},
-		&TransferModel{}, &SequenceModel{},
+		&TransferModel{}, &SequenceModel{}, &TaxFilingModel{},
 	)
 }

@@ -23,6 +23,10 @@ func (uc *LookupUseCases) CompanySettings(ctx context.Context, id vo.CompanyID) 
 	return uc.companies.Settings(ctx, id)
 }
 
+func (uc *LookupUseCases) YearStatuses(ctx context.Context, companyID vo.CompanyID) ([]dto.FiscalYearStatus, error) {
+	return uc.fiscal.YearStatuses(ctx, companyID)
+}
+
 func (uc *LookupUseCases) PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (dto.PeriodAt, error) {
 	return uc.fiscal.PeriodAt(ctx, companyID, date)
 }

@@ -23,6 +23,8 @@ type (
 	DepartmentID   uuid.UUID
 	CostCenterID   uuid.UUID
 	ProjectSiteID  uuid.UUID
+	// YearEndClosingID: การปิดบัญชีสิ้นปี (1 แถวต่อบริษัทต่อปีบัญชี)
+	YearEndClosingID uuid.UUID
 )
 
 type anyID interface {

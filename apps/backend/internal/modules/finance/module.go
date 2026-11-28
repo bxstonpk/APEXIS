@@ -64,7 +64,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receiv
 		Receivables: services.NewReceivables(receivables),
 		Payables:    services.NewPayables(payables),
 		PettyCash:   services.NewPettyCash(pettyCash),
-		Vat:         services.NewVat(receivables, payables, pettyCash.InputVat),
+		Vat:         services.NewVat(receivables, payables, services.VatSource{Totals: pettyCash.InputVat, Rows: pettyCash.InputVatRows}),
 		Accounts:    gormrepo.NewCashAccountRepository(db),
 		Settings:    gormrepo.NewSettingsRepository(db),
 		WhtTypes:    gormrepo.NewWhtTypeRepository(db),
@@ -73,6 +73,7 @@ func New(db *gorm.DB, identity Identity, org Organization, ledger Ledger, receiv
 		Payments:    gormrepo.NewPaymentRepository(db),
 		Transfers:   gormrepo.NewTransferRepository(db),
 		Reports:     gormrepo.NewReportRepository(db),
+		TaxFilings:  gormrepo.NewTaxFilingRepository(db),
 	})
 	return &Module{UseCases: uc, identity: identity, handler: handlers.NewHandler(uc, identity.CurrentUserID)}
 }

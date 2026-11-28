@@ -6,6 +6,7 @@ package finance_test
 
 import (
 	"bytes"
+	"io"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -40,6 +41,7 @@ type api struct {
 type resp struct {
 	status int
 	body   obj
+	raw    string // เนื้อหาดิบ (ไฟล์ส่งออกที่ไม่ใช่ JSON)
 }
 
 func (r resp) data() obj  { return r.body["data"].(obj) }
@@ -70,8 +72,9 @@ func (a api) do(method, path, token string, body any) resp {
 		a.t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	out := resp{status: res.StatusCode, body: obj{}}
-	_ = json.NewDecoder(res.Body).Decode(&out.body)
+	raw, _ := io.ReadAll(res.Body)
+	out := resp{status: res.StatusCode, body: obj{}, raw: string(raw)}
+	_ = json.Unmarshal(raw, &out.body)
 	return out
 }
 

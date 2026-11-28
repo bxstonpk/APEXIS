@@ -816,6 +816,20 @@ func (uc *ReportUseCases) VatTotals(ctx context.Context, companyID vo.CompanyID,
 	return uc.reports.VatTotals(ctx, companyID, start, end)
 }
 
+// VatRowsLimit: จำนวนแถวสูงสุดของรายงานภาษีขาย 1 เดือนที่ finance พิมพ์ประกอบ ภ.พ.30 (ไม่แบ่งหน้า)
+const VatRowsLimit = 20000
+
+// VatRows: แถวภาษีขายที่เกิดแล้วของช่วงวันที่ (ชุดเดียวกับ book=output-vat เรียงวันที่ / เลขที่) — เรียกโดย finance
+// ซึ่งตรวจสิทธิ์รายงานของตัวเองแล้ว; query เดียวกับรายงาน (แบ่งหน้าใน DB ด้วย limit เดียว)
+func (uc *ReportUseCases) VatRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]dto.TaxRow, error) {
+	if !vo.IsDateOnly(start) || !vo.IsDateOnly(end) || start.After(end) {
+		return nil, domain.ErrInvalidDate
+	}
+	res, _, err := uc.reports.OutputVat(ctx, companyID, dto.TaxFilter{Start: start, End: end, Sort: dto.DefaultTaxSort,
+		Page: listing.Page{Number: 1, Size: VatRowsLimit}})
+	return res.Items, err
+}
+
 // UndueVat: ใบแจ้งหนี้บริการที่ภาษีขายยังไม่ถึงกำหนด ณ วันที่ (กระทบยอดบัญชีภาษีขายยังไม่ถึงกำหนด)
 func (uc *ReportUseCases) UndueVat(ctx context.Context, in dto.List[dto.UndueVatFilter]) (dto.UndueVatReport, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.UndueVatReport, error) {

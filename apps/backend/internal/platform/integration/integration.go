@@ -28,6 +28,19 @@ func Reject(module string, err error) error {
 
 // ---------- ledger ----------
 
+// FiscalYearCreatedHook ถูกเรียกหลังสร้างปีบัญชีใหม่ ภายใน transaction เดียวกัน (error = ยกเลิกการสร้างปี)
+// ledger ใช้ผ่านรายการกลับอัตโนมัติของรายการปรับปรุงที่รอปีนี้
+type FiscalYearCreatedHook func(ctx context.Context, companyID uuid.UUID, year int) error
+
+// FiscalYearStatus คือปีบัญชี (organization) พร้อมจำนวนงวดทั้งหมด / งวดที่ยังเปิด — ledger ใช้กับการปิดบัญชีสิ้นปี
+type FiscalYearStatus struct {
+	Year        int
+	Start       time.Time
+	End         time.Time
+	Periods     int
+	OpenPeriods int
+}
+
 // JournalLine คือบรรทัดรายการบัญชีที่ module อื่นส่งให้ ledger ลงบัญชี (เดบิตหรือเครดิตด้านเดียว)
 type JournalLine struct {
 	AccountID   uuid.UUID
@@ -200,6 +213,18 @@ type VatTotals struct {
 	Base      decimal.Decimal // มูลค่าสินค้า / บริการ (ก่อน VAT)
 	Tax       decimal.Decimal // ภาษีมูลค่าเพิ่ม
 	Documents int             // จำนวนเอกสาร (ใบกำกับ + ใบลดหนี้)
+}
+
+// VatRow คือ 1 แถวของรายงานภาษีขาย / ภาษีซื้อตามแบบกรมสรรพากร (ภาษีที่เกิดแล้วในช่วงวันที่ — ใบลดหนี้เป็นยอดติดลบ)
+// sales.Module.OutputVatRows / purchasing.Module.InputVatRows / pettycash.Module.InputVatRows คืนค่านี้ให้ finance พิมพ์รายงานประกอบ ภ.พ.30
+type VatRow struct {
+	Date       time.Time       // วันที่ใบกำกับภาษี
+	DocumentNo string          // เลขที่ใบกำกับภาษี (ภาษีซื้อ = เลขที่ของผู้ขาย)
+	PartyName  string          // ผู้ซื้อ / ผู้ขาย / ผู้รับเงิน
+	TaxID      string          // เลขประจำตัวผู้เสียภาษี
+	BranchNo   string          // สาขา (00000 = สำนักงานใหญ่)
+	Base       decimal.Decimal // มูลค่าก่อน VAT
+	Tax        decimal.Decimal // ภาษีมูลค่าเพิ่ม
 }
 
 // ---------- เงินสดย่อย (finance -> pettycash) ----------

@@ -133,9 +133,11 @@ export const apps: readonly AppDefinition[] = [
     menu: [
       { path: 'dashboard', permission: 'ledger.report:read' },
       { path: 'entries', permission: 'ledger.entry:read' },
+      { path: 'adjustments', permission: 'ledger.entry:read' },
       { path: 'accounts', permission: 'ledger.account:read' },
       { path: 'journals', permission: 'ledger.journal:read' },
       { path: 'reports', permission: 'ledger.report:read' },
+      { path: 'year-end', permission: 'ledger.report:read' },
     ],
   },
   {
@@ -149,6 +151,7 @@ export const apps: readonly AppDefinition[] = [
       { path: 'transfers', permission: 'finance.transfer:read' },
       { path: 'cash-accounts', permission: 'finance.cash_account:read' },
       { path: 'reports', permission: 'finance.report:read' },
+      { path: 'tax-filings', permission: 'finance.report:read' },
       { path: 'wht-types', permission: 'finance.settings:read' },
       { path: 'settings', permission: 'finance.settings:read' },
     ],

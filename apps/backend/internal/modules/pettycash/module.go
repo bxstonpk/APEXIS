@@ -161,3 +161,17 @@ func (m *Module) InputVat(ctx context.Context, companyID uuid.UUID, start, end t
 	}
 	return integration.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }
+
+// InputVatRows: แถวภาษีซื้อของใบสำคัญจ่ายที่ชดเชยแล้ว — finance พิมพ์รายงานภาษีซื้อตามแบบกรมสรรพากรประกอบ ภ.พ.30
+func (m *Module) InputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error) {
+	rows, err := m.UseCases.Finance.VatRows(ctx, vo.CompanyID(companyID), start, end)
+	if err != nil {
+		return nil, reject(err)
+	}
+	out := make([]integration.VatRow, len(rows))
+	for i, r := range rows {
+		out[i] = integration.VatRow{Date: r.Date, DocumentNo: r.TaxInvoiceNo, PartyName: r.PayeeName, TaxID: r.TaxID, BranchNo: r.BranchNo,
+			Base: r.Base, Tax: r.Vat}
+	}
+	return out, nil
+}

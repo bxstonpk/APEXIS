@@ -70,6 +70,13 @@ type EntryModel struct {
 	ReversedBy     *EntryModel     `gorm:"foreignKey:ReversedByID;constraint:OnDelete:RESTRICT"`
 	PostedAt       *time.Time
 	PostedBy       *uuid.UUID  `gorm:"type:uuid"`
+	AdjustingPeriod bool       `gorm:"not null;default:false"` // งวดปรับปรุง (งวดที่ 13) — วันที่ = วันสุดท้ายของปีบัญชี
+	IsClosing       bool       `gorm:"not null;default:false"` // รายการปิดบัญชีสิ้นปี (และรายการกลับ) — งบกำไรขาดทุนไม่นับ
+	// รายการปรับปรุงสิ้นงวด: template ว่าง = รายการทั่วไป; auto_reverse = กลับรายการอัตโนมัติ ณ วันแรกของงวดถัดไป
+	Template       string     `gorm:"size:30;not null;default:'';index:idx_ledger_entries_template,priority:2;check:chk_ledger_entries_template,template IN ('','accrued_revenue','accrued_expense','deferred_revenue','prepaid_expense','other')"`
+	AutoReverse    bool       `gorm:"not null;default:false"`
+	AutoReversalID *uuid.UUID `gorm:"type:uuid"` // รายการกลับอัตโนมัติ (draft = รอผ่าน)
+	IsAutoReversal bool       `gorm:"not null;default:false;index:idx_ledger_entries_pending_rev,where:is_auto_reversal AND status = 'draft'"`
 	CreatedBy      uuid.UUID   `gorm:"type:uuid;not null"`
 	Lines          []LineModel `gorm:"foreignKey:EntryID;constraint:OnDelete:CASCADE"`
 	CreatedAt      time.Time   `gorm:"not null"`
@@ -118,7 +125,8 @@ func AutoMigrate(db *gorm.DB) error {
 			return err
 		}
 	}
-	if err := db.AutoMigrate(&AccountModel{}, &JournalModel{}, &EntryModel{}, &LineModel{}, &SequenceModel{}); err != nil {
+	if err := db.AutoMigrate(&AccountModel{}, &JournalModel{}, &EntryModel{}, &LineModel{}, &SequenceModel{},
+		&SettingsModel{}, &YearEndClosingModel{}); err != nil {
 		return err
 	}
 	// ลำดับเลขแบบเดิม (ต่อปีบัญชี) -> คีย์ช่วงนับของรูปแบบเริ่มต้น "F<ปีบัญชี>"

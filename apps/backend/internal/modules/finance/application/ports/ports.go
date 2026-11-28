@@ -180,4 +180,18 @@ type VatTotals struct {
 type Vat interface {
 	OutputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (VatTotals, error)
 	InputVat(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (VatTotals, error)
+	// OutputRows / InputRows: แถวรายงานภาษีขาย / ภาษีซื้อ (ภาษีซื้อ = จัดซื้อ + เงินสดย่อย) เรียงวันที่ / เลขที่
+	OutputRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]VatRow, error)
+	InputRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]VatRow, error)
+}
+
+// VatRow: แถวรายงานภาษีตามแบบกรมสรรพากร (ใบลดหนี้ = ยอดติดลบ)
+type VatRow struct {
+	Date       time.Time
+	DocumentNo string
+	PartyName  string
+	TaxID      string
+	BranchNo   string
+	Base       vo.Money
+	Tax        vo.Money
 }

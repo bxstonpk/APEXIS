@@ -19,6 +19,13 @@ export function reportCsvRows(r: Report, companyName: string): CsvCell[][] {
   ]
 
   switch (r.book) {
+    case 'dbd-balance-sheet':
+    case 'dbd-income-statement':
+      return [
+        ...title(r.columns[0]?.end_date ?? ''),
+        [t.dbd.unit, ...r.columns.map((x) => String(x.fiscal_year + 543))],
+        ...r.rows.map((x) => [`${'  '.repeat(x.level)}${t.dbd.lines[x.key] ?? x.key}`, ...(x.kind === 'header' ? [] : x.amounts.map((a) => plainAmount(a)))]),
+      ]
     case 'trial-balance':
       return [
         ...title(`${r.start_date} – ${r.end_date}`),

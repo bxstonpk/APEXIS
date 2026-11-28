@@ -61,6 +61,16 @@ func (uc *ReportUseCases) VatTotals(ctx context.Context, companyID vo.CompanyID,
 	return uc.reports.VatTotals(ctx, companyID, start, end)
 }
 
+// VatRowsLimit: จำนวนแถวสูงสุดของรายงานภาษีซื้อ 1 เดือนที่ finance พิมพ์ประกอบ ภ.พ.30 (ไม่แบ่งหน้า)
+const VatRowsLimit = 20000
+
+// VatRows: แถวภาษีซื้อของช่วงวันที่ (ชุดเดียวกับ book=input-vat เรียงวันที่ / เลขที่) — ไม่ตรวจสิทธิ์ (finance ตรวจแล้ว)
+func (uc *ReportUseCases) VatRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]dto.InputVatRow, error) {
+	res, _, err := uc.reports.InputVat(ctx, companyID, dto.InputVatFilter{Start: start, End: end, Sort: dto.DefaultInputVatSort,
+		Page: listing.Page{Number: 1, Size: VatRowsLimit}})
+	return res.Items, err
+}
+
 func (uc *ReportUseCases) Aging(ctx context.Context, in dto.List[dto.AgingFilter]) (dto.Aging, error) {
 	return read(ctx, uc.base, in.Actor, vo.PermReportRead, func() (dto.Aging, error) {
 		rows, totals, err := uc.reports.Aging(ctx, in.CompanyID, in.Filter)

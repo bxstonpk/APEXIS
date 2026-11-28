@@ -26,6 +26,8 @@ type Deps struct {
 	Journals repositories.JournalRepository
 	Entries  repositories.EntryRepository
 	Reports  repositories.ReportRepository
+	YearEnds repositories.YearEndRepository
+	Settings repositories.SettingsRepository
 	Clock    func() time.Time // optional, default time.Now().UTC()
 }
 
@@ -34,6 +36,7 @@ type UseCases struct {
 	Journals *JournalUseCases
 	Entries  *EntryUseCases
 	Reports  *ReportUseCases
+	YearEnd  *YearEndUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -41,11 +44,14 @@ func New(d Deps) *UseCases {
 		d.Clock = func() time.Time { return time.Now().UTC() }
 	}
 	b := base{tx: d.Tx, auth: d.Auth, org: d.Org, now: d.Clock}
+	entries := &EntryUseCases{base: b, entries: d.Entries, accounts: d.Accounts, journals: d.Journals, yearEnds: d.YearEnds}
 	return &UseCases{
-		Accounts: &AccountUseCases{base: b, accounts: d.Accounts, journals: d.Journals},
+		Accounts: &AccountUseCases{base: b, accounts: d.Accounts, journals: d.Journals, settings: d.Settings},
 		Journals: &JournalUseCases{base: b, journals: d.Journals},
-		Entries:  &EntryUseCases{base: b, entries: d.Entries, accounts: d.Accounts, journals: d.Journals},
+		Entries:  entries,
 		Reports:  &ReportUseCases{base: b, accounts: d.Accounts, reports: d.Reports},
+		YearEnd: &YearEndUseCases{base: b, entries: entries, accounts: d.Accounts, journals: d.Journals,
+			reports: d.Reports, yearEnds: d.YearEnds, settings: d.Settings},
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"apexis/backend/internal/modules/pettycash/domain/entities"
 	domain "apexis/backend/internal/modules/pettycash/domain/errors"
 	vo "apexis/backend/internal/modules/pettycash/domain/value_objects"
+	"apexis/backend/internal/platform/listing"
 )
 
 // FinanceUseCases คือสิ่งที่การเงินเรียก (public API ของ module) — ไม่ตรวจสิทธิ์ของเงินสดย่อย
@@ -154,4 +155,14 @@ func (uc *FinanceUseCases) Unpay(ctx context.Context, companyID vo.CompanyID, do
 // VatTotals: ภาษีซื้อของใบสำคัญจ่ายที่ชดเชยแล้ว (ตามวันที่ใบกำกับภาษี) — finance ใช้ทำ ภ.พ.30
 func (uc *FinanceUseCases) VatTotals(ctx context.Context, companyID vo.CompanyID, start, end time.Time) (dto.VatTotals, error) {
 	return uc.reports.VatTotals(ctx, companyID, start, end)
+}
+
+// VatRowsLimit: จำนวนแถวสูงสุดของภาษีซื้อเงินสดย่อย 1 เดือนที่ finance พิมพ์ประกอบ ภ.พ.30 (ไม่แบ่งหน้า)
+const VatRowsLimit = 20000
+
+// VatRows: แถวภาษีซื้อของใบสำคัญจ่ายที่ชดเชยแล้ว (ชุดเดียวกับ VatTotals / book=input-vat) — finance พิมพ์รายงานภาษีซื้อ
+func (uc *FinanceUseCases) VatRows(ctx context.Context, companyID vo.CompanyID, start, end time.Time) ([]dto.InputVatRow, error) {
+	rep, err := uc.reports.InputVat(ctx, companyID, dto.InputVatFilter{DateRange: dto.DateRange{Start: start, End: end},
+		Page: listing.Page{Number: 1, Size: VatRowsLimit}})
+	return rep.Rows.Items, err
 }

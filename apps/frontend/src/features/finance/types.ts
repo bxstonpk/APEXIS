@@ -50,7 +50,8 @@ export type ReceiptVatLine = { invoice: { id: string; document_no: string }; bas
 
 /** tax_invoice = ใบนี้เป็น "ใบเสร็จรับเงิน / ใบกำกับภาษี" ด้วย (มี vat_lines) */
 export type Receipt = DocumentSummary & { created_by: string; lines: ReceiptLine[]; methods: Method[]; tax_invoice?: boolean; vat_lines?: ReceiptVatLine[] }
-export type Payment = DocumentSummary & { created_by: string; lines: PaymentLine[]; methods: Method[]; wht_certificate_no: string | null }
+/** wht_form_seq: ลำดับที่ในใบแนบ ภ.ง.ด.3 / 53 ของเดือน (0 = ไม่มีภาษีหัก) — ช่อง "ลำดับที่ในแบบ" ของ 50 ทวิ */
+export type Payment = DocumentSummary & { created_by: string; lines: PaymentLine[]; methods: Method[]; wht_certificate_no: string | null; wht_form_seq?: number }
 
 export type Transfer = {
   id: string

@@ -26,6 +26,7 @@ type Deps struct {
 	Auth          ports.Authorizer
 	Members       ports.Membership
 	Provisioner   ports.CompanyProvisioner // optional (nil = ไม่ตั้งค่าเริ่มต้นให้ module อื่น)
+	FiscalHooks   ports.FiscalYearListener // optional (nil = ไม่แจ้ง module อื่นเมื่อสร้างปีบัญชี)
 	Companies     repositories.CompanyRepository
 	Branches      repositories.BranchRepository
 	BusinessUnits repositories.BusinessUnitRepository
@@ -76,7 +77,7 @@ func New(d Deps) *UseCases {
 			master: newMaster(b, d.ProjectSites, vo.PermProjectSiteRead, vo.PermProjectSiteManage), repo: d.ProjectSites,
 			branches: d.Branches, costCenters: d.CostCenters,
 		},
-		Fiscal:    &FiscalUseCases{base: b, fiscal: d.Fiscal},
+		Fiscal:    &FiscalUseCases{base: b, fiscal: d.Fiscal, hooks: d.FiscalHooks},
 		Lookups:   &LookupUseCases{companies: d.Companies, fiscal: d.Fiscal, dimensions: d.Dimensions},
 		Numbering: &NumberingUseCases{base: b, repo: d.Numbering, types: d.DocumentTypes, now: d.Clock},
 	}

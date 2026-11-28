@@ -38,6 +38,7 @@ type Deps struct {
 	Payments    repositories.PaymentRepository
 	Transfers   repositories.TransferRepository
 	Reports     repositories.ReportRepository
+	TaxFilings  repositories.TaxFilingRepository
 	Clock       func() time.Time // optional
 }
 
@@ -49,6 +50,7 @@ type UseCases struct {
 	Payments  *PaymentUseCases
 	Transfers *TransferUseCases
 	Reports   *ReportUseCases
+	Tax       *TaxUseCases
 }
 
 func New(d Deps) *UseCases {
@@ -61,9 +63,10 @@ func New(d Deps) *UseCases {
 		Settings:  &SettingsUseCases{base: b},
 		WhtTypes:  &WhtTypeUseCases{base: b, repo: d.WhtTypes},
 		Receipts:  &ReceiptUseCases{base: b, receipts: d.Receipts, receivables: d.Receivables},
-		Payments:  &PaymentUseCases{base: b, payments: d.Payments, payables: d.Payables, pettyCash: d.PettyCash, whtTypes: d.WhtTypes},
+		Payments:  &PaymentUseCases{base: b, payments: d.Payments, payables: d.Payables, pettyCash: d.PettyCash, whtTypes: d.WhtTypes, reports: d.Reports},
 		Transfers: &TransferUseCases{base: b, transfers: d.Transfers},
 		Reports:   &ReportUseCases{base: b, reports: d.Reports, vat: d.Vat},
+		Tax:       &TaxUseCases{base: b, reports: d.Reports, filings: d.TaxFilings, payments: d.Payments, vat: d.Vat},
 	}
 }
 

@@ -86,6 +86,8 @@ type FiscalRepository interface {
 	// PeriodAt คืนงวดที่ครอบคลุมวันที่ พร้อม lock แถวงวดแบบ FOR SHARE (ถ้าอยู่ใน transaction)
 	// เพื่อให้การปิดงวด (UPDATE แถวงวด) รอจนรายการที่กำลังลงในงวดนั้น commit — คืน ErrFiscalPeriodNotFound ถ้าไม่มี
 	PeriodAt(ctx context.Context, companyID vo.CompanyID, date time.Time) (dto.PeriodAt, error)
+	// YearStatuses: ปีบัญชีทั้งหมดของบริษัท (เรียงตามปี) พร้อมจำนวนงวด / งวดที่ยังเปิด — 1 query
+	YearStatuses(ctx context.Context, companyID vo.CompanyID) ([]dto.FiscalYearStatus, error)
 	GetYear(ctx context.Context, companyID vo.CompanyID, id vo.FiscalYearID) (dto.FiscalYear, error)
 	ListYears(ctx context.Context, companyID vo.CompanyID, f dto.FiscalYearFilter) (listing.Result[dto.FiscalYear], error)
 	GetPeriod(ctx context.Context, companyID vo.CompanyID, id vo.FiscalPeriodID) (dto.FiscalPeriod, error)

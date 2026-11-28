@@ -256,6 +256,9 @@ const (
 	PermSettingsRead   Permission = "finance.settings:read"
 	PermSettingsManage Permission = "finance.settings:manage" // ค่าตั้งการเงิน + ประเภทภาษีหัก ณ ที่จ่าย
 	PermReportRead     Permission = "finance.report:read"
+	// ทะเบียนการยื่นแบบภาษี (ภ.ง.ด.3 / 53 / ภ.พ.30) — ดูแบบยื่นใช้ finance.report:read
+	PermTaxFilingRead   Permission = "finance.tax_filing:read"
+	PermTaxFilingManage Permission = "finance.tax_filing:manage"
 )
 
 func (p Permission) String() string { return string(p) }
@@ -273,6 +276,8 @@ var AllPermissions = []Permission{
 	PermSettingsRead,
 	PermSettingsManage,
 	PermReportRead,
+	PermTaxFilingRead,
+	PermTaxFilingManage,
 }
 
 // PermissionMigration คือการแปลงสิทธิ์เดิมของบทบาทเมื่อความรับผิดชอบย้าย module (ตัดสินใจ 2026-11-23)

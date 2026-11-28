@@ -37,6 +37,7 @@ const payment: Payment = {
   created_by: 'u',
   methods: [],
   wht_certificate_no: 'WT2026-000001',
+  wht_form_seq: 17,
   lines: [
     { invoice: null, account_id: 'a', description: '', amount: '10000', wht_type: svc, wht_rate: '3', wht_base: '10000', wht: '300' },
     { invoice: null, account_id: 'a', description: '', amount: '4000', wht_type: rent, wht_rate: '5', wht_base: '4000', wht: '200' },
@@ -54,6 +55,8 @@ describe('WhtCertificate', () => {
     const first = within(sheets[0] as HTMLElement)
     expect(first.getByText(c.copy1)).toBeInTheDocument()
     expect(first.getAllByText('WT2026-000001').length).toBeGreaterThan(0)
+    // ลำดับที่ในใบแนบ ภ.ง.ด. (คำนวณที่ backend)
+    expect(first.getByText('17')).toBeInTheDocument()
     // ช่องที่เลือก = ภ.ง.ด.53
     const checked = first.getAllByText(c.checked).map((el) => el.parentElement!.textContent)
     expect(checked.some((t) => t?.includes(c.forms.pnd53!))).toBe(true)

@@ -17,6 +17,7 @@ type AccountUseCases struct {
 	base
 	accounts repositories.AccountRepository
 	journals repositories.JournalRepository
+	settings repositories.SettingsRepository
 }
 
 // Tree ผังบัญชีทั้งชุด (ทุกสถานะ) เรียงตามรหัส — 1 query
@@ -95,7 +96,35 @@ func (uc *AccountUseCases) seed(ctx context.Context, companyID vo.CompanyID, bt 
 		}
 		out.Journals++
 	}
-	return out, nil
+	// ค่าตั้งการปิดบัญชีสิ้นปีจากผังมาตรฐาน (บัญชีกำไรสะสม / สรุปผลกำไรขาดทุน / สมุด GEN)
+	s, err := defaultSettings(ctx, uc.accounts, uc.journals, companyID)
+	if err != nil {
+		return out, err
+	}
+	return out, uc.settings.Save(ctx, companyID, s)
+}
+
+// defaultSettings หาบัญชี / สมุดตั้งต้นของการปิดบัญชีตามรหัสในผังมาตรฐาน (ไม่พบ = ว่าง)
+func defaultSettings(ctx context.Context, accounts repositories.AccountRepository, journals repositories.JournalRepository, companyID vo.CompanyID) (entities.Settings, error) {
+	var s entities.Settings
+	ids, err := accounts.PostableIDsByCode(ctx, companyID, []string{entities.DefaultRetainedEarningsCode, entities.DefaultIncomeSummaryCode})
+	if err != nil {
+		return s, err
+	}
+	js, err := journals.ActiveIDsByCode(ctx, companyID, []string{entities.DefaultClosingJournalCode})
+	if err != nil {
+		return s, err
+	}
+	if id, ok := ids[entities.DefaultRetainedEarningsCode]; ok {
+		s.RetainedEarningsAccountID = &id
+	}
+	if id, ok := ids[entities.DefaultIncomeSummaryCode]; ok {
+		s.IncomeSummaryAccountID = &id
+	}
+	if id, ok := js[entities.DefaultClosingJournalCode]; ok {
+		s.ClosingJournalID = &id
+	}
+	return s, nil
 }
 
 // PostableIDsByCode / JournalIDsByCode: id ตามรหัส (module อื่นใช้ตั้งค่าเริ่มต้นจากผังมาตรฐาน) — ไม่ตรวจสิทธิ์, เข้าร่วม transaction ใน ctx

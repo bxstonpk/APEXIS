@@ -4,6 +4,7 @@ import { Alert, Button, Pagination, SelectField, TextField } from '@/components'
 import { format, texts } from '@/config'
 import { ReportActions } from '@/features/accounting/ReportActions'
 import { reportCsvRows } from '@/features/accounting/reportCsv'
+import { DBDTable } from '@/features/accounting/DBDTable'
 import { BalanceSheetTable, GeneralLedgerTable, IncomeStatementTable, TrialBalanceTable } from '@/features/accounting/ReportTables'
 import { BOOKS, ledgerApi, ledgerPage, type Book, type Report } from '@/features/accounting/types'
 import { RefFilter } from '@/features/organization/pages'
@@ -39,7 +40,9 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   const needsAccount = book === 'general-ledger' && !accountId
 
   const query = new URLSearchParams({ book, end_date: end })
-  if (book !== 'balance-sheet') query.set('start_date', start)
+  // งบ ณ วันที่ (ไม่ใช้ start_date): งบแสดงฐานะการเงิน และงบแบบกรมพัฒนาธุรกิจการค้า (กำไรขาดทุน = ต้นปีบัญชีถึงวันที่)
+  const asOfBook = book === 'balance-sheet' || book === 'dbd-balance-sheet' || book === 'dbd-income-statement'
+  if (!asOfBook) query.set('start_date', start)
   if (book === 'general-ledger') {
     query.set('account_id', accountId)
     query.set('page_size', '100')
@@ -56,7 +59,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
     loadRef(ledgerApi.accounts(companyId), accountId),
   ])
   const report = res && 'data' in res ? res.data : null
-  const period = book === 'balance-sheet' ? format(t.asOf, { date: formatDate(end) }) : format(t.period, { start: formatDate(start), end: formatDate(end) })
+  const period = asOfBook ? format(t.asOf, { date: formatDate(end) }) : format(t.period, { start: formatDate(start), end: formatDate(end) })
   const current = new URLSearchParams(query)
   current.delete('page_size')
 
@@ -71,19 +74,20 @@ export default async function ReportsPage({ params, searchParams }: Props) {
             {book === 'general-ledger' && account && ` · ${account.code} ${account.name}`}
           </p>
         </div>
-        {report && <ReportActions rows={reportCsvRows(report, ctx.company.name)} filename={`${book}_${book === 'balance-sheet' ? end : `${start}_${end}`}.csv`} />}
+        {report && <ReportActions rows={reportCsvRows(report, ctx.company.name)} filename={`${book}_${asOfBook ? end : `${start}_${end}`}.csv`} />}
       </header>
 
       <Form key={query.toString()} action="" className="flex flex-wrap items-end gap-2 rounded-(--radius-panel) border border-line bg-surface p-4 shadow-card print:hidden">
         <SelectField name="book" label={t.fields.book} defaultValue={book} options={BOOKS.map((b) => ({ value: b, label: t.books[b]! }))} className="w-full sm:w-56" />
-        {book !== 'balance-sheet' && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
-        <TextField name="end_date" type="date" label={book === 'balance-sheet' ? t.fields.asOf : t.fields.end} defaultValue={end} />
+        {!asOfBook && <TextField name="start_date" type="date" label={t.fields.start} defaultValue={start} />}
+        <TextField name="end_date" type="date" label={asOfBook ? t.fields.asOf : t.fields.end} defaultValue={end} />
         {book === 'general-ledger' && <RefFilter label={t.fields.account} name="account_id" source={ledgerApi.accounts(companyId)} value={account} />}
         <Button type="submit">{t.run}</Button>      </Form>
 
       {res && 'error' in res && <Alert tone="error">{res.error}</Alert>}
       {report?.book === 'trial-balance' && <TrialBalanceTable r={report} ledgerHref={(id) => withQuery(path, { book: 'general-ledger', start_date: start, end_date: end, account_id: id })} />}
       {report?.book === 'balance-sheet' && <BalanceSheetTable r={report} />}
+      {(report?.book === 'dbd-balance-sheet' || report?.book === 'dbd-income-statement') && <DBDTable r={report} />}
       {report?.book === 'income-statement' && <IncomeStatementTable r={report} />}
       {report?.book === 'general-ledger' && (
         <>

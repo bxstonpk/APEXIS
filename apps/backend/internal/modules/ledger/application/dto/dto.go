@@ -119,8 +119,11 @@ type EntryFilter struct {
 	AccountID *vo.AccountID // รายการที่มีบรรทัดใช้บัญชีนี้
 	StartDate *time.Time
 	EndDate   *time.Time
-	Sort      []listing.Sort
-	Page      listing.Page
+	// Adjustments: เฉพาะรายการปรับปรุงสิ้นงวด (GET /adjusting-entries); Templates กรองตามแบบ
+	Adjustments bool
+	Templates   []string
+	Sort        []listing.Sort
+	Page        listing.Page
 }
 
 // ---------- Output (read model) ----------
@@ -176,6 +179,22 @@ type EntrySummary struct {
 	TotalDebit  vo.Money
 	TotalCredit vo.Money
 	PostedAt    *time.Time
+	// AdjustingPeriod: อยู่ในงวดปรับปรุง (งวดที่ 13); Closing: รายการปิดบัญชีสิ้นปี
+	AdjustingPeriod bool
+	Closing         bool
+	Template        string // รายการปรับปรุงสิ้นงวด (ว่าง = ทั่วไป)
+	AutoReverse     bool
+	AutoReversal    bool // รายการนี้เป็นรายการกลับอัตโนมัติ
+	// รายการกลับอัตโนมัติของรายการปรับปรุงนี้ (Status draft = รอผ่าน)
+	Reversal *EntryLink
+}
+
+// EntryLink: รายการที่เกี่ยวข้อง (เลขที่ว่าง = ยังไม่ผ่าน)
+type EntryLink struct {
+	ID      string
+	EntryNo string
+	Date    time.Time
+	Status  string
 }
 
 type EntryLine struct {

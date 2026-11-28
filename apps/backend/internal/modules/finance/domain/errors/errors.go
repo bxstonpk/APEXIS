@@ -21,6 +21,9 @@ var (
 	ErrInvalidReceipt    = errors.New("invalid receipt")  // detailed
 	ErrInvalidPayment    = errors.New("invalid payment")  // detailed
 	ErrInvalidTransfer   = errors.New("invalid transfer") // detailed
+	ErrInvalidTaxForm    = errors.New("form must be pnd3, pnd53 or pp30")
+	ErrInvalidMonth      = errors.New("month must be YYYY-MM")
+	ErrInvalidTaxFiling  = errors.New("invalid tax filing") // detailed
 )
 
 // 404
@@ -30,12 +33,14 @@ var (
 	ErrPaymentNotFound     = errors.New("payment not found")
 	ErrTransferNotFound    = errors.New("transfer not found")
 	ErrWhtTypeNotFound     = errors.New("withholding tax type not found") // detailed
+	ErrTaxFilingNotFound   = errors.New("tax filing not found")
 )
 
 // 409
 var (
-	ErrCodeExists     = errors.New("code already exists")
-	ErrDocumentNoUsed = errors.New("document number is already used (check the document number format)")
+	ErrCodeExists      = errors.New("code already exists")
+	ErrDocumentNoUsed  = errors.New("document number is already used (check the document number format)")
+	ErrTaxFilingExists = errors.New("this form is already filed for the month (cancel the filing first)")
 )
 
 // 422

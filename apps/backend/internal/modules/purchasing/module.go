@@ -180,3 +180,24 @@ func (m *Module) InputVat(ctx context.Context, companyID uuid.UUID, start, end t
 	}
 	return integration.VatTotals{Base: t.Base, Tax: t.Tax, Documents: t.Documents}, nil
 }
+
+// InputVatRows: แถวภาษีซื้อของช่วงวันที่ — finance พิมพ์รายงานภาษีซื้อตามแบบกรมสรรพากรประกอบ ภ.พ.30
+// วันที่ / เลขที่ = ของใบกำกับภาษีจากผู้ขาย (ไม่มี = วันที่ / เลขที่เอกสารของเรา)
+func (m *Module) InputVatRows(ctx context.Context, companyID uuid.UUID, start, end time.Time) ([]integration.VatRow, error) {
+	rows, err := m.UseCases.Reports.VatRows(ctx, vo.CompanyID(companyID), start, end)
+	if err != nil {
+		return nil, reject(err)
+	}
+	out := make([]integration.VatRow, len(rows))
+	for i, r := range rows {
+		date, no := r.Date, r.DocumentNo
+		if !r.TaxInvoiceDate.IsZero() {
+			date = r.TaxInvoiceDate
+		}
+		if r.TaxInvoiceNo != "" {
+			no = r.TaxInvoiceNo
+		}
+		out[i] = integration.VatRow{Date: date, DocumentNo: no, PartyName: r.Supplier.Name, TaxID: r.TaxID, BranchNo: r.BranchNo, Base: r.Base, Tax: r.Tax}
+	}
+	return out, nil
+}

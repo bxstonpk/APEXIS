@@ -54,6 +54,7 @@ func New(db *gorm.DB, identity Identity) *Module {
 		Auth:          idn,
 		Members:       idn,
 		Provisioner:   provisioning,
+		FiscalHooks:   provisioning,
 		Companies:     gormrepo.NewCompanyRepository(db),
 		Branches:      gormrepo.NewBranchRepository(db),
 		BusinessUnits: gormrepo.NewBusinessUnitRepository(db),
@@ -107,6 +108,21 @@ func (m *Module) CompanyBusinessType(ctx context.Context, companyID uuid.UUID) (
 // hook ทำงานตามลำดับที่ลงทะเบียน ใน transaction เดียวกับการสร้างบริษัท — error = rollback ทั้งหมด
 func (m *Module) OnCompanyCreated(h integration.CompanyCreatedHook) {
 	m.provisioning.Add(h)
+}
+
+// OnFiscalYearCreated ลงทะเบียน hook ที่เรียกหลังสร้างปีบัญชี (ตามลำดับที่ลงทะเบียน ใน transaction เดียวกัน)
+func (m *Module) OnFiscalYearCreated(h integration.FiscalYearCreatedHook) {
+	m.provisioning.AddFiscal(h)
+}
+
+// FiscalYears คืนปีบัญชีทั้งหมดของบริษัท (เรียงตามปี) พร้อมจำนวนงวด / งวดที่ยังเปิด — ledger ใช้ตรวจเงื่อนไขปิดบัญชีสิ้นปี
+func (m *Module) FiscalYears(ctx context.Context, companyID uuid.UUID) ([]integration.FiscalYearStatus, error) {
+	ys, err := m.UseCases.Lookups.YearStatuses(ctx, vo.CompanyID(companyID))
+	out := make([]integration.FiscalYearStatus, len(ys))
+	for i, y := range ys {
+		out[i] = integration.FiscalYearStatus{Year: y.Year, Start: y.StartDate, End: y.EndDate, Periods: y.Periods, OpenPeriods: y.OpenPeriods}
+	}
+	return out, err
 }
 
 // FiscalPeriodAt คืนงวดบัญชีที่ครอบคลุม date: id งวด, ปีบัญชี, วันเริ่มปีบัญชี, งวดเปิดอยู่หรือไม่

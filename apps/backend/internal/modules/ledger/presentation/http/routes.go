@@ -40,6 +40,20 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("DELETE "+base+"/journal-entries/{entryID}", h.DeleteEntry)
 	handle("POST "+base+"/journal-entries/{entryID}/reversals", h.ReverseEntry)
 
+	// รายการปรับปรุงสิ้นงวด (+ กลับรายการอัตโนมัติ)
+	handle("GET "+base+"/adjusting-entries", h.ListAdjustingEntries)
+	handle("POST "+base+"/adjusting-entries", h.CreateAdjustingEntry)
+	handle("GET "+base+"/adjusting-entries/templates", h.AdjustingTemplates)
+	handle("POST "+base+"/adjusting-entries/pending-reversals", h.PostPendingReversals)
+
+	// ปิดบัญชีสิ้นปี / ค่าตั้ง
+	handle("GET "+base+"/year-end-closings", h.ListYearEnds)
+	handle("GET "+base+"/year-end-closings/{fiscalYear}", h.GetYearEnd)
+	handle("POST "+base+"/year-end-closings/{fiscalYear}/close", h.CloseYear)
+	handle("POST "+base+"/year-end-closings/{fiscalYear}/reopen", h.ReopenYear)
+	handle("GET "+base+"/ledger-settings", h.GetLedgerSettings)
+	handle("PUT "+base+"/ledger-settings", h.UpdateLedgerSettings)
+
 	// ภาพรวมแอปบัญชี (ต้องมี ledger.report:read)
 	handle("GET "+base+"/dashboards/accounting", h.AccountingDashboard)
 }
