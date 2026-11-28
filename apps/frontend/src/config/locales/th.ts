@@ -482,7 +482,7 @@ export const th = {
       assetTooLarge: 'รูปต้องไม่เกิน 500 KB',
       assetName: 'ชื่อใช้ a-z, 0-9, - หรือ _ ไม่เกิน 40 ตัว',
     },
-    editor: { code: 'HTML', preview: 'ตัวอย่าง', variables: 'ตัวแปร', helpers: 'ตัวช่วย', line: 'บรรทัด {n}' },
+    editor: { code: 'โค้ด HTML', preview: 'ตัวอย่าง', variables: 'ตัวแปร', helpers: 'ตัวช่วย', line: 'บรรทัด {n}' },
     assets: {
       heading: 'รูปของแม่แบบ',
       name: 'ชื่อรูป',
