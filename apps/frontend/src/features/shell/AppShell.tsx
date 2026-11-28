@@ -67,7 +67,11 @@ async function AppShellContent({ companyId, appKey, children }: { companyId: str
   }
 
   const t = appTexts(app.key)
-  const items = app.menu.map((m) => ({ href: companyPath(companyId, app.key, m.path), label: t.menu[m.path] ?? m.path }))
+  const items = app.menu.map((m) => ({
+    href: companyPath(companyId, app.key, m.path),
+    label: t.menu[m.path] ?? m.path,
+    match: m.also?.map((p) => companyPath(companyId, app.key, p)),
+  }))
   return (
     <Frame
       companyId={companyId}

@@ -130,6 +130,38 @@ var (
 	DefaultDocumentSort = []listing.Sort{{Key: "date", Desc: true}, {Key: "document_no", Desc: true}}
 )
 
+// PurchaseDocumentFilter: GET /purchase-documents?type=&status=&supplier_id=&q=&start_date=&end_date=&sort=&page=&page_size=
+// Types ว่าง = ทุกชนิดที่ผู้ใช้มีสิทธิ์อ่าน; Statuses รวมสถานะของใบสั่ง (draft / approved / closed) และเอกสาร (posted) — cancelled ใช้ร่วมกัน
+type PurchaseDocumentFilter struct {
+	Types      []vo.PurchaseDocType
+	Search     string
+	Statuses   []string
+	SupplierID *vo.SupplierID
+	StartDate  *time.Time
+	EndDate    *time.Time
+	Sort       []listing.Sort
+	Page       listing.Page
+}
+
+// PurchaseDocument คือแถวของรายการรวม "เอกสารซื้อ"
+//
+//	Reference: ใบแจ้งหนี้ = เลขที่ใบแจ้งหนี้ของผู้ขาย, ใบสั่ง / ใบรับ = อ้างอิงที่กรอก
+//	Total: ยอดรวม (รวม VAT) — nil สำหรับใบรับสินค้า / ใบตรวจรับงาน
+//	Outstanding: ยอดค้างจ่าย — เฉพาะใบแจ้งหนี้
+//	VatStatus: ภาษีซื้อของใบแจ้งหนี้ (none / claimed / undue / partial) — ว่างสำหรับเอกสารอื่น
+type PurchaseDocument struct {
+	Type        vo.PurchaseDocType
+	ID          string
+	DocumentNo  string
+	Date        time.Time
+	Supplier    Ref
+	Status      string
+	Reference   string
+	Total       *vo.Money
+	Outstanding *vo.Money
+	VatStatus   string
+}
+
 // SupplierFilter: GET /suppliers?q=&status=&vat_registered=&sort=&page=&page_size=
 type SupplierFilter struct {
 	Search        string

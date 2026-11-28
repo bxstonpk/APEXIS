@@ -233,4 +233,79 @@ func TestServicePurchaseFlow(t *testing.T) {
 	a.expect(a.do("GET", base+"/work-orders", staff, nil), 403, "buyer reads WOs")
 	a.expect(a.do("GET", base+"/supplier-service-invoices", staff, nil), 403, "buyer reads SIs")
 	a.expect(a.do("POST", txPath, staff, obj{"tax_invoice_no": "TX-X", "tax_invoice_date": "2026-02-25"}), 403, "buyer records TX")
+
+	// ---------- รายการรวม "เอกสารซื้อ": ทุกชนิดใน query เดียว, กรองชนิด, สิทธิ์, แบ่งหน้า ----------
+	count := func(path string) int {
+		t.Helper()
+		return a.expect(a.do("GET", base+path, owner, nil), 200, path).total()
+	}
+	byType := map[string]int{
+		"order": count("/purchase-orders"), "receipt": count("/goods-receipts"), "invoice": count("/supplier-invoices"),
+		"work_order": count("/work-orders"), "service_acceptance": count("/service-acceptances"), "service_invoice": count("/supplier-service-invoices"),
+	}
+	all := 0
+	for _, n := range byType {
+		all += n
+	}
+	mixed := a.expect(a.do("GET", base+"/purchase-documents?page_size=100", owner, nil), 200, "purchase documents")
+	rows := objs(mixed.body["data"])
+	if mixed.total() != all || len(rows) != all {
+		t.Fatalf("purchase documents total = %d rows = %d, want %d (%v)", mixed.total(), len(rows), all, byType)
+	}
+	seen := map[string]int{}
+	for i, r := range rows {
+		seen[r["type"].(string)]++
+		if r["supplier"].(obj)["code"] == "" || r["date"] == "" {
+			t.Fatalf("row %d = %v", i, r)
+		}
+		if i > 0 && r["date"].(string) > rows[i-1]["date"].(string) {
+			t.Fatalf("rows not sorted by -date: %v then %v", rows[i-1]["date"], r["date"])
+		}
+		switch r["type"] {
+		case "receipt", "service_acceptance":
+			if r["total"] != nil || r["outstanding"] != nil {
+				t.Fatalf("receipt row has totals: %v", r)
+			}
+		case "invoice", "service_invoice":
+			if r["total"] == nil || r["outstanding"] == nil || r["vat_status"] == nil {
+				t.Fatalf("invoice row = %v", r)
+			}
+		}
+	}
+	for typ, n := range byType {
+		if seen[typ] != n {
+			t.Fatalf("type %s = %d, want %d", typ, seen[typ], n)
+		}
+	}
+	if byType["work_order"] == 0 || byType["service_invoice"] == 0 || byType["order"] == 0 {
+		t.Fatalf("fixture should have mixed types: %v", byType)
+	}
+	onlySI := a.expect(a.do("GET", base+"/purchase-documents?type=service_invoice", owner, nil), 200, "type filter")
+	for _, r := range objs(onlySI.body["data"]) {
+		if r["type"] != "service_invoice" {
+			t.Fatalf("type filter leaked %v", r["type"])
+		}
+	}
+	if onlySI.total() != byType["service_invoice"] {
+		t.Fatalf("service_invoice total = %d", onlySI.total())
+	}
+	two := a.expect(a.do("GET", base+"/purchase-documents?type=work_order,service_invoice&page_size=2&page=1", owner, nil), 200, "page 1")
+	if len(objs(two.body["data"])) != 2 || two.total() != byType["work_order"]+byType["service_invoice"] {
+		t.Fatalf("pagination: %d rows, total %d", len(objs(two.body["data"])), two.total())
+	}
+	if r := a.expect(a.do("GET", base+"/purchase-documents?status=posted&type=order,invoice", owner, nil), 200, "status filter"); r.total() != byType["invoice"] {
+		t.Fatalf("posted orders+invoices = %d, want only invoices %d", r.total(), byType["invoice"])
+	}
+	a.expect(a.do("GET", base+"/purchase-documents?type=quotation", owner, nil), 400, "invalid type")
+	// buyer อ่านได้เฉพาะใบสั่งซื้อ / ซื้อสินค้า: ไม่ระบุชนิด = เห็นเฉพาะ 2 ชนิดนี้, ขอชนิดที่ไม่มีสิทธิ์ล้วน = 403
+	limited := a.expect(a.do("GET", base+"/purchase-documents?page_size=100", staff, nil), 200, "buyer documents")
+	for _, r := range objs(limited.body["data"]) {
+		if r["type"] != "order" && r["type"] != "invoice" {
+			t.Fatalf("buyer sees %v", r["type"])
+		}
+	}
+	if limited.total() != byType["order"]+byType["invoice"] {
+		t.Fatalf("buyer total = %d", limited.total())
+	}
+	a.expect(a.do("GET", base+"/purchase-documents?type=work_order", staff, nil), 403, "buyer asks WOs only")
 }

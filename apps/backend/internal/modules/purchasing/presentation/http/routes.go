@@ -24,6 +24,9 @@ func RegisterRoutes(mux *nethttp.ServeMux, h *handlers.Handler, authenticate fun
 	handle("PUT "+base+"/suppliers/{supplierID}", h.UpdateSupplier)
 	handle("DELETE "+base+"/suppliers/{supplierID}", h.DeleteSupplier)
 
+	// รายการรวม "เอกสารซื้อ": ใบสั่งซื้อ / ใบรับสินค้า / ซื้อสินค้า / ใบสั่งจ้าง / ตรวจรับงาน / ซื้อบริการ (เฉพาะชนิดที่มีสิทธิ์อ่าน)
+	handle("GET "+base+"/purchase-documents", h.ListPurchaseDocuments)
+
 	// ใบสั่งซื้อ: draft -> (PATCH status=approved) -> approved -> closed / cancelled
 	handle("GET "+base+"/purchase-orders", h.ListOrders)
 	handle("POST "+base+"/purchase-orders", h.CreateOrder)

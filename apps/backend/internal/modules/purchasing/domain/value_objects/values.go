@@ -294,6 +294,48 @@ func (k PurchaseKind) InvoiceDoc() DocType {
 	return DocInvoice
 }
 
+// PurchaseDocType คือชนิดเอกสารในรายการรวม "เอกสารซื้อ" (GET /purchase-documents?type=)
+// = ขั้นของเอกสาร (ใบสั่ง / ใบรับ / ใบแจ้งหนี้) × สาย (สินค้า / บริการ)
+type PurchaseDocType string
+
+const (
+	DocTypeOrder             PurchaseDocType = "order"              // ใบสั่งซื้อ
+	DocTypeReceipt           PurchaseDocType = "receipt"            // ใบรับสินค้า
+	DocTypeInvoice           PurchaseDocType = "invoice"            // ซื้อสินค้า
+	DocTypeWorkOrder         PurchaseDocType = "work_order"         // ใบสั่งจ้าง
+	DocTypeServiceAcceptance PurchaseDocType = "service_acceptance" // ใบตรวจรับงาน
+	DocTypeServiceInvoice    PurchaseDocType = "service_invoice"    // ซื้อบริการ
+)
+
+var PurchaseDocTypes = []PurchaseDocType{
+	DocTypeOrder, DocTypeReceipt, DocTypeInvoice, DocTypeWorkOrder, DocTypeServiceAcceptance, DocTypeServiceInvoice,
+}
+
+func ParsePurchaseDocType(raw string) (PurchaseDocType, error) {
+	return parseEnum(raw, PurchaseDocTypes, domain.ErrInvalidDocType)
+}
+
+// Kind: สายของชนิดเอกสาร
+func (t PurchaseDocType) Kind() PurchaseKind {
+	switch t {
+	case DocTypeWorkOrder, DocTypeServiceAcceptance, DocTypeServiceInvoice:
+		return KindService
+	}
+	return KindGoods
+}
+
+// ReadPermission: สิทธิ์อ่านของชนิดเอกสาร (สิทธิ์เดียวกับ endpoint รายการของเอกสารนั้น)
+func (t PurchaseDocType) ReadPermission() Permission {
+	p := t.Kind().Perms()
+	switch t {
+	case DocTypeReceipt, DocTypeServiceAcceptance:
+		return p.ReceiptRead
+	case DocTypeInvoice, DocTypeServiceInvoice:
+		return p.InvoiceRead
+	}
+	return p.OrderRead
+}
+
 // KindOrDefault: ค่าว่าง (ข้อมูลเดิมก่อนแยกสาย) = สินค้า
 func KindOrDefault(raw string) PurchaseKind {
 	if raw == string(KindService) {
